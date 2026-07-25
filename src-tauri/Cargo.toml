@@ -1,0 +1,104 @@
+[package]
+name = "caduceus"
+version = "0.1.0"
+description = "Caduceus — a fast, local-first AI command center for your desktop."
+authors = ["Caduceus contributors"]
+license = "MIT"
+repository = "https://github.com/vivaanshahani/caduceus"
+edition = "2021"
+rust-version = "1.82"
+
+# The library target is what Tauri's mobile/desktop entrypoints link against.
+# Keeping logic in `lib.rs` (rather than `main.rs`) keeps it unit-testable.
+[lib]
+name = "caduceus_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+# ---- Tauri core + plugins -------------------------------------------------
+tauri = { version = "2", features = ["macos-private-api", "tray-icon", "image-png"] }
+tauri-plugin-store = "2"
+tauri-plugin-global-shortcut = "2"
+tauri-plugin-opener = "2"
+tauri-plugin-dialog = "2"
+tauri-plugin-autostart = "2"
+
+# ---- Serialization / async ------------------------------------------------
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time", "process", "io-util"] }
+async-trait = "0.1"
+futures = "0.3"
+
+# ---- Errors / logging -----------------------------------------------------
+anyhow = "1"
+thiserror = "2"
+log = "0.4"
+env_logger = "0.11"
+
+# ---- HTTP (AI providers, remote STT) --------------------------------------
+# rustls + bundled webpki roots rather than native-tls: it removes the OpenSSL
+# build dependency on Linux and makes the binary behave identically everywhere.
+reqwest = { version = "0.13", default-features = false, features = [
+  "json",
+  "rustls",
+  "rustls-native-certs",
+  "webpki-roots",
+  "multipart",
+  "charset",
+  "http2",
+] }
+
+# ---- Storage --------------------------------------------------------------
+rusqlite = { version = "0.40", features = ["bundled"] }
+
+# ---- Crypto (optional clipboard encryption at rest) -----------------------
+chacha20poly1305 = "0.11"
+getrandom = "0.3"
+base64 = "0.23"
+
+# ---- Images (clipboard thumbnails only) -----------------------------------
+# Screen capture and input simulation used to live here. Both are now Hermes
+# Agent's job via its `computer_use` toolset, which is why `xcap` and `enigo`
+# are gone: Caduceus never touches the screen or the input devices itself.
+image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
+
+# ---- Clipboard ------------------------------------------------------------
+arboard = { version = "3", features = ["image-data"] }
+
+# ---- Audio capture (push-to-talk) -----------------------------------------
+cpal = "0.18"
+hound = "3.5"
+
+# ---- Misc -----------------------------------------------------------------
+chrono = { version = "0.4", features = ["serde"] }
+uuid = { version = "1", features = ["v4", "serde"] }
+parking_lot = "0.12"
+dirs = "6"
+
+# ---- Platform-specific ----------------------------------------------------
+[target.'cfg(target_os = "macos")'.dependencies]
+keyring = { version = "3.6", features = ["apple-native"] }
+window-vibrancy = "0.8"
+
+[target.'cfg(target_os = "windows")'.dependencies]
+keyring = { version = "3.6", features = ["windows-native"] }
+window-vibrancy = "0.8"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+keyring = { version = "3.6", features = ["sync-secret-service", "crypto-rust"] }
+
+[features]
+# `custom-protocol` is set by `tauri build`; it swaps the dev server for the
+# embedded asset protocol.
+custom-protocol = ["tauri/custom-protocol"]
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+panic = "abort"
+strip = true

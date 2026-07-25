@@ -1,0 +1,89 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Caduceus",
+  "version": "0.1.0",
+  "identifier": "com.caduceus.desktop",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://127.0.0.1:1420",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "withGlobalTauri": false,
+    "macOSPrivateApi": true,
+    "security": {
+      "csp": "default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; connect-src 'self' ipc: http://ipc.localhost ws://127.0.0.1:1420 http://127.0.0.1:1420; object-src 'none'; base-uri 'none'; frame-src 'none'"
+    },
+    "windows": [
+      {
+        "label": "staff",
+        "title": "Caduceus",
+        "url": "index.html",
+        "width": 340,
+        "height": 340,
+        "resizable": false,
+        "decorations": false,
+        "transparent": true,
+        "shadow": false,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "focus": false,
+        "visible": false,
+        "acceptFirstMouse": true,
+        "hiddenTitle": true,
+        "titleBarStyle": "Transparent"
+      },
+      {
+        "label": "command-center",
+        "title": "Caduceus — Command Center",
+        "url": "command-center.html",
+        "width": 760,
+        "height": 520,
+        "minWidth": 560,
+        "minHeight": 220,
+        "resizable": false,
+        "decorations": false,
+        "transparent": true,
+        "shadow": false,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "center": true,
+        "visible": false,
+        "acceptFirstMouse": true,
+        "hiddenTitle": true,
+        "titleBarStyle": "Transparent"
+      },
+      {
+        "label": "settings",
+        "title": "Caduceus Settings",
+        "url": "settings.html",
+        "width": 1040,
+        "height": 720,
+        "minWidth": 840,
+        "minHeight": 560,
+        "resizable": true,
+        "decorations": true,
+        "transparent": true,
+        "visible": false,
+        "hiddenTitle": true,
+        "titleBarStyle": "Overlay"
+      }
+    ]
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["app", "dmg"],
+    "resources": ["bin/*"],
+    "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.icns"],
+    "category": "Productivity",
+    "shortDescription": "A fast, local-first AI command center.",
+    "longDescription": "Caduceus is a floating staff, a command palette, a clipboard manager and a pluggable AI agent runtime — in one small native binary. Works fully offline with zero API keys; add a model when you want one.",
+    "copyright": "MIT licensed. Copyright (c) Caduceus contributors.",
+    "macOS": {
+      "minimumSystemVersion": "11.0",
+      "entitlements": "entitlements.plist"
+    }
+  },
+  "plugins": {}
+}

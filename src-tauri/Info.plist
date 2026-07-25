@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Caduceus is a menu-bar utility: no Dock icon, no app-switcher entry.
+	     Everything is reachable from the tray icon, the staff and the hotkey. -->
+	<key>LSUIElement</key>
+	<true/>
+
+	<!-- Shown by macOS the first time push-to-talk records audio. -->
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Caduceus records audio only while you hold the push-to-talk key, so it can transcribe what you said into the Command Center.</string>
+
+	<!-- Shown when the on-device speech recogniser is used as the STT backend. -->
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Caduceus uses speech recognition to turn your push-to-talk recording into text.</string>
+
+	<!-- Shown when a shortcut of kind `run_applescript` is executed. -->
+	<key>NSAppleEventsUsageDescription</key>
+	<string>Caduceus runs the AppleScript shortcuts you have configured yourself.</string>
+
+	<!-- Shown the first time a computer-use agent step captures the screen.
+	     Caduceus never captures the screen until you approve an agent session. -->
+	<key>NSDesktopFolderUsageDescription</key>
+	<string>Caduceus only reads files you explicitly reference in a shortcut.</string>
+</dict>
+</plist>

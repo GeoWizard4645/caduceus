@@ -1,0 +1,532 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Caduceus — a command centre for your Mac</title>
+<meta name="description" content="A floating staff, a command palette that launches apps and does maths, a clipboard that remembers, and an AI agent that can drive your Mac. Free and open source.">
+
+<meta property="og:title" content="Caduceus">
+<meta property="og:description" content="A fast, local-first command centre for your Mac.">
+<meta property="og:type" content="website">
+
+<link rel="icon" href="caduceus-mark.png">
+
+<style>
+  /* ---------------------------------------------------------------------
+     One stylesheet, no build step, no dependencies. The whole site is this
+     file plus a PNG, so it drops onto any static host.
+     --------------------------------------------------------------------- */
+  :root {
+    --base: #0a0b10;
+    --surface: #12131b;
+    --raised: #1a1c26;
+    --line: #2c2f3e;
+    --ink: #edeef6;
+    --ink-soft: #bec1d1;
+    --ink-mute: #8a8ea2;
+    --ink-faint: #606478;
+    --accent: #7c7cff;
+    --gold: #e8c468;
+    --teal: #4fe3d0;
+    --radius: 14px;
+    --page: 940px;
+  }
+
+  @media (prefers-color-scheme: light) {
+    :root {
+      --base: #f4f5f9;
+      --surface: #ffffff;
+      --raised: #f9fafd;
+      --line: #e0e3eb;
+      --ink: #161822;
+      --ink-soft: #424758;
+      --ink-mute: #6c7286;
+      --ink-faint: #969cad;
+      --accent: #5858e8;
+    }
+  }
+
+  *, *::before, *::after { box-sizing: border-box; }
+
+  html { -webkit-text-size-adjust: 100%; scroll-behavior: smooth; }
+
+  body {
+    margin: 0;
+    background: var(--base);
+    color: var(--ink);
+    font: 16px/1.65 -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  a { color: var(--accent); }
+
+  .wrap { max-width: var(--page); margin: 0 auto; padding: 0 24px; }
+
+  /* --- hero ----------------------------------------------------------- */
+
+  header {
+    position: relative;
+    overflow: hidden;
+    text-align: center;
+    padding: 96px 0 72px;
+  }
+
+  /* A soft accent bloom behind the mark, echoing the app icon. */
+  header::before {
+    content: "";
+    position: absolute;
+    inset: -30% 50% auto;
+    width: 720px;
+    height: 720px;
+    transform: translateX(-50%);
+    background: radial-gradient(circle, rgb(124 124 255 / 0.18) 0%, transparent 62%);
+    pointer-events: none;
+  }
+
+  .mark {
+    position: relative;
+    width: 88px;
+    height: auto;
+    /* The mark is pixel art — never let a browser smooth it. */
+    image-rendering: pixelated;
+    filter: drop-shadow(0 4px 18px rgb(0 0 0 / 0.5));
+  }
+
+  h1 {
+    position: relative;
+    margin: 22px 0 10px;
+    font-size: clamp(2.4rem, 6vw, 3.4rem);
+    font-weight: 700;
+    letter-spacing: -0.03em;
+  }
+
+  .tagline {
+    position: relative;
+    margin: 0 auto;
+    max-width: 30ch;
+    font-size: clamp(1.05rem, 2.4vw, 1.25rem);
+    color: var(--ink-soft);
+    text-wrap: balance;
+  }
+
+  .badges {
+    position: relative;
+    margin-top: 18px;
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    font-size: 0.78rem;
+    color: var(--ink-mute);
+  }
+
+  .badge {
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 3px 11px;
+    background: var(--surface);
+  }
+
+  /* --- install -------------------------------------------------------- */
+
+  .install { position: relative; margin-top: 40px; }
+
+  .install-label {
+    font-size: 0.72rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    margin-bottom: 10px;
+    font-weight: 600;
+  }
+
+  .cmd {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    max-width: 660px;
+    margin: 0 auto;
+    padding: 14px 14px 14px 18px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    text-align: left;
+    box-shadow: 0 14px 40px -18px rgb(0 0 0 / 0.6);
+  }
+
+  .cmd code {
+    flex: 1;
+    min-width: 0;
+    overflow-x: auto;
+    white-space: nowrap;
+    font: 0.86rem/1.5 ui-monospace, "SF Mono", Menlo, monospace;
+    color: var(--ink-soft);
+  }
+
+  @media (max-width: 620px) {
+    .cmd { flex-direction: column; align-items: stretch; gap: 12px; padding: 14px; }
+    .cmd code { white-space: pre-wrap; word-break: break-all; }
+  }
+
+  .cmd code .prompt { color: var(--ink-faint); user-select: none; }
+
+  button.copy {
+    flex-shrink: 0;
+    border: 1px solid var(--line);
+    background: var(--raised);
+    color: var(--ink-soft);
+    border-radius: 9px;
+    padding: 7px 13px;
+    font-size: 0.8rem;
+    font-weight: 500;
+    font-family: inherit;
+    cursor: pointer;
+    transition: border-color 0.15s, color 0.15s;
+  }
+
+  button.copy:hover { border-color: var(--accent); color: var(--ink); }
+  button.copy.done { border-color: var(--teal); color: var(--teal); }
+
+  .alt {
+    margin-top: 16px;
+    font-size: 0.88rem;
+    color: var(--ink-mute);
+  }
+
+  .alt a { text-decoration: none; border-bottom: 1px solid rgb(124 124 255 / 0.4); }
+  .alt a:hover { border-bottom-color: var(--accent); }
+
+  details.manual {
+    max-width: 660px;
+    margin: 18px auto 0;
+    text-align: left;
+    font-size: 0.88rem;
+    color: var(--ink-mute);
+  }
+
+  details.manual summary {
+    cursor: pointer;
+    color: var(--ink-soft);
+    padding: 8px 0;
+  }
+
+  details.manual pre {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 12px 14px;
+    overflow-x: auto;
+    font: 0.82rem/1.6 ui-monospace, "SF Mono", Menlo, monospace;
+    color: var(--ink-soft);
+  }
+
+  /* --- sections ------------------------------------------------------- */
+
+  section { padding: 56px 0; border-top: 1px solid var(--line); }
+
+  h2 {
+    margin: 0 0 6px;
+    font-size: 1.35rem;
+    letter-spacing: -0.02em;
+  }
+
+  .sub { margin: 0 0 30px; color: var(--ink-mute); max-width: 60ch; }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+    gap: 16px;
+  }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 20px;
+  }
+
+  .card h3 {
+    margin: 0 0 6px;
+    font-size: 0.98rem;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .card h3 .glyph {
+    color: var(--accent);
+    font-size: 1.05rem;
+    line-height: 1;
+  }
+
+  .card p { margin: 0; font-size: 0.9rem; color: var(--ink-mute); }
+
+  /* --- the typing table ------------------------------------------------ */
+
+  table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+
+  table td { padding: 11px 0; border-bottom: 1px solid var(--line); vertical-align: top; }
+  table tr:last-child td { border-bottom: 0; }
+
+  table td:first-child {
+    width: 42%;
+    padding-right: 24px;
+    font: 0.85rem/1.5 ui-monospace, "SF Mono", Menlo, monospace;
+    color: var(--ink);
+    /* Wrapping beats a horizontal scrollbar per row: the longest example here
+       is a whole sentence, and nowrap would push the description into a
+       three-line sliver. */
+    word-break: break-word;
+  }
+
+  table td:last-child { color: var(--ink-mute); }
+
+  /* On a phone the two columns become unreadable slivers, so stack them. */
+  @media (max-width: 620px) {
+    table, table tbody, table tr, table td { display: block; width: auto; }
+    table tr { padding: 12px 0; border-bottom: 1px solid var(--line); }
+    table tr:last-child { border-bottom: 0; }
+    table td { border-bottom: 0; padding: 0; }
+    table td:first-child { width: auto; padding: 0 0 4px; }
+  }
+
+  /* --- notes ----------------------------------------------------------- */
+
+  .note {
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--gold);
+    border-radius: 0 10px 10px 0;
+    background: var(--surface);
+    padding: 16px 18px;
+    font-size: 0.9rem;
+    color: var(--ink-mute);
+  }
+
+  .note strong { color: var(--ink-soft); }
+
+  footer {
+    border-top: 1px solid var(--line);
+    padding: 34px 0 56px;
+    font-size: 0.85rem;
+    color: var(--ink-faint);
+    text-align: center;
+  }
+
+  footer a { color: var(--ink-mute); text-decoration: none; }
+  footer a:hover { color: var(--accent); }
+
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    * { transition: none !important; }
+  }
+</style>
+</head>
+
+<body>
+
+<header>
+  <div class="wrap">
+    <img class="mark" src="caduceus-mark.png" alt="The Caduceus mark: a pixel-art winged staff with two coiled snakes">
+    <h1>Caduceus</h1>
+    <p class="tagline">A fast, local-first command centre for your Mac.</p>
+
+    <div class="badges">
+      <span class="badge">macOS 11+</span>
+      <span class="badge">Apple Silicon &amp; Intel</span>
+      <span class="badge">MIT licensed</span>
+      <span class="badge">~5 MB</span>
+    </div>
+
+    <div class="install">
+      <p class="install-label">Install</p>
+
+      <div class="cmd">
+        <code id="cmd"><span class="prompt">$ </span>curl -fsSL https://vivaanshahani.com/caduceus/install.sh | bash</code>
+        <button class="copy" id="copy" type="button">Copy</button>
+      </div>
+
+      <p class="alt">
+        or <a href="https://github.com/GeoWizard4645/caduceus/releases/latest">download the .dmg</a>
+      </p>
+
+      <details class="manual">
+        <summary>Installing the .dmg by hand? One extra step.</summary>
+        <p>
+          Drag Caduceus to Applications, then run this once. Caduceus is not
+          signed with an Apple Developer certificate yet, so macOS quarantines it
+          and refuses to open it until you say you trust it.
+        </p>
+        <pre>xattr -dr com.apple.quarantine /Applications/Caduceus.app</pre>
+      </details>
+    </div>
+  </div>
+</header>
+
+<section>
+  <div class="wrap">
+    <h2>Type anything</h2>
+    <p class="sub">One bar. <strong>Alt&nbsp;+&nbsp;Space</strong> from anywhere.</p>
+
+    <table>
+      <tr>
+        <td>figma</td>
+        <td>Launches Figma. Every app on your Mac is searchable.</td>
+      </tr>
+      <tr>
+        <td>1920/16*9</td>
+        <td>Shows <strong>1,080</strong>. Enter copies it.</td>
+      </tr>
+      <tr>
+        <td>18% of 240</td>
+        <td>Shows <strong>43.2</strong>.</td>
+      </tr>
+      <tr>
+        <td>flights to lisbon</td>
+        <td>Searches the web, in whichever engine you set.</td>
+      </tr>
+      <tr>
+        <td>/ explain OAuth</td>
+        <td>Asks your AI agent.</td>
+      </tr>
+      <tr>
+        <td>/c find the invoice in my email</td>
+        <td>Hands the task to an agent that can drive your Mac.</td>
+      </tr>
+      <tr>
+        <td>/v invoice</td>
+        <td>Searches everything you have copied.</td>
+      </tr>
+    </table>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>What you get</h2>
+    <p class="sub">All of it works offline, with no account and no API key.</p>
+
+    <div class="grid">
+      <div class="card">
+        <h3><span class="glyph">⚕</span> A floating staff</h3>
+        <p>
+          Sits above everything. Hover for six shortcuts, click for the palette,
+          drag it wherever. Click-through the rest of the time, so it never
+          steals a click.
+        </p>
+      </div>
+
+      <div class="card">
+        <h3><span class="glyph">▣</span> App launcher</h3>
+        <p>
+          Fuzzy-search every application you have installed and open it with
+          Enter. No configuration.
+        </p>
+      </div>
+
+      <div class="card">
+        <h3><span class="glyph">=</span> Calculator</h3>
+        <p>
+          Real arithmetic in the search bar — precedence, percentages, functions,
+          constants. Enter copies the answer.
+        </p>
+      </div>
+
+      <div class="card">
+        <h3><span class="glyph">❐</span> Clipboard history</h3>
+        <p>
+          Text, images and files, searchable and pinnable. Skips whatever your
+          password manager marks as secret. Optional encryption at rest.
+        </p>
+      </div>
+
+      <div class="card">
+        <h3><span class="glyph">◍</span> Push-to-talk</h3>
+        <p>
+          Hold a key, talk, let go. Transcribed on-device by Apple's speech
+          recogniser — no audio leaves your Mac, and no wake word ever listens.
+        </p>
+      </div>
+
+      <div class="card">
+        <h3><span class="glyph">✳</span> An agent, if you want one</h3>
+        <p>
+          Powered by Hermes Agent. It can read your screen and drive your mouse —
+          but only after you approve it, every single time.
+        </p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>The AI is Hermes</h2>
+    <p class="sub">
+      Caduceus does not ship its own model or its own agent loop. It drives
+      <a href="https://github.com/NousResearch/hermes-agent">Hermes Agent</a>,
+      the open-source agent from Nous Research — which already does model
+      routing, tool calling, memory and screen control properly.
+    </p>
+
+    <div class="cmd" style="margin: 0 0 16px;">
+      <code id="cmd2"><span class="prompt">$ </span>curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash &amp;&amp; hermes setup --portal</code>
+      <button class="copy" id="copy2" type="button">Copy</button>
+    </div>
+
+    <div class="note">
+      <strong>Optional.</strong> Shortcuts, the launcher, the calculator,
+      clipboard history, voice and web search all work with Hermes uninstalled.
+      Only the <code>/</code> and <code>/c</code> prefixes need it. Hermes runs
+      whatever model you point it at, including a local one.
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <p>
+      <a href="https://github.com/GeoWizard4645/caduceus">Source</a> ·
+      <a href="https://github.com/GeoWizard4645/caduceus/releases">Releases</a> ·
+      <a href="https://github.com/GeoWizard4645/caduceus/issues">Issues</a>
+    </p>
+    <p>MIT licensed. Built by Vivaan Shahani.</p>
+  </div>
+</footer>
+
+<script>
+  // Copy buttons. The command text is read from the DOM rather than duplicated
+  // in JS, so there is only one place to change it.
+  for (const [buttonId, codeId] of [["copy", "cmd"], ["copy2", "cmd2"]]) {
+    const button = document.getElementById(buttonId);
+    const code = document.getElementById(codeId);
+    if (!button || !code) continue;
+
+    button.addEventListener("click", async () => {
+      // Strip the decorative "$ " prompt.
+      const text = code.textContent.replace(/^\s*\$\s*/, "").trim();
+      try {
+        await navigator.clipboard.writeText(text);
+      } catch {
+        // Clipboard API needs a secure context; fall back to a selection so the
+        // page still works when opened over plain http or from a file.
+        const range = document.createRange();
+        range.selectNodeContents(code);
+        const selection = getSelection();
+        selection.removeAllRanges();
+        selection.addRange(range);
+        document.execCommand("copy");
+        selection.removeAllRanges();
+      }
+      button.textContent = "Copied";
+      button.classList.add("done");
+      setTimeout(() => {
+        button.textContent = "Copy";
+        button.classList.remove("done");
+      }, 1800);
+    });
+  }
+</script>
+
+</body>
+</html>
