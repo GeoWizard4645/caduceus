@@ -1,20 +1,23 @@
 #!/usr/bin/env python3
-"""Render Orbit's icon set from code.
+"""Generate every Caduceus icon from one pixel-art grid.
 
-Everything Orbit ships as a raster icon is generated here rather than checked in
-as an opaque binary, so a contributor can restyle the brand by editing numbers in
-one file and re-running:
+The mark is a caduceus — Hermes' staff — drawn on a small pixel grid so it stays
+crisp at menu-bar sizes instead of turning to mush. The grid is defined once,
+here, and everything else is derived from it:
+
+    assets/icon-source.png        1024x1024 master, fed to `npm run tauri icon`
+    src-tauri/icons/tray.png      monochrome macOS template image (menu bar)
+    src-tauri/icons/tray@2x.png
+    src/shared/caduceusPixels.ts  the same grid as data, so the floating staff
+                                  in the app renders identical pixels as SVG
+    website/caduceus-mark.png     transparent mark for the landing page
+
+Re-run after editing the grid:
 
     python3 scripts/make-icons.py
 
-Outputs
-  assets/icon-source.png     1024x1024 master, fed to `npm run tauri icon`
-  src-tauri/icons/tray.png   monochrome macOS template image (menu bar)
-  src-tauri/icons/tray@2x.png
-  website/orbit-mark.png     transparent mark for the landing page / README
-
-Requires Pillow (`pip install pillow`). This script is a build-time convenience,
-not a runtime dependency — the generated PNGs are committed.
+Requires Pillow (`pip install pillow`). Generated files are committed, so this
+is a design-time tool, not a build step.
 """
 
 from __future__ import annotations
@@ -26,22 +29,130 @@ from PIL import Image, ImageDraw, ImageFilter
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-# --- Brand ------------------------------------------------------------------
-# Keep these in sync with the --o-accent tokens in src/styles.css.
+# --- Grid ------------------------------------------------------------------
+# Kept small and odd-width so the staff has a true centre column. Every
+# measurement below is in grid cells, not pixels.
+GRID_W, GRID_H = 13, 20
+CENTRE_X = 6
+
+# Vertical bands.
+KNOB_TOP_ROW, KNOB_ROW = 0, 1
+STAFF_TOP, STAFF_BOTTOM = 2, 19
+SNAKE_TOP, SNAKE_BOTTOM = 7, 18
+
+# Snake helix, spanning exactly one period so each snake shows one full coil.
+#
+# The constraint that matters is amplitude <= period / 2*pi: any steeper and the
+# path moves more than one cell per row, which breaks the line into disconnected
+# dashes that read as zigzag noise instead of a snake wrapping a staff.
+SNAKE_AMPLITUDE = 2.0
+SNAKE_PERIOD = 12.0
+
+# Left wing, as {row: [columns]}. Mirrored to the right automatically.
+#
+# A diagonal sweep: the tip sits high and outboard, and the wing narrows as it
+# runs down to meet the staff. A flat top row reads as a crossbar and turns the
+# whole mark into a winged sword, which is the failure mode to avoid.
+WING_SHAPE = {
+    3: [0, 1, 2],
+    4: [1, 2, 3, 4],
+    5: [3, 4, 5],
+    6: [5],
+}
+
+# --- Palette ---------------------------------------------------------------
+# The in-app mark swaps snake_a for the user's accent colour; these are the
+# values baked into the raster icons.
+COLOURS = {
+    "knob": (255, 233, 168),
+    "staff": (232, 196, 104),
+    "wing": (237, 239, 247),
+    "snake_a": (124, 124, 255),
+    "snake_b": (79, 227, 208),
+}
+
 BG_TOP = (24, 25, 37)
 BG_BOTTOM = (9, 10, 15)
-ORB_LIGHT = (201, 200, 255)
-ORB_MID = (140, 139, 255)
-ORB_DEEP = (91, 87, 232)
-ORB_SHADOW = (42, 36, 120)
-RING_A = (124, 124, 255)
-RING_B = (79, 227, 208)
 
-SS = 4  # supersampling factor; everything is drawn big and downsampled once
+SS = 4  # supersampling for the non-pixel-art parts (tile, glow)
+
+
+def build_grid() -> dict:
+    """Return {(x, y): kind} for every filled cell.
+
+    Later writes win, so the order below is also the z-order: staff first, then
+    wings, then the snakes on top of both.
+    """
+    cells = {}
+
+    # Staff.
+    for y in range(STAFF_TOP, STAFF_BOTTOM + 1):
+        cells[(CENTRE_X, y)] = "staff"
+
+    # Knob.
+    cells[(CENTRE_X, KNOB_TOP_ROW)] = "knob"
+    for x in (CENTRE_X - 1, CENTRE_X, CENTRE_X + 1):
+        cells[(x, KNOB_ROW)] = "knob"
+
+    # Wings, left then mirrored.
+    for row, columns in WING_SHAPE.items():
+        for x in columns:
+            cells[(x, row)] = "wing"
+            cells[(GRID_W - 1 - x, row)] = "wing"
+
+    # Snakes: two sine waves half a period out of phase.
+    crossing = 0
+    for y in range(SNAKE_TOP, SNAKE_BOTTOM + 1):
+        offset = SNAKE_AMPLITUDE * math.cos(2 * math.pi * (y - SNAKE_TOP) / SNAKE_PERIOD)
+        xa = round(CENTRE_X + offset)
+        xb = round(CENTRE_X - offset)
+
+        if xa == xb:
+            # A crossing. Drawing both would put one pixel on the staff and lose
+            # any sense of depth, so only the snake passing *in front* is drawn,
+            # and they alternate — which is what sells the helix.
+            cells[(xa, y)] = "snake_a" if crossing % 2 == 0 else "snake_b"
+            crossing += 1
+        else:
+            cells[(xa, y)] = "snake_a"
+            cells[(xb, y)] = "snake_b"
+
+    # Heads: a two-cell blunt tip angled outward, sitting directly above where
+    # each snake's body starts so the two connect. No eye — at 13x18 a single
+    # dark cell next to a one-cell head just reads as a longer dash.
+    reach = round(SNAKE_AMPLITUDE)
+    for kind, out in (("snake_a", 1), ("snake_b", -1)):
+        x = CENTRE_X + reach * out
+        cells[(x, SNAKE_TOP - 1)] = kind
+        cells[(x + out, SNAKE_TOP - 1)] = kind
+
+    return cells
+
+
+GRID = build_grid()
+
+
+# ---------------------------------------------------------------------------
+# Raster output
+# ---------------------------------------------------------------------------
+
+
+def render_mark(cell_px, palette=None, alpha=255):
+    """Draw the grid at `cell_px` pixels per cell, on transparency."""
+    colours = palette or COLOURS
+    img = Image.new("RGBA", (GRID_W * cell_px, GRID_H * cell_px), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(img)
+    for (x, y), kind in GRID.items():
+        colour = colours.get(kind, (255, 255, 255))
+        draw.rectangle(
+            [x * cell_px, y * cell_px, (x + 1) * cell_px - 1, (y + 1) * cell_px - 1],
+            fill=(colour[0], colour[1], colour[2], alpha),
+        )
+    return img
 
 
 def lerp(a, b, t):
-    return tuple(round(x + (y - x) * t) for x, y in zip(a, b))
+    return tuple(round(p + (q - p) * t) for p, q in zip(a, b))
 
 
 def vertical_gradient(size, top, bottom):
@@ -58,168 +169,135 @@ def rounded_mask(size, radius):
     return m
 
 
-def radial_sphere(size, cx, cy, radius):
-    """A lit sphere with a soft terminator, rendered per-pixel."""
-    img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
-    px = img.load()
-    lx, ly = cx - radius * 0.34, cy - radius * 0.40  # light position
-    for y in range(size):
-        for x in range(size):
-            dx, dy = x - cx, y - cy
-            d = math.hypot(dx, dy)
-            if d > radius + 1.5:
-                continue
-            # Distance from the light, normalised across the sphere.
-            t = min(math.hypot(x - lx, y - ly) / (radius * 1.65), 1.0)
-            if t < 0.34:
-                c = lerp(ORB_LIGHT, ORB_MID, t / 0.34)
-            elif t < 0.72:
-                c = lerp(ORB_MID, ORB_DEEP, (t - 0.34) / 0.38)
-            else:
-                c = lerp(ORB_DEEP, ORB_SHADOW, (t - 0.72) / 0.28)
-            # 1.5px feathered edge so the sphere doesn't alias against the ring.
-            a = 255 if d <= radius - 1.5 else round(255 * max(0.0, (radius + 1.5 - d) / 3.0))
-            px[x, y] = (*c, a)
-    return img
-
-
-def orbit_ring(size, cx, cy, rx, ry, tilt_deg, width, occlude_r=None):
-    """Ellipse stroked with a two-stop gradient, optionally occluded by the orb."""
-    img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
-    px = img.load()
-    tilt = math.radians(tilt_deg)
-    cos_t, sin_t = math.cos(tilt), math.sin(tilt)
-    steps = 3600
-    for i in range(steps):
-        th = 2 * math.pi * i / steps
-        ex, ey = rx * math.cos(th), ry * math.sin(th)
-        x = cx + ex * cos_t - ey * sin_t
-        y = cy + ex * sin_t + ey * cos_t
-        # Fade the far half of the orbit so the ring reads as 3D.
-        depth = (math.sin(th) + 1) / 2
-        col = lerp(RING_A, RING_B, (math.cos(th) + 1) / 2)
-        alpha = round(255 * (0.16 + 0.84 * depth))
-        if occlude_r is not None and math.hypot(x - cx, y - cy) < occlude_r:
-            # Behind the orb: keep a faint trace only where it peeks out.
-            continue
-        r = width / 2
-        for oy in range(-int(r) - 1, int(r) + 2):
-            for ox in range(-int(r) - 1, int(r) + 2):
-                d = math.hypot(ox, oy)
-                if d > r:
-                    continue
-                sx, sy = int(x) + ox, int(y) + oy
-                if not (0 <= sx < size and 0 <= sy < size):
-                    continue
-                a = round(alpha * min(1.0, (r - d) / 1.5 + 0.35))
-                if a > px[sx, sy][3]:
-                    px[sx, sy] = (*col, a)
-    return img
-
-
-def build_mark(size):
-    """The mark on a transparent background: orbit ring + orb + satellite."""
-    s = size * SS
-    c = s / 2
-    orb_r = s * 0.180
-    layer = Image.new("RGBA", (s, s), (0, 0, 0, 0))
-
-    # Halo.
-    halo = Image.new("RGBA", (s, s), (0, 0, 0, 0))
-    ImageDraw.Draw(halo).ellipse(
-        (c - s * 0.30, c - s * 0.30, c + s * 0.30, c + s * 0.30), fill=(*RING_A, 46)
-    )
-    layer.alpha_composite(halo.filter(ImageFilter.GaussianBlur(s * 0.055)))
-
-    ring = orbit_ring(s, c, c, s * 0.405, s * 0.164, -27, s * 0.027, occlude_r=orb_r * 1.02)
-    layer.alpha_composite(ring)
-
-    layer.alpha_composite(radial_sphere(s, c, c, orb_r))
-
-    # Specular highlight on the orb.
-    spec = Image.new("RGBA", (s, s), (0, 0, 0, 0))
-    ImageDraw.Draw(spec).ellipse(
-        (c - orb_r * 0.62, c - orb_r * 0.68, c - orb_r * 0.02, c - orb_r * 0.24),
-        fill=(255, 255, 255, 96),
-    )
-    layer.alpha_composite(spec.filter(ImageFilter.GaussianBlur(s * 0.012)))
-
-    # Satellite, with its own bloom.
-    sat = Image.new("RGBA", (s, s), (0, 0, 0, 0))
-    sx, sy, sr = c + s * 0.344, c - s * 0.188, s * 0.039
-    ImageDraw.Draw(sat).ellipse((sx - sr, sy - sr, sx + sr, sy + sr), fill=(*RING_B, 255))
-    glow = sat.filter(ImageFilter.GaussianBlur(s * 0.022))
-    layer.alpha_composite(glow)
-    layer.alpha_composite(sat)
-
-    return layer.resize((size, size), Image.LANCZOS)
-
-
 def build_app_icon(size=1024):
-    """The mark inside a rounded, gradient-filled tile (macOS/Windows app icon)."""
+    """The mark on a rounded, gradient-filled tile."""
     s = size * SS
     inset = round(s * 0.085)  # macOS icons sit inside a safe area
-    tile_size = s - inset * 2
+    tile = s - inset * 2
 
-    bg = vertical_gradient(tile_size, BG_TOP, BG_BOTTOM).convert("RGBA")
-    bg.putalpha(rounded_mask(tile_size, radius=round(tile_size * 0.225)))
+    bg = vertical_gradient(tile, BG_TOP, BG_BOTTOM).convert("RGBA")
+    bg.putalpha(rounded_mask(tile, radius=round(tile * 0.225)))
 
-    # A faint top hairline, the same trick the UI uses to fake a light source.
-    hair = Image.new("RGBA", (tile_size, tile_size), (0, 0, 0, 0))
+    # The same faint top hairline the UI uses to fake a light source.
+    hair = Image.new("RGBA", (tile, tile), (0, 0, 0, 0))
     ImageDraw.Draw(hair).rounded_rectangle(
-        (0, 0, tile_size - 1, tile_size - 1),
-        radius=round(tile_size * 0.225),
+        (0, 0, tile - 1, tile - 1),
+        radius=round(tile * 0.225),
         outline=(255, 255, 255, 30),
-        width=max(2, round(tile_size * 0.004)),
+        width=max(2, round(tile * 0.004)),
     )
     bg.alpha_composite(hair)
 
-    mark = build_mark(round(tile_size * 0.86))
+    # A soft accent glow behind the mark, so the icon has some depth.
+    glow = Image.new("RGBA", (tile, tile), (0, 0, 0, 0))
+    ImageDraw.Draw(glow).ellipse(
+        (tile * 0.24, tile * 0.16, tile * 0.76, tile * 0.84), fill=(124, 124, 255, 62)
+    )
+    bg.alpha_composite(glow.filter(ImageFilter.GaussianBlur(tile * 0.075)))
+
+    # Size the mark to ~76% of the tile, snapped to whole cells so the pixel
+    # grid stays perfectly square.
+    cell = max(1, round(tile * 0.76 / GRID_H))
+    mark = render_mark(cell)
+    bg.alpha_composite(mark, ((tile - mark.width) // 2, (tile - mark.height) // 2))
+
     canvas = Image.new("RGBA", (s, s), (0, 0, 0, 0))
     canvas.alpha_composite(bg, (inset, inset))
-    canvas.alpha_composite(
-        mark, (inset + (tile_size - mark.width) // 2, inset + (tile_size - mark.height) // 2)
-    )
     return canvas.resize((size, size), Image.LANCZOS)
 
 
-def build_tray(size):
-    """macOS template image: pure black silhouette + alpha, tinted by the OS."""
-    s = size * SS
-    c = s / 2
-    img = Image.new("RGBA", (s, s), (0, 0, 0, 0))
-    d = ImageDraw.Draw(img)
-    stroke = max(2, round(s * 0.055))
+def build_tray(height_px):
+    """macOS template image: a pure-black silhouette that the OS tints itself.
 
-    # Orbit ellipse.
-    d.ellipse((c - s * 0.44, c - s * 0.18, c + s * 0.44, c + s * 0.18), outline=(0, 0, 0, 255), width=stroke)
-    ring = img.rotate(27, resample=Image.BICUBIC, center=(c, c))
+    Rendered at a whole number of pixels per cell and never resampled — a scaled
+    pixel mark in a 22px menu bar turns into grey mush.
+    """
+    cell = max(1, height_px // GRID_H)
+    silhouette = {k: (0, 0, 0) for k in COLOURS}
+    mark = render_mark(cell, palette=silhouette)
 
-    out = Image.new("RGBA", (s, s), (0, 0, 0, 0))
-    out.alpha_composite(ring)
-    ImageDraw.Draw(out).ellipse(
-        (c - s * 0.185, c - s * 0.185, c + s * 0.185, c + s * 0.185), fill=(0, 0, 0, 255)
-    )
-    return out.resize((size, size), Image.LANCZOS)
+    canvas = Image.new("RGBA", (height_px, height_px), (0, 0, 0, 0))
+    canvas.alpha_composite(mark, ((height_px - mark.width) // 2, (height_px - mark.height) // 2))
+    return canvas
+
+
+# ---------------------------------------------------------------------------
+# TypeScript output
+# ---------------------------------------------------------------------------
+
+TS_KIND = {"snake_a": "snakeA", "snake_b": "snakeB"}
+
+
+def build_typescript():
+    """Emit the grid for the frontend, so the app and the icons cannot drift."""
+    rows = []
+    for y in range(GRID_H):
+        for x in range(GRID_W):
+            kind = GRID.get((x, y))
+            if kind:
+                rows.append('  [%d, %d, "%s"],' % (x, y, TS_KIND.get(kind, kind)))
+
+    newline = "\n"
+    return f'''// GENERATED by scripts/make-icons.py — do not edit by hand.
+//
+// The caduceus mark as pixel data. The floating staff renders these as SVG
+// rects, which keeps it crisp at any size and lets each part take its colour
+// from a CSS variable — so the snakes pick up the user's accent. The raster app
+// and tray icons come from the same grid, so the two can never drift apart.
+
+export const CADUCEUS_WIDTH = {GRID_W};
+export const CADUCEUS_HEIGHT = {GRID_H};
+
+export type PixelKind = "knob" | "staff" | "wing" | "snakeA" | "snakeB";
+
+/** `[x, y, kind]`, one entry per filled cell. */
+export const CADUCEUS_PIXELS: readonly (readonly [number, number, PixelKind])[] = [
+{newline.join(rows)}
+];
+
+/**
+ * Fill for each part. Wings and one snake follow the theme; the staff keeps a
+ * fixed warm gold, which reads as metal against every accent colour.
+ */
+export const PIXEL_FILL: Record<PixelKind, string> = {{
+  knob: "#ffe9a8",
+  staff: "#e8c468",
+  wing: "rgb(var(--c-ink))",
+  snakeA: "rgb(var(--c-accent))",
+  snakeB: "#4fe3d0",
+}};
+'''
+
+
+# ---------------------------------------------------------------------------
 
 
 def main():
-    os.makedirs(os.path.join(ROOT, "assets"), exist_ok=True)
-    os.makedirs(os.path.join(ROOT, "src-tauri", "icons"), exist_ok=True)
-    os.makedirs(os.path.join(ROOT, "website"), exist_ok=True)
+    for directory in ("assets", "src-tauri/icons", "website", "src/shared"):
+        os.makedirs(os.path.join(ROOT, directory), exist_ok=True)
 
-    icon = build_app_icon(1024)
-    icon.save(os.path.join(ROOT, "assets", "icon-source.png"))
+    build_app_icon(1024).save(os.path.join(ROOT, "assets", "icon-source.png"))
     print("wrote assets/icon-source.png")
 
-    mark = build_mark(512)
-    mark.save(os.path.join(ROOT, "website", "orbit-mark.png"))
-    mark.save(os.path.join(ROOT, "assets", "orbit-mark.png"))
-    print("wrote website/orbit-mark.png + assets/orbit-mark.png")
+    mark = render_mark(cell_px=28)
+    mark.save(os.path.join(ROOT, "website", "caduceus-mark.png"))
+    mark.save(os.path.join(ROOT, "assets", "caduceus-mark.png"))
+    print("wrote website/caduceus-mark.png + assets/caduceus-mark.png")
 
     for name, px in (("tray.png", 22), ("tray@2x.png", 44)):
         build_tray(px).save(os.path.join(ROOT, "src-tauri", "icons", name))
-        print(f"wrote src-tauri/icons/{name}")
+        print("wrote src-tauri/icons/" + name)
+
+    with open(os.path.join(ROOT, "src", "shared", "caduceusPixels.ts"), "w") as f:
+        f.write(build_typescript())
+    print("wrote src/shared/caduceusPixels.ts")
+
+    # A quick ASCII proof, so you can sanity-check the grid without opening a
+    # single PNG.
+    legend = {"knob": "O", "staff": "|", "wing": "W", "snake_a": "a", "snake_b": "b"}
+    print()
+    for y in range(GRID_H):
+        print("    " + "".join(legend.get(GRID.get((x, y)), " ") for x in range(GRID_W)))
 
 
 if __name__ == "__main__":
