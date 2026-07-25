@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256" role="img" aria-label="Orbit">
+  <title>Orbit</title>
+  <defs>
+    <!-- The orb: lit from the upper-left, falling off to a deep violet shadow. -->
+    <radialGradient id="orb" cx="38%" cy="32%" r="78%">
+      <stop offset="0%" stop-color="#C9C8FF"/>
+      <stop offset="34%" stop-color="#8C8BFF"/>
+      <stop offset="72%" stop-color="#5B57E8"/>
+      <stop offset="100%" stop-color="#2A2478"/>
+    </radialGradient>
+
+    <!-- The orbital ring fades as it passes behind the orb. -->
+    <linearGradient id="ring" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#4FE3D0" stop-opacity="0.15"/>
+      <stop offset="38%" stop-color="#7C7CFF" stop-opacity="0.95"/>
+      <stop offset="72%" stop-color="#4FE3D0" stop-opacity="0.95"/>
+      <stop offset="100%" stop-color="#7C7CFF" stop-opacity="0.15"/>
+    </linearGradient>
+
+    <radialGradient id="halo" cx="50%" cy="50%" r="50%">
+      <stop offset="55%" stop-color="#7C7CFF" stop-opacity="0.28"/>
+      <stop offset="100%" stop-color="#7C7CFF" stop-opacity="0"/>
+    </radialGradient>
+
+    <!-- Masks the ring where it should read as passing *behind* the orb. -->
+    <mask id="ring-behind">
+      <rect width="256" height="256" fill="#fff"/>
+      <circle cx="128" cy="128" r="49" fill="#000"/>
+    </mask>
+  </defs>
+
+  <circle cx="128" cy="128" r="118" fill="url(#halo)"/>
+
+  <!-- Back half of the orbit, dimmed and occluded by the orb. -->
+  <g mask="url(#ring-behind)">
+    <ellipse cx="128" cy="128" rx="104" ry="42"
+             transform="rotate(-27 128 128)"
+             fill="none" stroke="url(#ring)" stroke-width="7" stroke-linecap="round"/>
+  </g>
+
+  <circle cx="128" cy="128" r="46" fill="url(#orb)"/>
+  <!-- Specular highlight. -->
+  <ellipse cx="112" cy="110" rx="17" ry="12" transform="rotate(-24 112 110)" fill="#fff" opacity="0.34"/>
+
+  <!-- Front arc of the orbit, drawn over the orb to sell the 3D. -->
+  <path d="M 38 156 A 104 42 -27 0 0 128 174"
+        fill="none" stroke="#8FEDE0" stroke-width="7" stroke-linecap="round" opacity="0.9"
+        transform="rotate(-27 128 128)"/>
+
+  <!-- The satellite. -->
+  <circle cx="216" cy="80" r="10" fill="#4FE3D0"/>
+</svg>

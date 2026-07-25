@@ -1,0 +1,183 @@
+//! Settings persistence.
+//!
+//! The whole [`Settings`] tree is stored as a single JSON value under the key
+//! `"settings"` in a `tauri-plugin-store` file. Keeping it as one blob (rather
+//! than a key per field) means reads are atomic and the frontend can round-trip
+//! the entire config in one IPC call, which is what the Settings window does.
+//!
+//! Secrets never enter this file — see [`secrets`].
+
+pub mod model;
+pub mod secrets;
+
+pub use model::*;
+
+use std::sync::Arc;
+
+use parking_lot::RwLock;
+use tauri::{AppHandle, Manager, Runtime};
+use tauri_plugin_store::StoreExt;
+
+/// Filename inside the app config directory.
+pub const STORE_FILE: &str = "orbit-settings.json";
+const SETTINGS_KEY: &str = "settings";
+
+/// Event emitted to every window whenever settings change, so open windows
+/// re-render without polling.
+pub const SETTINGS_CHANGED_EVENT: &str = "orbit://settings-changed";
+
+/// In-memory cache of the config, shared by every subsystem.
+///
+/// Background workers (clipboard watcher, cursor tracker, agent runner) read
+/// this on every tick rather than holding their own copies, so a settings change
+/// takes effect immediately without restarting anything.
+#[derive(Clone)]
+pub struct SettingsManager {
+    inner: Arc<RwLock<Settings>>,
+}
+
+impl SettingsManager {
+    pub fn new(initial: Settings) -> Self {
+        Self {
+            inner: Arc::new(RwLock::new(initial)),
+        }
+    }
+
+    pub fn get(&self) -> Settings {
+        self.inner.read().clone()
+    }
+
+    /// Read a projection of the settings without cloning the whole tree.
+    /// Preferred inside hot loops.
+    pub fn with<T>(&self, f: impl FnOnce(&Settings) -> T) -> T {
+        f(&self.inner.read())
+    }
+
+    fn replace(&self, next: Settings) {
+        *self.inner.write() = next;
+    }
+}
+
+/// Load settings from disk, falling back to defaults on a missing or corrupt
+/// file. A corrupt file is backed up rather than deleted so nothing is lost.
+pub fn load<R: Runtime>(app: &AppHandle<R>) -> Settings {
+    let store = match app.store(STORE_FILE) {
+        Ok(s) => s,
+        Err(e) => {
+            log::error!("could not open settings store, using defaults: {e}");
+            return Settings::default();
+        }
+    };
+
+    let Some(raw) = store.get(SETTINGS_KEY) else {
+        log::info!("no settings found; writing defaults");
+        let defaults = Settings::default();
+        store.set(SETTINGS_KEY, serde_json::to_value(&defaults).unwrap_or_default());
+        let _ = store.save();
+        return defaults;
+    };
+
+    match serde_json::from_value::<Settings>(raw.clone()) {
+        Ok(mut s) => {
+            migrate(&mut s);
+            s
+        }
+        Err(e) => {
+            log::error!("settings file is not readable ({e}); backing it up and starting fresh");
+            backup_corrupt_settings(app, &raw);
+            Settings::default()
+        }
+    }
+}
+
+/// Write settings to disk and notify every window.
+pub fn save<R: Runtime>(app: &AppHandle<R>, settings: &Settings) -> Result<(), String> {
+    let store = app
+        .store(STORE_FILE)
+        .map_err(|e| format!("could not open settings store: {e}"))?;
+    let value = serde_json::to_value(settings).map_err(|e| format!("could not encode settings: {e}"))?;
+    store.set(SETTINGS_KEY, value);
+    store.save().map_err(|e| format!("could not write settings: {e}"))?;
+
+    if let Some(mgr) = app.try_state::<SettingsManager>() {
+        mgr.replace(settings.clone());
+    }
+
+    use tauri::Emitter;
+    let _ = app.emit(SETTINGS_CHANGED_EVENT, settings);
+    Ok(())
+}
+
+/// Apply forward-compatible fixups to a config loaded from an older version.
+///
+/// `#[serde(default)]` already handles *added* fields. This function handles
+/// the cases where a default alone would leave the app in a broken state.
+fn migrate(s: &mut Settings) {
+    // A config that predates the Null backend, or one whose backend list was
+    // emptied by hand, would leave every AI route unresolvable.
+    if s.agents.backends.is_empty() {
+        s.agents.backends = default_backends();
+    }
+    if s.agents
+        .primary_backend_id
+        .as_ref()
+        .is_none_or(|id| !s.agents.backends.iter().any(|b| &b.id == id))
+    {
+        s.agents.primary_backend_id = s.agents.backends.first().map(|b| b.id.clone());
+    }
+    // A computer-use backend that no longer exists (or lost the capability)
+    // must not stay selected.
+    if let Some(id) = s.agents.computer_use_backend_id.clone() {
+        let still_valid = s
+            .agents
+            .backends
+            .iter()
+            .any(|b| b.id == id && b.supports_computer_use);
+        if !still_valid {
+            s.agents.computer_use_backend_id = None;
+        }
+    }
+
+    // Clamp anything a hand-edited file could put out of range.
+    s.general.collapse_idle_ms = s.general.collapse_idle_ms.clamp(500, 60_000);
+    s.general.cursor_poll_ms = s.general.cursor_poll_ms.clamp(8, 500);
+    s.agents.max_steps = s.agents.max_steps.clamp(1, 500);
+    s.agents.screenshot_max_dimension = s.agents.screenshot_max_dimension.clamp(480, 4096);
+    s.clipboard.poll_interval_ms = s.clipboard.poll_interval_ms.clamp(100, 10_000);
+    s.clipboard.max_items = s.clipboard.max_items.clamp(10, 100_000);
+    s.appearance.orb_size = s.appearance.orb_size.clamp(28, 88);
+    s.appearance.popout_radius = s.appearance.popout_radius.clamp(56, 132);
+    s.appearance.popout_icon_size = s.appearance.popout_icon_size.clamp(24, 52);
+    s.appearance.orb_idle_opacity = s.appearance.orb_idle_opacity.clamp(0.15, 1.0);
+    s.voice.max_recording_secs = s.voice.max_recording_secs.clamp(3, 600);
+
+    s.version = Settings::CURRENT_VERSION;
+}
+
+fn backup_corrupt_settings<R: Runtime>(app: &AppHandle<R>, raw: &serde_json::Value) {
+    let Ok(dir) = app.path().app_config_dir() else {
+        return;
+    };
+    let stamp = chrono::Local::now().format("%Y%m%d-%H%M%S");
+    let path = dir.join(format!("orbit-settings.corrupt-{stamp}.json"));
+    if let Ok(text) = serde_json::to_string_pretty(raw) {
+        if let Err(e) = std::fs::write(&path, text) {
+            log::warn!("could not back up corrupt settings: {e}");
+        } else {
+            log::warn!("previous settings backed up to {}", path.display());
+        }
+    }
+}
+
+/// Reset everything to factory defaults, including deleting stored secrets for
+/// backends that are about to disappear.
+pub fn reset_to_defaults<R: Runtime>(app: &AppHandle<R>) -> Result<Settings, String> {
+    if let Some(mgr) = app.try_state::<SettingsManager>() {
+        for backend in mgr.get().agents.backends {
+            let _ = secrets::delete_backend_api_key(&backend.id);
+        }
+    }
+    let defaults = Settings::default();
+    save(app, &defaults)?;
+    Ok(defaults)
+}
