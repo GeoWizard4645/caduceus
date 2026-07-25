@@ -5,7 +5,7 @@
 //!
 //! | binding              | default                     | behaviour            |
 //! |----------------------|-----------------------------|----------------------|
-//! | toggle the orb       | `F12`                       | on key-down          |
+//! | toggle the staff       | `F12`                       | on key-down          |
 //! | Command Center       | `Alt+Space`                 | on key-down          |
 //! | push-to-talk         | `CommandOrControl+Shift+Space` | hold to record    |
 //!
@@ -39,7 +39,7 @@ pub fn register_all<R: Runtime>(app: &AppHandle<R>, settings: &SettingsManager) 
 
     let cfg = settings.get();
     for (label, accelerator) in [
-        ("Toggle orb", cfg.general.toggle_orb_hotkey.as_str()),
+        ("Toggle staff", cfg.general.toggle_orb_hotkey.as_str()),
         ("Command Center", cfg.general.command_center_hotkey.as_str()),
         (
             "Push to talk",
@@ -98,8 +98,8 @@ pub fn handle<R: Runtime>(app: &AppHandle<R>, shortcut: &Shortcut, event_state: 
     // --- press-only bindings ------------------------------------------------
     if event_state == ShortcutState::Pressed {
         if matches(&cfg.general.toggle_orb_hotkey) {
-            if let Err(e) = window::toggle_orb(app, &settings) {
-                log::error!("hotkey could not toggle the orb: {e}");
+            if let Err(e) = window::toggle_staff(app, &settings) {
+                log::error!("hotkey could not toggle the staff: {e}");
             }
             crate::tray::refresh(app);
             return;

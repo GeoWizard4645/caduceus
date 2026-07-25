@@ -144,7 +144,7 @@ export function AgentPanel({
       {pendingApproval && (
         <div className="border-b border-caution/30 bg-caution/[0.08] px-5 py-4">
           <p className="text-[13px] font-semibold text-ink">
-            Let Orbit control this computer?
+            Let Caduceus control this computer?
           </p>
           <p className="mt-1 text-2xs leading-relaxed text-ink-soft">
             The agent wants to start by: <span className="text-ink">{pendingApproval}</span>. It will

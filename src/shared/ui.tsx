@@ -57,7 +57,7 @@ export function Button({
       disabled={disabled}
       className={cx(
         "no-drag inline-flex shrink-0 items-center justify-center gap-1.5 rounded-lg border font-medium",
-        "transition-[background-color,filter,border-color] duration-150 ease-orbit",
+        "transition-[background-color,filter,border-color] duration-150 ease-cad",
         "disabled:cursor-not-allowed disabled:opacity-40",
         size === "sm" ? "h-7 px-2.5 text-2xs" : "h-9 px-3.5 text-[13px]",
         tones[tone],
@@ -135,7 +135,7 @@ export function Field({
 const inputClass =
   "w-full rounded-lg border border-line-strong/60 bg-base/60 px-3 py-2 text-[13px] text-ink " +
   "placeholder:text-ink-faint transition-[border-color,box-shadow] duration-150 " +
-  "focus:border-accent/70 focus:shadow-[0_0_0_3px_rgb(var(--o-accent)/0.18)] focus:outline-none " +
+  "focus:border-accent/70 focus:shadow-[0_0_0_3px_rgb(var(--c-accent)/0.18)] focus:outline-none " +
   "disabled:opacity-50";
 
 export function TextInput({
@@ -298,7 +298,7 @@ export function Toggle({
         disabled={disabled}
         onClick={() => onChange(!checked)}
         className={cx(
-          "no-drag relative mt-0.5 h-[22px] w-[38px] shrink-0 rounded-full border transition-colors duration-200 ease-orbit",
+          "no-drag relative mt-0.5 h-[22px] w-[38px] shrink-0 rounded-full border transition-colors duration-200 ease-cad",
           "disabled:cursor-not-allowed disabled:opacity-40",
           checked ? "border-accent/50 bg-accent" : "border-line-strong bg-raised",
         )}
@@ -309,7 +309,7 @@ export function Toggle({
         <span
           className={cx(
             "absolute top-1/2 h-[16px] w-[16px] -translate-y-1/2 rounded-full bg-white shadow-sm",
-            "transition-[left] duration-200 ease-orbit",
+            "transition-[left] duration-200 ease-cad",
             checked ? "left-[19px]" : "left-[3px]",
           )}
         />
@@ -384,7 +384,7 @@ export function HotkeyInput({
         className={cx(
           inputClass,
           "no-drag flex h-[38px] items-center justify-between text-left font-mono",
-          capturing && "border-accent/70 shadow-[0_0_0_3px_rgb(var(--o-accent)/0.18)]",
+          capturing && "border-accent/70 shadow-[0_0_0_3px_rgb(var(--c-accent)/0.18)]",
         )}
       >
         <span className={value ? "text-ink" : "text-ink-faint"}>
@@ -426,7 +426,7 @@ export function Section({
         </div>
         {actions && <div className="row shrink-0">{actions}</div>}
       </div>
-      <div className="rounded-orbit border border-line bg-surface/50 p-5">{children}</div>
+      <div className="rounded-cad border border-line bg-surface/50 p-5">{children}</div>
     </section>
   );
 }

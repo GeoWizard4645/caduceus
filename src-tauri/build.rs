@@ -24,7 +24,7 @@ fn write_if_changed(path: &Path, contents: &[u8]) {
 /// Compile the macOS speech-to-text helper, if we can.
 ///
 /// This is deliberately **best-effort**: a missing or broken `swiftc` must not
-/// fail the build, because the helper is optional — Orbit falls back to an HTTP
+/// fail the build, because the helper is optional — Caduceus falls back to an HTTP
 /// speech-to-text endpoint, and everything except the "System" STT backend works
 /// without it. The `bin/` directory always ends up with at least one file so the
 /// bundler's resource glob never resolves to nothing.
@@ -37,10 +37,10 @@ fn build_macos_stt_helper() {
     // to anyone who finds it in the bundle.
     write_if_changed(
         &bin_dir.join("README.txt"),
-        b"Helper executables bundled with Orbit.\n\n\
-         orbit-stt  macOS only. Transcribes a WAV file using Apple's Speech\n\
-         framework. Built from macos/OrbitSTT.swift by build.rs. If it is\n\
-         missing, Orbit's \"System\" speech-to-text backend reports that it is\n\
+        b"Helper executables bundled with Caduceus.\n\n\
+         caduceus-stt  macOS only. Transcribes a WAV file using Apple's Speech\n\
+         framework. Built from macos/CaduceusSTT.swift by build.rs. If it is\n\
+         missing, Caduceus's \"System\" speech-to-text backend reports that it is\n\
          unavailable and you can use an HTTP endpoint instead.\n",
     );
 
@@ -48,13 +48,13 @@ fn build_macos_stt_helper() {
         return;
     }
 
-    let source = Path::new(&manifest_dir).join("macos/OrbitSTT.swift");
-    println!("cargo:rerun-if-changed=macos/OrbitSTT.swift");
+    let source = Path::new(&manifest_dir).join("macos/CaduceusSTT.swift");
+    println!("cargo:rerun-if-changed=macos/CaduceusSTT.swift");
     if !source.exists() {
         return;
     }
 
-    let output = bin_dir.join("orbit-stt");
+    let output = bin_dir.join("caduceus-stt");
 
     // Skip the compile when the binary is already newer than its source, for
     // the same watcher reason as `write_if_changed` above.
@@ -77,7 +77,7 @@ fn build_macos_stt_helper() {
         .output()
     {
         Ok(out) if out.status.success() => {
-            println!("cargo:warning=built the macOS speech-to-text helper (bin/orbit-stt)");
+            println!("cargo:warning=built the macOS speech-to-text helper (bin/caduceus-stt)");
         }
         Ok(out) => {
             println!(

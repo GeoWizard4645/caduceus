@@ -2,7 +2,7 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import { resolve } from "node:path";
 
-// Orbit ships three separate webviews (orb / command center / settings), so Vite
+// Caduceus ships three separate webviews (staff / command center / settings), so Vite
 // is configured as a multi-page app. Each HTML file at the repo root is an entry
 // point that Tauri loads by path (see src-tauri/tauri.conf.json + window/mod.rs).
 export default defineConfig({
@@ -30,7 +30,7 @@ export default defineConfig({
     sourcemap: !!process.env.TAURI_ENV_DEBUG,
     rollupOptions: {
       input: {
-        orb: resolve(__dirname, "index.html"),
+        staff: resolve(__dirname, "index.html"),
         commandCenter: resolve(__dirname, "command-center.html"),
         settings: resolve(__dirname, "settings.html"),
       },

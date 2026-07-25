@@ -10,12 +10,12 @@
 //!
 //! # An explicit scope decision
 //!
-//! There is **no always-on wake-word listening**. Orbit only opens the
+//! There is **no always-on wake-word listening**. Caduceus only opens the
 //! microphone while you are physically holding a key, and closes it the moment
 //! you let go. A background listener would mean a process with permanent
 //! microphone access on a tool that also has screen capture and input
 //! simulation — too much to ask of someone installing a utility from GitHub.
-//! "Hey Orbit" is not a v1 feature and is not a small change.
+//! "Hey Caduceus" is not a v1 feature and is not a small change.
 
 pub mod recorder;
 pub mod router;
@@ -31,9 +31,9 @@ use crate::settings::SettingsManager;
 
 /// Events emitted while push-to-talk is running, so the Command Center can show
 /// a live "listening…" state.
-pub const VOICE_STATE_EVENT: &str = "orbit://voice-state";
+pub const VOICE_STATE_EVENT: &str = "caduceus://voice-state";
 /// Emitted with the routed transcript once transcription finishes.
-pub const VOICE_RESULT_EVENT: &str = "orbit://voice-result";
+pub const VOICE_RESULT_EVENT: &str = "caduceus://voice-result";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
 #[serde(rename_all = "camelCase")]

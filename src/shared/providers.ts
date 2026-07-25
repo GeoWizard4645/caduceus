@@ -1,7 +1,7 @@
 /**
  * The Command Center's result-source interface.
  *
- * This is Orbit's frontend extension point. A provider takes the current query
+ * This is Caduceus's frontend extension point. A provider takes the current query
  * and returns rows; the palette merges, ranks and renders them. Adding a new
  * source — open browser tabs, a project list, calculator results — means
  * writing one object and appending it to {@link defaultProviders}.
@@ -73,11 +73,11 @@ export const shortcutProvider: ResultProvider = {
   search({ query, settings, actions }) {
     const visible = settings.shortcuts.filter((s) => !s.hidden);
 
-    // An empty query shows pinned (orb) shortcuts in their configured order,
+    // An empty query shows pinned (staff) shortcuts in their configured order,
     // so the palette is useful before you have typed anything.
     if (!query) {
       return visible
-        .filter((s) => s.showInOrb)
+        .filter((s) => s.showInStaff)
         .sort((a, b) => a.orderIndex - b.orderIndex)
         .map((shortcut, index) => toItem(shortcut, 500 - index, undefined, actions));
     }
@@ -198,7 +198,7 @@ export const prefixHintProvider: ResultProvider = {
         icon: rule.prefix,
         group: "Prefixes",
         // Above clipboard on the empty query: prefixes are how you discover
-        // that Orbit does anything beyond opening bookmarks, and burying them
+        // that Caduceus does anything beyond opening bookmarks, and burying them
         // under a scroll means nobody finds them.
         score: 300 - index,
         accessory: `${rule.prefix} …`,

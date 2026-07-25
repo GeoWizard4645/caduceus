@@ -1,4 +1,4 @@
-//! Orbit — a fast, local-first AI command center.
+//! Caduceus — a fast, local-first AI command center.
 //!
 //! # Layout
 //!
@@ -10,7 +10,7 @@
 //! | [`agent`]     | the `AgentBackend` trait, providers, and computer use      |
 //! | [`voice`]     | push-to-talk capture, speech-to-text, keyword routing      |
 //! | [`palette`]   | Command Center prefix parsing and dispatch                 |
-//! | [`window`]    | orb placement, cursor tracking, window show/hide           |
+//! | [`window`]    | staff placement, cursor tracking, window show/hide           |
 //! | [`commands`]  | every `#[tauri::command]` the webview can call             |
 //!
 //! # Startup order
@@ -47,7 +47,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
-            // Started at login with no windows shown: the tray and the orb are
+            // Started at login with no windows shown: the tray and the staff are
             // the entire UI until the user asks for more.
             Some(vec!["--minimized"]),
         ))
@@ -80,8 +80,8 @@ pub fn run() {
             commands::open_command_center,
             commands::hide_command_center,
             commands::open_settings_window,
-            commands::toggle_orb,
-            commands::save_orb_position,
+            commands::toggle_staff,
+            commands::save_staff_position,
             // clipboard
             commands::clipboard_list,
             commands::clipboard_copy,
@@ -111,7 +111,7 @@ pub fn run() {
         .setup(setup)
         .on_window_event(handle_window_event)
         .build(tauri::generate_context!())
-        .expect("failed to build Orbit")
+        .expect("failed to build Caduceus")
         .run(|app, event| {
             if let RunEvent::ExitRequested { .. } = event {
                 shutdown(app);
@@ -122,7 +122,7 @@ pub fn run() {
 fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     let handle = app.handle().clone();
 
-    // macOS: no Dock icon, no app-switcher entry. Orbit is a menu-bar utility;
+    // macOS: no Dock icon, no app-switcher entry. Caduceus is a menu-bar utility;
     // the Settings window temporarily switches this back (see window::open_settings).
     #[cfg(target_os = "macos")]
     app.set_activation_policy(tauri::ActivationPolicy::Accessory);
@@ -136,7 +136,7 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     let data_dir = handle
         .path()
         .app_data_dir()
-        .unwrap_or_else(|_| std::env::temp_dir().join("orbit"));
+        .unwrap_or_else(|_| std::env::temp_dir().join("caduceus"));
     let _ = std::fs::create_dir_all(&data_dir);
 
     match ClipboardStore::open(data_dir.join(clipboard::DB_FILE)) {
@@ -161,14 +161,14 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     app.manage(voice::VoiceRuntime::new());
 
     // --- windows ----------------------------------------------------------
-    if let Some(orb) = window::orb(&handle) {
+    if let Some(staff) = window::staff(&handle) {
         // Start click-through; the cursor tracker turns this off when the
-        // pointer actually reaches the orb.
-        let _ = orb.set_ignore_cursor_events(true);
-        let _ = window::position_orb(&handle, &manager);
-        if loaded.general.orb_visible {
-            let _ = orb.show();
-            let _ = orb.set_always_on_top(true);
+        // pointer actually reaches the staff.
+        let _ = staff.set_ignore_cursor_events(true);
+        let _ = window::position_staff(&handle, &manager);
+        if loaded.general.staff_visible {
+            let _ = staff.show();
+            let _ = staff.set_always_on_top(true);
         }
     }
     for label in [window::COMMAND_CENTER_WINDOW, window::SETTINGS_WINDOW] {
@@ -185,7 +185,7 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     if !problems.is_empty() {
         // Surfaced in Settings rather than as a modal at launch: a clashing
         // hotkey is worth knowing about, not worth interrupting for.
-        let _ = handle.emit("orbit://hotkey-problems", &problems);
+        let _ = handle.emit("caduceus://hotkey-problems", &problems);
     }
 
     if let Err(e) = tray::build(&handle) {
@@ -195,7 +195,7 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     autostart::sync_with_settings(&handle, loaded.general.launch_at_login);
 
     log::info!(
-        "Orbit {} started on {} ({} shortcuts, clipboard {})",
+        "Caduceus {} started on {} ({} shortcuts, clipboard {})",
         env!("CARGO_PKG_VERSION"),
         std::env::consts::OS,
         loaded.shortcuts.len(),
@@ -207,10 +207,10 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
 fn handle_window_event(window: &tauri::Window, event: &WindowEvent) {
     match event {
         // Closing a window hides it instead of destroying it: recreating a
-        // webview on every open would make the palette feel slow, and Orbit is
+        // webview on every open would make the palette feel slow, and Caduceus is
         // only ever really quit from the tray.
         WindowEvent::CloseRequested { api, .. } => {
-            if window.label() != window::ORB_WINDOW {
+            if window.label() != window::STAFF_WINDOW {
                 api.prevent_close();
                 let _ = window.hide();
                 #[cfg(target_os = "macos")]
@@ -235,9 +235,9 @@ fn handle_window_event(window: &tauri::Window, event: &WindowEvent) {
             }
         }
 
-        // Remember where the orb was dragged to.
+        // Remember where the staff was dragged to.
         WindowEvent::Moved(_) => {
-            if window.label() == window::ORB_WINDOW {
+            if window.label() == window::STAFF_WINDOW {
                 let app = window.app_handle().clone();
                 if let Some(settings) = app.try_state::<SettingsManager>() {
                     let settings = settings.inner().clone();
@@ -245,7 +245,7 @@ fn handle_window_event(window: &tauri::Window, event: &WindowEvent) {
                     // write the settings file on every frame.
                     tauri::async_runtime::spawn(async move {
                         tokio::time::sleep(std::time::Duration::from_millis(400)).await;
-                        let _ = window::persist_orb_position(&app, &settings);
+                        let _ = window::persist_staff_position(&app, &settings);
                     });
                 }
             }

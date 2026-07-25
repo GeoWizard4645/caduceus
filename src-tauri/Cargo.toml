@@ -1,17 +1,17 @@
 [package]
-name = "orbit"
+name = "caduceus"
 version = "0.1.0"
-description = "Orbit — a fast, local-first AI command center for your desktop."
-authors = ["Orbit contributors"]
+description = "Caduceus — a fast, local-first AI command center for your desktop."
+authors = ["Caduceus contributors"]
 license = "MIT"
-repository = "https://github.com/vivaanshahani/orbit"
+repository = "https://github.com/vivaanshahani/caduceus"
 edition = "2021"
 rust-version = "1.82"
 
 # The library target is what Tauri's mobile/desktop entrypoints link against.
 # Keeping logic in `lib.rs` (rather than `main.rs`) keeps it unit-testable.
 [lib]
-name = "orbit_lib"
+name = "caduceus_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]

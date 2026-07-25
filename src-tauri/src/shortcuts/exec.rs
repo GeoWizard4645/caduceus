@@ -1,7 +1,7 @@
 //! Executing a [`Shortcut`].
 //!
 //! Everything here runs in the Rust process, never in the webview. The frontend
-//! can only say "run shortcut with id X" — it can never hand Orbit a command
+//! can only say "run shortcut with id X" — it can never hand Caduceus a command
 //! string to execute. That is why `capabilities/default.json` does not enable
 //! the shell plugin.
 
@@ -177,7 +177,7 @@ pub async fn open_url(url: &str, chrome_profile: Option<&str>, prefer_chrome: bo
 
 /// Only `http(s)` is ever opened.
 ///
-/// This matters because URLs can reach Orbit from a model response or a
+/// This matters because URLs can reach Caduceus from a model response or a
 /// clipboard entry, and schemes like `file:`, `javascript:` or a custom
 /// app-handler scheme are a real escalation path.
 fn is_safe_url(url: &str) -> bool {
@@ -313,7 +313,7 @@ pub async fn open_app(target: &str, args: &[String]) -> ExecOutcome {
 
 /// Spawn a shell command.
 ///
-/// The raw (unquoted) query is also exported as `$ORBIT_QUERY`, which is the
+/// The raw (unquoted) query is also exported as `$CADUCEUS_QUERY`, which is the
 /// recommended way to consume it — `{query}` substitution is shell-quoted, so
 /// it is safe but awkward to use inside an existing quoted string.
 async fn spawn_shell(command: &str, raw_query: &str, capture: bool) -> std::io::Result<String> {
@@ -332,7 +332,7 @@ async fn spawn_shell(command: &str, raw_query: &str, capture: bool) -> std::io::
         c
     };
 
-    cmd.env("ORBIT_QUERY", raw_query);
+    cmd.env("CADUCEUS_QUERY", raw_query);
 
     if capture {
         let out = cmd.output().await?;
@@ -441,7 +441,7 @@ fn shell_quote(s: &str) -> String {
     }
 }
 
-/// Detach a child so it outlives Orbit and does not inherit our stdio.
+/// Detach a child so it outlives Caduceus and does not inherit our stdio.
 fn detach(cmd: &mut Command) {
     cmd.stdin(Stdio::null())
         .stdout(Stdio::null())

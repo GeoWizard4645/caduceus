@@ -2,10 +2,10 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 
 import "@/styles.css";
-import { Orb } from "./Orb";
+import { Staff } from "./Staff";
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
-    <Orb />
+    <Staff />
   </React.StrictMode>,
 );

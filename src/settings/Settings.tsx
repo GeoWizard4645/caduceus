@@ -71,7 +71,7 @@ export function Settings() {
         <div className="h-11 shrink-0" />
 
         <div className="px-3 pb-3">
-          <p className="px-2 text-[15px] font-semibold tracking-[-0.01em] text-ink">Orbit</p>
+          <p className="px-2 text-[15px] font-semibold tracking-[-0.01em] text-ink">Caduceus</p>
           <p className="px-2 text-2xs text-ink-faint">
             {info.data ? `Version ${info.data.version}` : " "}
           </p>

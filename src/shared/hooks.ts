@@ -1,7 +1,7 @@
 /**
  * Shared React hooks.
  *
- * Every Orbit window loads settings, listens for the change event, and applies
+ * Every Caduceus window loads settings, listens for the change event, and applies
  * the theme. That is `useSettings`; the rest are small utilities that stop the
  * three windows from each inventing their own version.
  */

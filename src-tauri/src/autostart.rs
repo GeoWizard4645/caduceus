@@ -27,7 +27,7 @@ pub fn set_enabled<R: Runtime>(app: &AppHandle<R>, enabled: bool) -> Result<(), 
     })
 }
 
-/// Whether the OS currently has Orbit registered to launch at login.
+/// Whether the OS currently has Caduceus registered to launch at login.
 ///
 /// Read from the OS rather than from settings, so a login item removed by hand
 /// is reflected accurately.

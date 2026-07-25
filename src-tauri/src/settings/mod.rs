@@ -19,12 +19,12 @@ use tauri::{AppHandle, Manager, Runtime};
 use tauri_plugin_store::StoreExt;
 
 /// Filename inside the app config directory.
-pub const STORE_FILE: &str = "orbit-settings.json";
+pub const STORE_FILE: &str = "caduceus-settings.json";
 const SETTINGS_KEY: &str = "settings";
 
 /// Event emitted to every window whenever settings change, so open windows
 /// re-render without polling.
-pub const SETTINGS_CHANGED_EVENT: &str = "orbit://settings-changed";
+pub const SETTINGS_CHANGED_EVENT: &str = "caduceus://settings-changed";
 
 /// In-memory cache of the config, shared by every subsystem.
 ///
@@ -145,10 +145,10 @@ fn migrate(s: &mut Settings) {
     s.agents.screenshot_max_dimension = s.agents.screenshot_max_dimension.clamp(480, 4096);
     s.clipboard.poll_interval_ms = s.clipboard.poll_interval_ms.clamp(100, 10_000);
     s.clipboard.max_items = s.clipboard.max_items.clamp(10, 100_000);
-    s.appearance.orb_size = s.appearance.orb_size.clamp(28, 88);
+    s.appearance.staff_size = s.appearance.staff_size.clamp(28, 88);
     s.appearance.popout_radius = s.appearance.popout_radius.clamp(56, 132);
     s.appearance.popout_icon_size = s.appearance.popout_icon_size.clamp(24, 52);
-    s.appearance.orb_idle_opacity = s.appearance.orb_idle_opacity.clamp(0.15, 1.0);
+    s.appearance.staff_idle_opacity = s.appearance.staff_idle_opacity.clamp(0.15, 1.0);
     s.voice.max_recording_secs = s.voice.max_recording_secs.clamp(3, 600);
 
     s.version = Settings::CURRENT_VERSION;
@@ -159,7 +159,7 @@ fn backup_corrupt_settings<R: Runtime>(app: &AppHandle<R>, raw: &serde_json::Val
         return;
     };
     let stamp = chrono::Local::now().format("%Y%m%d-%H%M%S");
-    let path = dir.join(format!("orbit-settings.corrupt-{stamp}.json"));
+    let path = dir.join(format!("caduceus-settings.corrupt-{stamp}.json"));
     if let Ok(text) = serde_json::to_string_pretty(raw) {
         if let Err(e) = std::fs::write(&path, text) {
             log::warn!("could not back up corrupt settings: {e}");

@@ -1,18 +1,18 @@
-// Orbit's macOS speech-to-text helper.
+// Caduceus's macOS speech-to-text helper.
 //
 // A ~90-line command-line tool that hands a WAV file to Apple's Speech
 // framework and prints the transcript. It exists because `Speech.framework` has
 // no C interface Rust can call directly, and because shelling out keeps the
 // permission prompt, the framework link, and the Swift runtime entirely outside
-// Orbit's main binary — if this helper is missing or fails, Orbit falls back to
+// Caduceus's main binary — if this helper is missing or fails, Caduceus falls back to
 // an HTTP speech-to-text endpoint and nothing else breaks.
 //
-// Built by `build.rs` into `src-tauri/bin/orbit-stt` and shipped as a bundle
+// Built by `build.rs` into `src-tauri/bin/caduceus-stt` and shipped as a bundle
 // resource. Build it by hand with:
 //
-//     swiftc -O -o bin/orbit-stt macos/OrbitSTT.swift
+//     swiftc -O -o bin/caduceus-stt macos/CaduceusSTT.swift
 //
-// Usage: orbit-stt <path-to-audio> [locale-identifier]
+// Usage: caduceus-stt <path-to-audio> [locale-identifier]
 // Exit codes: 0 success (transcript on stdout), 2 failure (reason on stderr).
 
 import Foundation
@@ -25,7 +25,7 @@ func fail(_ message: String) -> Never {
 
 let arguments = CommandLine.arguments
 guard arguments.count >= 2 else {
-    fail("usage: orbit-stt <path-to-audio> [locale-identifier]")
+    fail("usage: caduceus-stt <path-to-audio> [locale-identifier]")
 }
 
 let audioURL = URL(fileURLWithPath: arguments[1])
@@ -39,7 +39,7 @@ let localeIdentifier: String = {
 }()
 
 // Authorisation. The first run shows the system prompt described by
-// NSSpeechRecognitionUsageDescription in Orbit's Info.plist.
+// NSSpeechRecognitionUsageDescription in Caduceus's Info.plist.
 let authSemaphore = DispatchSemaphore(value: 0)
 var authorization: SFSpeechRecognizerAuthorizationStatus = .notDetermined
 SFSpeechRecognizer.requestAuthorization { status in

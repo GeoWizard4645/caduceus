@@ -1,7 +1,7 @@
 //! Microphone capture for push-to-talk.
 //!
 //! Records from the default input device while the hotkey is held, then emits a
-//! 16 kHz mono 16-bit WAV — the format every speech recogniser Orbit talks to
+//! 16 kHz mono 16-bit WAV — the format every speech recogniser Caduceus talks to
 //! accepts natively, and small enough to POST to a local Whisper server without
 //! thinking about it.
 //!
@@ -15,14 +15,14 @@ use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use parking_lot::Mutex;
 use thiserror::Error;
 
-/// Sample rate every STT backend Orbit supports is happy with.
+/// Sample rate every STT backend Caduceus supports is happy with.
 pub const TARGET_SAMPLE_RATE: u32 = 16_000;
 
 #[derive(Debug, Error)]
 pub enum RecorderError {
     #[error("no microphone found. Check your input device in System Settings.")]
     NoDevice,
-    #[error("could not open the microphone: {0}. On macOS, grant Orbit microphone access in System Settings \u{2192} Privacy & Security.")]
+    #[error("could not open the microphone: {0}. On macOS, grant Caduceus microphone access in System Settings \u{2192} Privacy & Security.")]
     Device(String),
     #[error("recording failed: {0}")]
     Stream(String),
@@ -62,7 +62,7 @@ pub fn start(max_secs: u32) -> RecorderResult<Recording> {
     let (ready_tx, ready_rx) = mpsc::channel::<RecorderResult<()>>();
 
     std::thread::Builder::new()
-        .name("orbit-mic".into())
+        .name("caduceus-mic".into())
         .spawn(move || {
             let samples: Arc<Mutex<Vec<f32>>> = Arc::new(Mutex::new(Vec::new()));
 

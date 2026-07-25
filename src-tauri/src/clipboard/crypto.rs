@@ -5,8 +5,8 @@
 //! This protects clipboard history from **another process or user reading the
 //! SQLite file off disk** — a synced backup, a shared machine, a stolen laptop
 //! with the disk mounted elsewhere. It does *not* protect against malware
-//! running as you while Orbit is unlocked, because at that point the attacker
-//! can ask the OS keychain for the key exactly like Orbit does.
+//! running as you while Caduceus is unlocked, because at that point the attacker
+//! can ask the OS keychain for the key exactly like Caduceus does.
 //!
 //! # Construction
 //!

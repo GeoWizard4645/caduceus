@@ -34,7 +34,7 @@ export function ClipboardTab({
     <>
       <Section
         title="History"
-        description="Orbit watches the clipboard in the background and keeps what you copy, so you can get it back later."
+        description="Caduceus watches the clipboard in the background and keeps what you copy, so you can get it back later."
       >
         <Toggle
           label="Keep clipboard history"
@@ -74,7 +74,7 @@ export function ClipboardTab({
 
           <Field
             label="Check every"
-            hint="How often Orbit looks at the clipboard. Lower feels snappier; the cost is negligible either way."
+            hint="How often Caduceus looks at the clipboard. Lower feels snappier; the cost is negligible either way."
           >
             <NumberInput
               value={clipboard.pollIntervalMs}
@@ -125,7 +125,7 @@ export function ClipboardTab({
       >
         <Toggle
           label="Honour the “do not record” marker"
-          hint="Password managers tag their copies as concealed. Orbit skips anything carrying that marker. macOS only — no equivalent convention exists on Windows or Linux."
+          hint="Password managers tag their copies as concealed. Caduceus skips anything carrying that marker. macOS only — no equivalent convention exists on Windows or Linux."
           checked={clipboard.respectConcealedMarker}
           onChange={(checked) => draft.update((d) => (d.clipboard.respectConcealedMarker = checked))}
         />
@@ -168,12 +168,12 @@ export function ClipboardTab({
           <Callout tone="info" title="What this does and does not protect">
             It protects your history from anything that can read the database file — a synced
             backup, another user account, a disk pulled out of the machine. It does <em>not</em>
-            {" "}protect against software running as you while Orbit is unlocked, because that can ask
-            the keychain for the key exactly as Orbit does.
+            {" "}protect against software running as you while Caduceus is unlocked, because that can ask
+            the keychain for the key exactly as Caduceus does.
           </Callout>
 
           <Callout tone="warn" title="Losing the key loses the history">
-            The key lives only in your OS keychain and Orbit provides no way to export it. If the
+            The key lives only in your OS keychain and Caduceus provides no way to export it. If the
             keychain is reset or the entry is deleted, existing encrypted history becomes
             permanently unreadable and is removed the next time you toggle this. That is the
             intended behaviour, not a bug.

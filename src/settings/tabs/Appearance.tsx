@@ -55,7 +55,7 @@ export function AppearanceTab({ draft }: { draft: Draft }) {
 
       <Section
         title="Accent"
-        description="One colour, used for focus rings, the orb, and highlighted rows."
+        description="One colour, used for focus rings, the staff, and highlighted rows."
       >
         <div className="flex flex-wrap gap-2">
           {ACCENTS.map((accent) => (
@@ -101,21 +101,21 @@ export function AppearanceTab({ draft }: { draft: Draft }) {
       </Section>
 
       <Section
-        title="The orb"
-        description="Changes apply live — drag a value and watch the orb on screen."
+        title="The staff"
+        description="Changes apply live — drag a value and watch the staff on screen."
       >
         <div className="grid grid-cols-2 gap-5">
-          <Field label="Orb size">
+          <Field label="Staff size" hint="The height of the caduceus mark.">
             <NumberInput
-              value={appearance.orbSize}
-              min={28}
-              max={88}
+              value={appearance.staffSize}
+              min={36}
+              max={120}
               suffix="px"
-              onChange={(value) => draft.update((d) => (d.appearance.orbSize = value))}
+              onChange={(value) => draft.update((d) => (d.appearance.staffSize = value))}
             />
           </Field>
 
-          <Field label="Pop-out distance" hint="How far the icons sit from the orb's centre.">
+          <Field label="Pop-out distance" hint="How far the icons sit from the staff's centre.">
             <NumberInput
               value={appearance.popoutRadius}
               min={56}
@@ -137,29 +137,29 @@ export function AppearanceTab({ draft }: { draft: Draft }) {
 
           <Field
             label="Idle opacity"
-            hint="How visible the orb is when you are not near it. 1 is fully opaque."
+            hint="How visible the staff is when you are not near it. 1 is fully opaque."
           >
             <NumberInput
-              value={appearance.orbIdleOpacity}
+              value={appearance.staffIdleOpacity}
               min={0.15}
               max={1}
               step={0.05}
-              onChange={(value) => draft.update((d) => (d.appearance.orbIdleOpacity = value))}
+              onChange={(value) => draft.update((d) => (d.appearance.staffIdleOpacity = value))}
             />
           </Field>
         </div>
 
         <div className="mt-4 border-t border-line pt-4">
           <Toggle
-            label="Animate the idle orb"
-            hint="A slow breathing pulse and a rotating ring. Turn off for a completely still orb."
-            checked={appearance.orbIdleAnimation}
-            onChange={(checked) => draft.update((d) => (d.appearance.orbIdleAnimation = checked))}
+            label="Animate the idle staff"
+            hint="A slow breathing pulse and a rotating ring. Turn off for a completely still staff."
+            checked={appearance.staffIdleAnimation}
+            onChange={(checked) => draft.update((d) => (d.appearance.staffIdleAnimation = checked))}
           />
         </div>
 
         <p className="mt-4 text-2xs leading-relaxed text-ink-faint">
-          Orbit also respects your system's “reduce motion” setting, which disables every animation
+          Caduceus also respects your system's “reduce motion” setting, which disables every animation
           regardless of what is set here.
         </p>
       </Section>

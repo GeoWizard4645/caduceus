@@ -1,9 +1,9 @@
 //! The `Shortcut` primitive.
 //!
-//! A shortcut is the single unit of "a thing Orbit can do for you". The same
+//! A shortcut is the single unit of "a thing Caduceus can do for you". The same
 //! struct powers:
 //!
-//! * the six icons that fan out around the orb,
+//! * the six icons that fan out around the staff,
 //! * every non-clipboard row in the Command Center,
 //! * anything a user adds in Settings → Shortcuts.
 //!
@@ -57,16 +57,16 @@ pub struct Shortcut {
     /// Chrome `--profile-directory` value, e.g. `Default` or `Profile 1`.
     /// Only meaningful for `OpenUrl`.
     pub chrome_profile_directory: Option<String>,
-    /// Whether this appears in the orb's radial pop-out. The orb renders at
-    /// most [`ORB_POPOUT_LIMIT`] of these, ordered by `order_index`; the data
+    /// Whether this appears in the staff's radial pop-out. The staff renders at
+    /// most [`STAFF_POPOUT_LIMIT`] of these, ordered by `order_index`; the data
     /// model itself imposes no cap.
-    pub show_in_orb: bool,
+    pub show_in_staff: bool,
     pub order_index: i32,
     /// Extra words that should match this shortcut in the palette.
     pub keywords: Vec<String>,
     /// Shown as the subtitle in the Command Center.
     pub description: String,
-    /// Hidden from search results (but still usable from the orb).
+    /// Hidden from search results (but still usable from the staff).
     pub hidden: bool,
 }
 
@@ -80,7 +80,7 @@ impl Default for Shortcut {
             target: String::new(),
             args: Vec::new(),
             chrome_profile_directory: None,
-            show_in_orb: false,
+            show_in_staff: false,
             order_index: 0,
             keywords: Vec::new(),
             description: String::new(),
@@ -89,15 +89,15 @@ impl Default for Shortcut {
     }
 }
 
-/// How many pop-out icons the orb renders. Extra `show_in_orb` shortcuts beyond
+/// How many pop-out icons the staff renders. Extra `show_in_staff` shortcuts beyond
 /// this are simply not drawn; the Settings UI warns instead of silently
 /// dropping them.
-pub const ORB_POPOUT_LIMIT: usize = 6;
+pub const STAFF_POPOUT_LIMIT: usize = 6;
 
 /// The six shortcuts a fresh install ships with.
 ///
 /// These are *starting points*, not fixtures — every field is editable and each
-/// one can be deleted. They exist so the orb is useful in the first ten seconds
+/// one can be deleted. They exist so the staff is useful in the first ten seconds
 /// rather than being an empty ring.
 pub fn default_shortcuts() -> Vec<Shortcut> {
     vec![
@@ -107,7 +107,7 @@ pub fn default_shortcuts() -> Vec<Shortcut> {
             icon: "✧".into(),
             kind: ShortcutKind::OpenUrl,
             target: "https://gemini.google.com/app".into(),
-            show_in_orb: true,
+            show_in_staff: true,
             order_index: 0,
             keywords: vec!["google".into(), "ai".into(), "bard".into()],
             description: "Open Gemini in your browser".into(),
@@ -119,7 +119,7 @@ pub fn default_shortcuts() -> Vec<Shortcut> {
             icon: "✉".into(),
             kind: ShortcutKind::OpenUrl,
             target: "https://mail.google.com".into(),
-            show_in_orb: true,
+            show_in_staff: true,
             order_index: 1,
             keywords: vec!["mail".into(), "email".into(), "inbox".into()],
             description: "Open your inbox".into(),
@@ -131,7 +131,7 @@ pub fn default_shortcuts() -> Vec<Shortcut> {
             icon: "◎".into(),
             kind: ShortcutKind::OpenApp,
             target: default_chrome_target().into(),
-            show_in_orb: true,
+            show_in_staff: true,
             order_index: 2,
             keywords: vec!["browser".into(), "google".into()],
             description: "Launch the browser".into(),
@@ -143,21 +143,21 @@ pub fn default_shortcuts() -> Vec<Shortcut> {
             icon: "✳".into(),
             kind: ShortcutKind::OpenUrl,
             target: "https://claude.ai".into(),
-            show_in_orb: true,
+            show_in_staff: true,
             order_index: 3,
             keywords: vec!["anthropic".into(), "ai".into(), "chat".into()],
             description: "Open Claude in your browser".into(),
             ..Default::default()
         },
         Shortcut {
-            // Deliberately blank: Orbit does not assume which dictation app you
+            // Deliberately blank: Caduceus does not assume which dictation app you
             // use, or that you have one. The Settings UI flags empty targets.
             id: "sc-dictation".into(),
             label: "Dictation App".into(),
             icon: "◍".into(),
             kind: ShortcutKind::OpenApp,
             target: String::new(),
-            show_in_orb: true,
+            show_in_staff: true,
             order_index: 4,
             keywords: vec!["voice".into(), "speech".into(), "transcribe".into()],
             description: "Set this to your dictation app in Settings → Shortcuts".into(),
@@ -169,7 +169,7 @@ pub fn default_shortcuts() -> Vec<Shortcut> {
             icon: "❐".into(),
             kind: ShortcutKind::ClipboardView,
             target: String::new(),
-            show_in_orb: true,
+            show_in_staff: true,
             order_index: 5,
             keywords: vec!["history".into(), "paste".into(), "copy".into()],
             description: "Browse everything you have copied".into(),
@@ -228,7 +228,7 @@ mod tests {
     #[test]
     fn default_set_has_six_orb_shortcuts() {
         let s = default_shortcuts();
-        assert_eq!(s.iter().filter(|x| x.show_in_orb).count(), ORB_POPOUT_LIMIT);
+        assert_eq!(s.iter().filter(|x| x.show_in_staff).count(), STAFF_POPOUT_LIMIT);
     }
 
     #[test]

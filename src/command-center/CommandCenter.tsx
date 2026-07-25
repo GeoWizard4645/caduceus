@@ -1,5 +1,5 @@
 /**
- * The Command Center — Orbit's palette.
+ * The Command Center — Caduceus's palette.
  *
  * One input, one keyboard-navigable list, and a prefix router. Results come
  * from {@link defaultProviders}; the routing decision (what Enter actually
@@ -287,7 +287,7 @@ export function CommandCenter() {
     // `h-full` rather than `h-screen`: html/body/#root are already 100% tall, so
     // this is identical in the real window but also correct when the component
     // is embedded in the UI preview harness.
-    <div className="relative flex h-full w-full flex-col overflow-hidden rounded-orbit-lg glass shadow-float">
+    <div className="relative flex h-full w-full flex-col overflow-hidden rounded-cad-lg glass shadow-float">
       {/* --- input row -------------------------------------------------- */}
       <div className="drag-region flex shrink-0 items-center gap-3 px-5 pb-3 pt-4">
         <span aria-hidden="true" className="shrink-0 text-ink-faint">

@@ -3,9 +3,9 @@
 //! That is a much larger set than "OpenAI": Ollama, LM Studio, vLLM,
 //! llama.cpp's server, LocalAI, OpenRouter, Together, Groq, Fireworks, DeepSeek
 //! and most corporate gateways all expose it. One backend covers all of them,
-//! which is why Orbit does not ship a per-vendor integration for each.
+//! which is why Caduceus does not ship a per-vendor integration for each.
 //!
-//! Chat only. Computer use is Anthropic-specific in Orbit today — see
+//! Chat only. Computer use is Anthropic-specific in Caduceus today — see
 //! `docs/PLUGIN_GUIDE.md` if you want to add a tool-use loop for another
 //! provider.
 

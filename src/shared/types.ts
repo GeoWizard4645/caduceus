@@ -28,21 +28,21 @@ export interface Shortcut {
   target: string;
   args: string[];
   chromeProfileDirectory: string | null;
-  showInOrb: boolean;
+  showInStaff: boolean;
   orderIndex: number;
   keywords: string[];
   description: string;
   hidden: boolean;
 }
 
-/** The orb draws at most this many pop-out icons. */
-export const ORB_POPOUT_LIMIT = 6;
+/** The staff draws at most this many pop-out icons. */
+export const STAFF_POPOUT_LIMIT = 6;
 
 // ---------------------------------------------------------------------------
 // Settings
 // ---------------------------------------------------------------------------
 
-export type OrbEdge = "left" | "right";
+export type StaffEdge = "left" | "right";
 
 export interface Point {
   x: number;
@@ -52,9 +52,9 @@ export interface Point {
 export interface GeneralSettings {
   toggleOrbHotkey: string;
   commandCenterHotkey: string;
-  orbVisible: boolean;
-  orbEdge: OrbEdge;
-  orbPosition: Point | null;
+  staffVisible: boolean;
+  staffEdge: StaffEdge;
+  staffPosition: Point | null;
   hoverExpandDelayMs: number;
   collapseIdleMs: number;
   launchAtLogin: boolean;
@@ -173,12 +173,12 @@ export type Theme = "dark" | "light" | "system";
 export interface AppearanceSettings {
   theme: Theme;
   accent: string;
-  orbSize: number;
+  staffSize: number;
   popoutRadius: number;
   popoutIconSize: number;
-  orbIdleOpacity: number;
+  staffIdleOpacity: number;
   reduceTransparency: boolean;
-  orbIdleAnimation: boolean;
+  staffIdleAnimation: boolean;
 }
 
 export interface Settings {
@@ -363,7 +363,7 @@ export interface VoiceOutcome {
 // Window events
 // ---------------------------------------------------------------------------
 
-export interface OrbHoverState {
+export interface StaffHoverState {
   hovering: boolean;
   expanded: boolean;
 }
@@ -376,13 +376,13 @@ export interface CommandCenterOpenPayload {
 
 /** Event names emitted by the Rust side. */
 export const EVENTS = {
-  settingsChanged: "orbit://settings-changed",
-  clipboardChanged: "orbit://clipboard-changed",
-  agentStep: "orbit://agent-step",
-  orbHover: "orbit://orb-hover",
-  commandCenterOpen: "orbit://command-center-open",
-  settingsTab: "orbit://settings-tab",
-  voiceState: "orbit://voice-state",
-  voiceResult: "orbit://voice-result",
-  hotkeyProblems: "orbit://hotkey-problems",
+  settingsChanged: "caduceus://settings-changed",
+  clipboardChanged: "caduceus://clipboard-changed",
+  agentStep: "caduceus://agent-step",
+  staffHover: "caduceus://staff-hover",
+  commandCenterOpen: "caduceus://command-center-open",
+  settingsTab: "caduceus://settings-tab",
+  voiceState: "caduceus://voice-state",
+  voiceResult: "caduceus://voice-result",
+  hotkeyProblems: "caduceus://hotkey-problems",
 } as const;

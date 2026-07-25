@@ -1,4 +1,4 @@
-//! OS keychain access for everything Orbit must never write to disk.
+//! OS keychain access for everything Caduceus must never write to disk.
 //!
 //! Two kinds of secret live here:
 //!
@@ -17,7 +17,7 @@ use keyring::Entry;
 use thiserror::Error;
 
 /// Keychain "service" name. Shows up in Keychain Access as the item's service.
-const SERVICE: &str = "com.orbit.desktop";
+const SERVICE: &str = "com.caduceus.desktop";
 
 /// Account name for the clipboard encryption key.
 const CLIPBOARD_KEY_ACCOUNT: &str = "clipboard-encryption-key";
@@ -140,7 +140,7 @@ pub fn has_stt_api_key() -> bool {
 ///
 /// **Losing this key makes existing encrypted history unreadable.** That is the
 /// intended behaviour: the whole point of the toggle is that history is
-/// worthless without the key material, and Orbit deliberately provides no
+/// worthless without the key material, and Caduceus deliberately provides no
 /// escrow or export path for it.
 pub fn get_or_create_clipboard_key() -> SecretResult<[u8; 32]> {
     let e = entry(CLIPBOARD_KEY_ACCOUNT)?;
@@ -185,7 +185,7 @@ fn decode_key(encoded: &str) -> SecretResult<[u8; 32]> {
 /// Probe whether a keychain is usable at all, so the UI can warn up front on
 /// systems (headless Linux, mainly) where secret storage will not work.
 pub fn keychain_available() -> bool {
-    match Entry::new(SERVICE, "orbit-availability-probe") {
+    match Entry::new(SERVICE, "caduceus-availability-probe") {
         Ok(e) => !matches!(
             e.get_password(),
             Err(keyring::Error::PlatformFailure(_)) | Err(keyring::Error::NoStorageAccess(_))

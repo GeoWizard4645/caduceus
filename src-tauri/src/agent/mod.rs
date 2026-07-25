@@ -41,7 +41,7 @@ use tauri::{AppHandle, Emitter, Runtime};
 use crate::settings::{BackendConfig, BackendKind, SettingsManager};
 
 /// Event carrying [`AgentStep`]s to the frontend.
-pub const AGENT_STEP_EVENT: &str = "orbit://agent-step";
+pub const AGENT_STEP_EVENT: &str = "caduceus://agent-step";
 
 /// Resolve a [`BackendKind`] to its implementation.
 ///

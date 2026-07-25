@@ -36,7 +36,7 @@ pub struct ChromeInstall {
     pub profiles: Vec<ChromeProfile>,
 }
 
-/// Every Chromium-family browser Orbit knows how to introspect.
+/// Every Chromium-family browser Caduceus knows how to introspect.
 ///
 /// `(id, display name, user-data dir relative to the platform root, launch target)`
 struct Candidate {

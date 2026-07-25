@@ -169,7 +169,7 @@ export function CommandCenterTab({ draft, info }: { draft: Draft; info: RuntimeI
                       hint={
                         rule.action === "open_url_template"
                           ? "URL with {query}, e.g. https://github.com/search?q={query}"
-                          : "{query} is inserted safely quoted; the raw text is also in $ORBIT_QUERY."
+                          : "{query} is inserted safely quoted; the raw text is also in $CADUCEUS_QUERY."
                       }
                     >
                       <TextInput

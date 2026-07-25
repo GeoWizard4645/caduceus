@@ -12,7 +12,7 @@
 //! | model                  | `model`                     | `claude-opus-5`          |
 //!
 //! When Anthropic ships a newer tool version, a user edits three text boxes in
-//! Settings rather than waiting for an Orbit release. The defaults come from
+//! Settings rather than waiting for an Caduceus release. The defaults come from
 //! <https://platform.claude.com/docs/en/agents-and-tools/tool-use/computer-use-tool>,
 //! read while this backend was written.
 //!
@@ -631,7 +631,7 @@ fn accumulate_usage(total: &mut Usage, response: &Value) {
     }
 }
 
-/// Models Orbit suggests in the Settings picker. Free-text entry always wins —
+/// Models Caduceus suggests in the Settings picker. Free-text entry always wins —
 /// this list is a convenience, never a restriction, so a model released after
 /// this build is still usable.
 pub const SUGGESTED_MODELS: &[&str] = &[

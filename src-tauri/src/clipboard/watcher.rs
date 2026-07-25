@@ -5,9 +5,9 @@
 //! macOS exposes clipboard changes only as a monotonically increasing
 //! `changeCount` that you have to read; there is no notification. Windows has
 //! `AddClipboardFormatListener` and Linux has selection ownership events, but
-//! `arboard` — the cross-platform clipboard crate Orbit uses — does not surface
+//! `arboard` — the cross-platform clipboard crate Caduceus uses — does not surface
 //! either. Rather than three platform-specific code paths plus a polling
-//! fallback, Orbit polls on all three. At the default 700ms the cost is
+//! fallback, Caduceus polls on all three. At the default 700ms the cost is
 //! unmeasurable (one clipboard read, and a hash only when the content changed).
 //!
 //! The interval is a setting, so anyone who wants 200ms responsiveness or 5s
@@ -32,7 +32,7 @@ const THUMBNAIL_MAX: u32 = 220;
 const PREVIEW_CHARS: usize = 400;
 
 /// Event emitted when a new entry lands, so an open Command Center updates live.
-pub const CLIPBOARD_CHANGED_EVENT: &str = "orbit://clipboard-changed";
+pub const CLIPBOARD_CHANGED_EVENT: &str = "caduceus://clipboard-changed";
 
 /// Handle used to stop the watcher (on quit, or when the user disables history).
 #[derive(Clone, Default)]
@@ -64,7 +64,7 @@ pub fn spawn<R: tauri::Runtime>(
     let stop_flag = handle.clone();
 
     std::thread::Builder::new()
-        .name("orbit-clipboard".into())
+        .name("caduceus-clipboard".into())
         .spawn(move || {
             let mut clipboard = match Clipboard::new() {
                 Ok(c) => c,
@@ -309,7 +309,7 @@ fn is_excluded(cfg: &crate::settings::ClipboardSettings, source: Option<&str>) -
 /// "copied from" label.
 ///
 /// On macOS this shells out to `lsappinfo`, which — unlike the usual
-/// `System Events` AppleScript — needs no Automation permission, so Orbit never
+/// `System Events` AppleScript — needs no Automation permission, so Caduceus never
 /// triggers a scary consent prompt just to label a clipboard row.
 fn detect_frontmost_app() -> Option<String> {
     #[cfg(target_os = "macos")]
@@ -355,7 +355,7 @@ fn detect_frontmost_app() -> Option<String> {
 /// Whether the current clipboard carries the `org.nspasteboard.ConcealedType`
 /// marker that password managers set to mean "do not record this".
 ///
-/// Honouring this convention is why Orbit can be trusted to run a clipboard
+/// Honouring this convention is why Caduceus can be trusted to run a clipboard
 /// history at all. Implemented via JXA, which reads *our own* process's
 /// pasteboard and therefore needs no permissions.
 fn clipboard_is_concealed() -> bool {
@@ -435,7 +435,7 @@ mod tests {
     #[test]
     fn real_paths_are_detected_as_a_file_list() {
         let dir = std::env::temp_dir();
-        let f = dir.join("orbit-file-list-test.txt");
+        let f = dir.join("caduceus-file-list-test.txt");
         std::fs::write(&f, b"x").unwrap();
         assert!(looks_like_file_list(f.to_str().unwrap()));
         let _ = std::fs::remove_file(f);

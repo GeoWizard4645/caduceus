@@ -75,11 +75,11 @@ export const openCommandCenter = (mode?: string, prefill?: string) =>
 export const openSettingsWindow = (tab?: string) =>
   invoke<void>("open_settings_window", { tab: tab ?? null });
 
-// --- orb -------------------------------------------------------------------
+// --- staff -------------------------------------------------------------------
 
-export const toggleOrb = () => invoke<boolean>("toggle_orb");
+export const toggleStaff = () => invoke<boolean>("toggle_staff");
 
-export const saveOrbPosition = () => invoke<void>("save_orb_position");
+export const saveStaffPosition = () => invoke<void>("save_staff_position");
 
 // --- clipboard -------------------------------------------------------------
 
@@ -142,7 +142,7 @@ export const quitApp = () => invoke<void>("quit_app");
  * Normalise an error thrown by `invoke` into a string.
  *
  * Tauri rejects with whatever the command's `Err` variant serialised to — a
- * plain string for Orbit's commands, but an `Error` when the IPC layer itself
+ * plain string for Caduceus's commands, but an `Error` when the IPC layer itself
  * fails, and occasionally an object.
  */
 export function errorMessage(error: unknown): string {

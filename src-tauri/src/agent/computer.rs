@@ -36,9 +36,9 @@ use thiserror::Error;
 pub enum ComputerError {
     #[error("no monitor at index {0}")]
     NoSuchMonitor(usize),
-    #[error("screen capture failed: {0}. On macOS, grant Orbit Screen Recording access in System Settings \u{2192} Privacy & Security.")]
+    #[error("screen capture failed: {0}. On macOS, grant Caduceus Screen Recording access in System Settings \u{2192} Privacy & Security.")]
     Capture(String),
-    #[error("input simulation failed: {0}. On macOS, grant Orbit Accessibility access in System Settings \u{2192} Privacy & Security.")]
+    #[error("input simulation failed: {0}. On macOS, grant Caduceus Accessibility access in System Settings \u{2192} Privacy & Security.")]
     Input(String),
     #[error("the input thread is not running")]
     ThreadGone,
@@ -54,7 +54,7 @@ pub type ComputerResult<T> = Result<T, ComputerError>;
 // Actions
 // ---------------------------------------------------------------------------
 
-/// The action set Orbit implements, mirroring Anthropic's computer-use tool.
+/// The action set Caduceus implements, mirroring Anthropic's computer-use tool.
 ///
 /// Deserialised straight from the model's `tool_use` input, which is why the
 /// field names match the API rather than Rust convention.
@@ -226,12 +226,12 @@ impl ComputerController {
     ///
     /// Note that `Enigo` is constructed lazily on the first action, not here:
     /// on macOS constructing it can trigger the Accessibility permission
-    /// prompt, and Orbit promises not to ask until an agent actually runs.
+    /// prompt, and Caduceus promises not to ask until an agent actually runs.
     pub fn start(monitor_index: usize, max_dimension: u32) -> Self {
         let (tx, rx) = mpsc::channel::<Job>();
 
         std::thread::Builder::new()
-            .name("orbit-input".into())
+            .name("caduceus-input".into())
             .spawn(move || {
                 let mut enigo: Option<Enigo> = None;
 

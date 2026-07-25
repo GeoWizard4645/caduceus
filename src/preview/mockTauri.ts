@@ -2,12 +2,12 @@
  * A fake Tauri IPC layer, for developing the UI without building Rust.
  *
  * `npm run ui` serves `preview.html`, which installs this before importing any
- * component. Every `invoke` is answered from in-memory fixtures, so the orb, the
+ * component. Every `invoke` is answered from in-memory fixtures, so the staff, the
  * Command Center and all seven Settings tabs render and respond exactly as they
  * do in the real app — you just cannot open a browser or drive a mouse.
  *
  * This is a **development tool**, not part of the shipped app: nothing in
- * `src/orb`, `src/command-center` or `src/settings` imports it.
+ * `src/staff`, `src/command-center` or `src/settings` imports it.
  */
 
 import type { ClipboardEntry, RuntimeInfo, Settings } from "@/shared/types";
@@ -21,21 +21,21 @@ export const mockSettings: Settings = {
   general: {
     toggleOrbHotkey: "F12",
     commandCenterHotkey: "Alt+Space",
-    orbVisible: true,
-    orbEdge: "right",
-    orbPosition: null,
+    staffVisible: true,
+    staffEdge: "right",
+    staffPosition: null,
     hoverExpandDelayMs: 0,
     collapseIdleMs: 3000,
     launchAtLogin: false,
     cursorPollMs: 33,
   },
   shortcuts: [
-    { id: "sc-gemini", label: "Gemini", icon: "✧", kind: "open_url", target: "https://gemini.google.com/app", args: [], chromeProfileDirectory: null, showInOrb: true, orderIndex: 0, keywords: ["google", "ai"], description: "Open Gemini in your browser", hidden: false },
-    { id: "sc-gmail", label: "Gmail", icon: "✉", kind: "open_url", target: "https://mail.google.com", args: [], chromeProfileDirectory: null, showInOrb: true, orderIndex: 1, keywords: ["mail", "inbox"], description: "Open your inbox", hidden: false },
-    { id: "sc-chrome", label: "Chrome", icon: "◎", kind: "open_app", target: "com.google.Chrome", args: [], chromeProfileDirectory: null, showInOrb: true, orderIndex: 2, keywords: ["browser"], description: "Launch the browser", hidden: false },
-    { id: "sc-claude", label: "Claude", icon: "✳", kind: "open_url", target: "https://claude.ai", args: [], chromeProfileDirectory: null, showInOrb: true, orderIndex: 3, keywords: ["anthropic", "ai"], description: "Open Claude in your browser", hidden: false },
-    { id: "sc-dictation", label: "Dictation App", icon: "◍", kind: "open_app", target: "", args: [], chromeProfileDirectory: null, showInOrb: true, orderIndex: 4, keywords: ["voice"], description: "Set this to your dictation app in Settings → Shortcuts", hidden: false },
-    { id: "sc-clipboard", label: "Clipboard", icon: "❐", kind: "clipboard_view", target: "", args: [], chromeProfileDirectory: null, showInOrb: true, orderIndex: 5, keywords: ["history", "paste"], description: "Browse everything you have copied", hidden: false },
+    { id: "sc-gemini", label: "Gemini", icon: "✧", kind: "open_url", target: "https://gemini.google.com/app", args: [], chromeProfileDirectory: null, showInStaff: true, orderIndex: 0, keywords: ["google", "ai"], description: "Open Gemini in your browser", hidden: false },
+    { id: "sc-gmail", label: "Gmail", icon: "✉", kind: "open_url", target: "https://mail.google.com", args: [], chromeProfileDirectory: null, showInStaff: true, orderIndex: 1, keywords: ["mail", "inbox"], description: "Open your inbox", hidden: false },
+    { id: "sc-chrome", label: "Chrome", icon: "◎", kind: "open_app", target: "com.google.Chrome", args: [], chromeProfileDirectory: null, showInStaff: true, orderIndex: 2, keywords: ["browser"], description: "Launch the browser", hidden: false },
+    { id: "sc-claude", label: "Claude", icon: "✳", kind: "open_url", target: "https://claude.ai", args: [], chromeProfileDirectory: null, showInStaff: true, orderIndex: 3, keywords: ["anthropic", "ai"], description: "Open Claude in your browser", hidden: false },
+    { id: "sc-dictation", label: "Dictation App", icon: "◍", kind: "open_app", target: "", args: [], chromeProfileDirectory: null, showInStaff: true, orderIndex: 4, keywords: ["voice"], description: "Set this to your dictation app in Settings → Shortcuts", hidden: false },
+    { id: "sc-clipboard", label: "Clipboard", icon: "❐", kind: "clipboard_view", target: "", args: [], chromeProfileDirectory: null, showInStaff: true, orderIndex: 5, keywords: ["history", "paste"], description: "Browse everything you have copied", hidden: false },
   ],
   commandCenter: {
     searchUrlTemplate: "https://www.google.com/search?q={query}",
@@ -93,12 +93,12 @@ export const mockSettings: Settings = {
   appearance: {
     theme: "dark",
     accent: "#7c7cff",
-    orbSize: 56,
+    staffSize: 72,
     popoutRadius: 96,
     popoutIconSize: 38,
-    orbIdleOpacity: 0.9,
+    staffIdleOpacity: 0.9,
     reduceTransparency: false,
-    orbIdleAnimation: true,
+    staffIdleAnimation: true,
   },
 };
 
@@ -133,7 +133,7 @@ const mockRuntimeInfo: RuntimeInfo = {
   backendsWithKeys: [],
   suggestedAnthropicModels: ["claude-opus-5", "claude-sonnet-5", "claude-opus-4-8", "claude-haiku-4-5"],
   computerUseNote:
-    "macOS will ask for Screen Recording and Accessibility permission the first time an agent runs. Orbit never requests them at launch.",
+    "macOS will ask for Screen Recording and Accessibility permission the first time an agent runs. Caduceus never requests them at launch.",
 };
 
 // ---------------------------------------------------------------------------
@@ -161,12 +161,12 @@ function handle(command: string, args: Record<string, unknown>): unknown {
 
     case "update_settings":
       settings = args.next as Settings;
-      emitMock("orbit://settings-changed", settings);
+      emitMock("caduceus://settings-changed", settings);
       return { settings, hotkeyProblems: [], autostartError: null, encryptionReport: null };
 
     case "reset_settings":
       settings = structuredClone(mockSettings);
-      emitMock("orbit://settings-changed", settings);
+      emitMock("caduceus://settings-changed", settings);
       return settings;
 
     case "get_runtime_info":

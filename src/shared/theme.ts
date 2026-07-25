@@ -3,7 +3,7 @@
  *
  * Colours live in CSS custom properties (see `src/styles.css`), so changing the
  * accent is a matter of writing three variables rather than re-rendering
- * anything. Tailwind reads the same variables through `rgb(var(--o-x) / alpha)`.
+ * anything. Tailwind reads the same variables through `rgb(var(--c-x) / alpha)`.
  */
 
 import type { AppearanceSettings, Theme } from "./types";
@@ -52,7 +52,7 @@ export function applyAppearance(appearance: AppearanceSettings): void {
 
   const channels = hexToRgbChannels(appearance.accent);
   if (channels) {
-    root.style.setProperty("--o-accent", channels);
+    root.style.setProperty("--c-accent", channels);
 
     const [r, g, b] = channels.split(" ").map(Number) as [number, number, number];
 
@@ -64,16 +64,16 @@ export function applyAppearance(appearance: AppearanceSettings): void {
         : `${Math.round(r + (255 - r) * 0.82)} ${Math.round(g + (255 - g) * 0.82)} ${Math.round(
             b + (255 - b) * 0.82,
           )}`;
-    root.style.setProperty("--o-accent-soft", soft);
+    root.style.setProperty("--c-accent-soft", soft);
 
     // Text drawn *on* the accent. A bright accent needs dark text, or the
     // primary button becomes unreadable — which is exactly what happens if a
     // user picks yellow and we always assume white.
-    root.style.setProperty("--o-accent-ink", luminance(r, g, b) > 0.55 ? "12 14 22" : "255 255 255");
+    root.style.setProperty("--c-accent-ink", luminance(r, g, b) > 0.55 ? "12 14 22" : "255 255 255");
   }
 
   // Solid surfaces instead of translucent ones.
-  root.style.setProperty("--o-glass-alpha", appearance.reduceTransparency ? "1" : mode === "dark" ? "0.72" : "0.78");
+  root.style.setProperty("--c-glass-alpha", appearance.reduceTransparency ? "1" : mode === "dark" ? "0.72" : "0.78");
 }
 
 /**

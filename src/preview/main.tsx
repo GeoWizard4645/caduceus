@@ -1,7 +1,7 @@
 /**
  * UI preview harness — `npm run ui`.
  *
- * Renders every Orbit surface side by side against a fake IPC layer, so you can
+ * Renders every Caduceus surface side by side against a fake IPC layer, so you can
  * work on the interface without a Rust toolchain and without launching the real
  * app. Nothing here ships: `preview.html` is not one of the bundled entry points.
  */
@@ -18,20 +18,20 @@ import { installMockTauri, emitMock } from "./mockTauri";
 installMockTauri();
 
 const { CommandCenter } = await import("@/command-center/CommandCenter");
-const { Orb } = await import("@/orb/Orb");
+const { Staff } = await import("@/staff/Staff");
 const { Settings } = await import("@/settings/Settings");
 
-type Surface = "orb" | "command-center" | "settings";
+type Surface = "staff" | "command-center" | "settings";
 
 function Preview() {
   const [surface, setSurface] = useState<Surface>("command-center");
   const [expanded, setExpanded] = useState(true);
 
-  // The orb takes its hover state from a Rust event; fake it here so the
+  // The staff takes its hover state from a Rust event; fake it here so the
   // pop-out can be inspected. Re-emitted on a slow interval because `listen()`
   // resolves asynchronously — a single emit on mount races the subscription.
   React.useEffect(() => {
-    const send = () => emitMock("orbit://orb-hover", { hovering: expanded, expanded });
+    const send = () => emitMock("caduceus://staff-hover", { hovering: expanded, expanded });
     send();
     const timer = setInterval(send, 400);
     return () => clearInterval(timer);
@@ -40,11 +40,11 @@ function Preview() {
   return (
     <div className="flex h-screen w-screen flex-col bg-base">
       <header className="row shrink-0 border-b border-line px-4 py-2.5">
-        <span className="text-[13px] font-semibold text-ink">Orbit UI preview</span>
+        <span className="text-[13px] font-semibold text-ink">Caduceus UI preview</span>
         <span className="text-2xs text-ink-faint">mock backend — no real actions run</span>
 
         <div className="ml-auto row">
-          {(["orb", "command-center", "settings"] as Surface[]).map((s) => (
+          {(["staff", "command-center", "settings"] as Surface[]).map((s) => (
             <button
               key={s}
               type="button"
@@ -59,7 +59,7 @@ function Preview() {
               {s}
             </button>
           ))}
-          {surface === "orb" && (
+          {surface === "staff" && (
             <button
               type="button"
               onClick={() => setExpanded((e) => !e)}
@@ -86,12 +86,12 @@ function Preview() {
                 "repeating-linear-gradient(45deg, #0e1016 0 18px, #12141c 18px 36px)",
             }}
           >
-            {surface === "orb" ? (
+            {surface === "staff" ? (
               <div className="relative h-[340px] w-[340px]">
-                <Orb />
+                <Staff />
               </div>
             ) : (
-              <div className="h-[520px] w-[760px] overflow-hidden rounded-orbit-lg">
+              <div className="h-[520px] w-[760px] overflow-hidden rounded-cad-lg">
                 <CommandCenter />
               </div>
             )}

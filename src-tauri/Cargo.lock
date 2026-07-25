@@ -564,6 +564,45 @@ dependencies = [
 ]
 
 [[package]]
+name = "caduceus"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "arboard",
+ "async-trait",
+ "base64 0.23.0",
+ "chacha20poly1305",
+ "chrono",
+ "cpal",
+ "dirs 6.0.0",
+ "enigo",
+ "env_logger",
+ "futures",
+ "getrandom 0.3.4",
+ "hound",
+ "image",
+ "keyring",
+ "log",
+ "parking_lot",
+ "reqwest",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-autostart",
+ "tauri-plugin-dialog",
+ "tauri-plugin-global-shortcut",
+ "tauri-plugin-opener",
+ "tauri-plugin-store",
+ "thiserror 2.0.19",
+ "tokio",
+ "uuid",
+ "window-vibrancy 0.8.0",
+ "xcap",
+]
+
+[[package]]
 name = "cairo-rs"
 version = "0.18.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3710,45 +3749,6 @@ name = "option-ext"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "04744f49eae99ab78e0d5c0b603ab218f515ea8cfe5a456d7629ad883a3b6e7d"
-
-[[package]]
-name = "orbit"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "arboard",
- "async-trait",
- "base64 0.23.0",
- "chacha20poly1305",
- "chrono",
- "cpal",
- "dirs 6.0.0",
- "enigo",
- "env_logger",
- "futures",
- "getrandom 0.3.4",
- "hound",
- "image",
- "keyring",
- "log",
- "parking_lot",
- "reqwest",
- "rusqlite",
- "serde",
- "serde_json",
- "tauri",
- "tauri-build",
- "tauri-plugin-autostart",
- "tauri-plugin-dialog",
- "tauri-plugin-global-shortcut",
- "tauri-plugin-opener",
- "tauri-plugin-store",
- "thiserror 2.0.19",
- "tokio",
- "uuid",
- "window-vibrancy 0.8.0",
- "xcap",
-]
 
 [[package]]
 name = "ordered-stream"

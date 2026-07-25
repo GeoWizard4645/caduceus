@@ -1,8 +1,8 @@
-//! The complete Orbit configuration schema.
+//! The complete Caduceus configuration schema.
 //!
 //! # Design rules for this file
 //!
-//! 1. **Everything is data.** Nothing about Orbit's behaviour is hardcoded in
+//! 1. **Everything is data.** Nothing about Caduceus's behaviour is hardcoded in
 //!    logic if a user could plausibly want it different. Prefixes, keyword
 //!    routes, API endpoints, beta headers, tool-version strings and search URLs
 //!    all live here so they can be changed from Settings without recompiling.
@@ -59,29 +59,29 @@ impl Default for Settings {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct GeneralSettings {
-    /// Global hotkey that shows/hides the floating orb.
+    /// Global hotkey that shows/hides the floating staff.
     ///
     /// Uses the `tauri-plugin-global-shortcut` accelerator syntax, e.g.
     /// `"F12"`, `"CommandOrControl+Shift+O"`. An empty string disables it.
     pub toggle_orb_hotkey: String,
-    /// Global hotkey that opens the Command Center directly, bypassing the orb.
+    /// Global hotkey that opens the Command Center directly, bypassing the staff.
     pub command_center_hotkey: String,
-    /// Whether the orb is currently shown. Persisted so the choice survives
+    /// Whether the staff is currently shown. Persisted so the choice survives
     /// restarts.
-    pub orb_visible: bool,
-    /// Which screen edge the orb snaps to when it has no saved position.
-    pub orb_edge: OrbEdge,
-    /// Last dragged position in *physical* pixels. `None` = use `orb_edge`.
-    pub orb_position: Option<Point>,
-    /// Delay before the pop-out expands after the pointer reaches the orb.
+    pub staff_visible: bool,
+    /// Which screen edge the staff snaps to when it has no saved position.
+    pub staff_edge: StaffEdge,
+    /// Last dragged position in *physical* pixels. `None` = use `staff_edge`.
+    pub staff_position: Option<Point>,
+    /// Delay before the pop-out expands after the pointer reaches the staff.
     /// `0` means "immediately", which is the documented default behaviour.
     pub hover_expand_delay_ms: u64,
-    /// How long the pointer must be away from the orb before the pop-out
+    /// How long the pointer must be away from the staff before the pop-out
     /// collapses again. Settings UI constrains this to 1000–10000ms.
     pub collapse_idle_ms: u64,
-    /// Register Orbit as a login item.
+    /// Register Caduceus as a login item.
     pub launch_at_login: bool,
-    /// Poll rate of the global cursor tracker that drives orb hover/collapse.
+    /// Poll rate of the global cursor tracker that drives staff hover/collapse.
     /// Lower is more responsive, higher is cheaper. 16–100ms is sane.
     pub cursor_poll_ms: u64,
 }
@@ -93,9 +93,9 @@ impl Default for GeneralSettings {
             // Alt+Space avoids clashing with Spotlight (Cmd+Space) and most
             // Windows/Linux launchers.
             command_center_hotkey: "Alt+Space".into(),
-            orb_visible: true,
-            orb_edge: OrbEdge::Right,
-            orb_position: None,
+            staff_visible: true,
+            staff_edge: StaffEdge::Right,
+            staff_position: None,
             hover_expand_delay_ms: 0,
             collapse_idle_ms: 3000,
             launch_at_login: false,
@@ -106,7 +106,7 @@ impl Default for GeneralSettings {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
-pub enum OrbEdge {
+pub enum StaffEdge {
     Left,
     #[default]
     Right,
@@ -162,7 +162,7 @@ impl Default for CommandCenterSettings {
 
 /// A prefix rule is just "when the input starts with X, do Y with the rest".
 ///
-/// This is the same primitive the orb shortcuts use, which is why users can add
+/// This is the same primitive the staff shortcuts use, which is why users can add
 /// arbitrary prefixes that open URLs or run commands.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
@@ -449,8 +449,8 @@ pub enum BackendKind {
 /// Version-sensitive strings (`anthropic_beta_header`, `computer_tool_version`,
 /// `model`) are deliberately plain text fields rather than enums: Anthropic
 /// ships new tool versions and models on its own schedule, and a user should be
-/// able to point Orbit at a newer one by editing a text box, not by waiting for
-/// a new Orbit release.
+/// able to point Caduceus at a newer one by editing a text box, not by waiting for
+/// a new Caduceus release.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct BackendConfig {
@@ -621,21 +621,25 @@ impl Default for ClipboardSettings {
 #[serde(default, rename_all = "camelCase")]
 pub struct AppearanceSettings {
     pub theme: Theme,
-    /// Accent colour as `#rrggbb`. Drives `--o-accent` in the frontend.
+    /// Accent colour as `#rrggbb`. Drives `--c-accent` in the frontend.
     pub accent: String,
-    /// Diameter of the collapsed orb in logical pixels (32–88).
-    pub orb_size: u32,
-    /// Distance from the orb centre to the pop-out icons (64–120).
+    /// Height of the caduceus mark in logical pixels (36–120).
+    ///
+    /// This is a *height*, not a diameter: the mark is tall and narrow, so it
+    /// needs noticeably more of it than a circle would to carry the same
+    /// visual weight.
+    pub staff_size: u32,
+    /// Distance from the staff centre to the pop-out icons (64–120).
     pub popout_radius: u32,
     /// Diameter of each pop-out icon (28–48).
     pub popout_icon_size: u32,
-    /// Orb opacity when idle and un-hovered (0.2–1.0).
-    pub orb_idle_opacity: f32,
+    /// Staff opacity when idle and un-hovered (0.2–1.0).
+    pub staff_idle_opacity: f32,
     /// Replace translucency with solid surfaces. Helps on low-end GPUs and for
     /// users who find blur uncomfortable.
     pub reduce_transparency: bool,
-    /// Draw the slow "breathing" animation on the idle orb.
-    pub orb_idle_animation: bool,
+    /// Draw the slow "breathing" animation on the idle staff.
+    pub staff_idle_animation: bool,
 }
 
 impl Default for AppearanceSettings {
@@ -643,12 +647,12 @@ impl Default for AppearanceSettings {
         Self {
             theme: Theme::Dark,
             accent: "#7c7cff".into(),
-            orb_size: 56,
+            staff_size: 72,
             popout_radius: 96,
             popout_icon_size: 38,
-            orb_idle_opacity: 0.9,
+            staff_idle_opacity: 0.9,
             reduce_transparency: false,
-            orb_idle_animation: true,
+            staff_idle_animation: true,
         }
     }
 }

@@ -8,21 +8,21 @@ use super::types::{AgentError, AgentResult};
 ///
 /// Clients are cheap to create and each backend can have its own timeout, so
 /// there is no shared pool. `reqwest` keeps its own connection pool per client;
-/// for Orbit's request volume (a handful per minute at most) that is irrelevant.
+/// for Caduceus's request volume (a handful per minute at most) that is irrelevant.
 pub fn client(timeout_secs: u64) -> AgentResult<reqwest::Client> {
     reqwest::Client::builder()
         .timeout(Duration::from_secs(timeout_secs.clamp(5, 900)))
         // Local model servers on a slow first token still need the connection
         // itself to come up fast, so failure is reported quickly.
         .connect_timeout(Duration::from_secs(10))
-        .user_agent(concat!("Orbit/", env!("CARGO_PKG_VERSION")))
+        .user_agent(concat!("Caduceus/", env!("CARGO_PKG_VERSION")))
         .build()
         .map_err(|e| AgentError::Other(format!("could not create an HTTP client: {e}")))
 }
 
 /// Pull a human-readable message out of a provider error body.
 ///
-/// Both dialects Orbit talks to nest the useful text differently
+/// Both dialects Caduceus talks to nest the useful text differently
 /// (`{"error":{"message":…}}` vs `{"error":"…"}`), and some local servers just
 /// return a bare string. Falls back to the truncated raw body.
 pub fn extract_error_message(body: &str) -> String {

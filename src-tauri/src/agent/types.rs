@@ -1,7 +1,7 @@
 //! Provider-neutral types shared by every [`AgentBackend`](super::AgentBackend).
 //!
 //! Nothing here mentions a specific vendor. A new backend implements the trait
-//! against these types and every part of Orbit that consumes AI — the `/`
+//! against these types and every part of Caduceus that consumes AI — the `/`
 //! prefix, `/c`, voice routing — works with it immediately.
 
 use serde::{Deserialize, Serialize};

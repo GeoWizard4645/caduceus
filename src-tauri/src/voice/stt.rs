@@ -49,7 +49,7 @@ pub struct SttAvailability {
     pub detail: String,
 }
 
-/// A speech recogniser Orbit can use.
+/// A speech recogniser Caduceus can use.
 #[async_trait]
 pub trait SttBackend: Send + Sync {
     fn id(&self) -> &str;
@@ -123,7 +123,7 @@ pub struct SystemNativeStt;
 fn stt_helper_path() -> Option<std::path::PathBuf> {
     // 1. Next to the running executable (Contents/Resources in a macOS bundle).
     if let Ok(exe) = std::env::current_exe() {
-        for relative in ["../Resources/bin/orbit-stt", "bin/orbit-stt", "orbit-stt"] {
+        for relative in ["../Resources/bin/caduceus-stt", "bin/caduceus-stt", "caduceus-stt"] {
             if let Some(dir) = exe.parent() {
                 let candidate = dir.join(relative);
                 if candidate.is_file() {
@@ -133,7 +133,7 @@ fn stt_helper_path() -> Option<std::path::PathBuf> {
         }
     }
     // 2. The source tree, for development builds.
-    let dev = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("bin/orbit-stt");
+    let dev = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("bin/caduceus-stt");
     dev.is_file().then_some(dev)
 }
 
@@ -168,7 +168,7 @@ impl SttBackend for SystemNativeStt {
 
         // The framework wants a file URL, so the recording goes to a temp file
         // that is removed as soon as the helper exits.
-        let path = std::env::temp_dir().join(format!("orbit-stt-{}.wav", uuid::Uuid::new_v4()));
+        let path = std::env::temp_dir().join(format!("caduceus-stt-{}.wav", uuid::Uuid::new_v4()));
         tokio::fs::write(&path, &wav)
             .await
             .map_err(|e| SttError::Failed(format!("could not write the recording: {e}")))?;
@@ -214,7 +214,7 @@ impl SttBackend for SystemNativeStt {
             (
                 false,
                 "The speech helper was not built. Install the Xcode Command Line Tools \
-                 (`xcode-select --install`) and rebuild Orbit."
+                 (`xcode-select --install`) and rebuild Caduceus."
                     .to_string(),
             )
         };

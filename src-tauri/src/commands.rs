@@ -1,7 +1,7 @@
 //! The IPC surface exposed to the webview.
 //!
 //! This is the **entire** attack surface between the frontend and the machine.
-//! Orbit deliberately does not enable Tauri's `shell`, `fs` or `http` plugins,
+//! Caduceus deliberately does not enable Tauri's `shell`, `fs` or `http` plugins,
 //! so the webview cannot ask to run a command, read a file, or call an
 //! arbitrary URL. It can only invoke the functions below, each of which decides
 //! for itself what is allowed:
@@ -50,12 +50,12 @@ pub async fn update_settings<R: Runtime>(
     // Re-register hotkeys so a rebind takes effect without a restart.
     let hotkey_problems = crate::hotkeys::register_all(&app, &settings);
 
-    // Reposition the orb if the edge changed and there is no manual position.
-    if previous.general.orb_edge != next.general.orb_edge && next.general.orb_position.is_none() {
-        let _ = window::position_orb(&app, &settings);
+    // Reposition the staff if the edge changed and there is no manual position.
+    if previous.general.staff_edge != next.general.staff_edge && next.general.staff_position.is_none() {
+        let _ = window::position_staff(&app, &settings);
     }
-    if previous.general.orb_visible != next.general.orb_visible {
-        window::set_orb_visible(&app, &settings, next.general.orb_visible)?;
+    if previous.general.staff_visible != next.general.staff_visible {
+        window::set_staff_visible(&app, &settings, next.general.staff_visible)?;
     }
     crate::tray::refresh(&app);
 
@@ -104,7 +104,7 @@ pub fn reset_settings<R: Runtime>(app: AppHandle<R>) -> Res<Settings> {
     let next = settings::reset_to_defaults(&app)?;
     if let Some(mgr) = app.try_state::<SettingsManager>() {
         let _ = crate::hotkeys::register_all(&app, &mgr);
-        let _ = window::position_orb(&app, &mgr);
+        let _ = window::position_staff(&app, &mgr);
     }
     crate::tray::refresh(&app);
     Ok(next)
@@ -166,12 +166,12 @@ fn platform_computer_use_note() -> &'static str {
     #[cfg(target_os = "macos")]
     {
         "macOS will ask for Screen Recording and Accessibility permission the first time an \
-         agent runs. Orbit never requests them at launch."
+         agent runs. Caduceus never requests them at launch."
     }
     #[cfg(target_os = "windows")]
     {
         "Computer use works without extra permissions, but cannot interact with windows \
-         running as administrator unless Orbit is also elevated."
+         running as administrator unless Caduceus is also elevated."
     }
     #[cfg(all(unix, not(target_os = "macos")))]
     {
@@ -305,23 +305,23 @@ pub fn open_settings_window<R: Runtime>(app: AppHandle<R>, tab: Option<String>) 
 }
 
 // ---------------------------------------------------------------------------
-// Orb
+// Staff
 // ---------------------------------------------------------------------------
 
 #[tauri::command]
-pub fn toggle_orb<R: Runtime>(app: AppHandle<R>, settings: tauri::State<'_, SettingsManager>) -> Res<bool> {
-    let visible = window::toggle_orb(&app, &settings)?;
+pub fn toggle_staff<R: Runtime>(app: AppHandle<R>, settings: tauri::State<'_, SettingsManager>) -> Res<bool> {
+    let visible = window::toggle_staff(&app, &settings)?;
     crate::tray::refresh(&app);
     Ok(visible)
 }
 
-/// Called by the orb after a drag ends, to remember where it was left.
+/// Called by the staff after a drag ends, to remember where it was left.
 #[tauri::command]
-pub fn save_orb_position<R: Runtime>(
+pub fn save_staff_position<R: Runtime>(
     app: AppHandle<R>,
     settings: tauri::State<'_, SettingsManager>,
 ) -> Res<()> {
-    window::persist_orb_position(&app, &settings)
+    window::persist_staff_position(&app, &settings)
 }
 
 // ---------------------------------------------------------------------------

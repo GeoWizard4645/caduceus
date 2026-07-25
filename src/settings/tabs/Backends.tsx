@@ -60,8 +60,8 @@ export function BackendsTab({
   return (
     <>
       <Section
-        title="How Orbit uses AI"
-        description="Everything else in Orbit works without any of this. Add a backend when you want the “/” and “/c” prefixes, or voice routing to AI."
+        title="How Caduceus uses AI"
+        description="Everything else in Caduceus works without any of this. Add a backend when you want the “/” and “/c” prefixes, or voice routing to AI."
       >
         <div className="grid grid-cols-2 gap-5">
           <Field
@@ -99,7 +99,7 @@ export function BackendsTab({
         {info && !info.keychainAvailable && (
           <div className="mt-4">
             <Callout tone="warn" title="API keys cannot be stored on this system">
-              Orbit only ever puts keys in the OS keychain, and there is not one available here.
+              Caduceus only ever puts keys in the OS keychain, and there is not one available here.
               Local model servers that need no key will still work.
             </Callout>
           </div>
@@ -157,7 +157,7 @@ export function BackendsTab({
       >
         <Toggle
           label="Ask before the first action of a session"
-          hint="Orbit never moves your mouse until you approve. Turning this off means an agent starts acting the moment you press Enter."
+          hint="Caduceus never moves your mouse until you approve. Turning this off means an agent starts acting the moment you press Enter."
           checked={agents.confirmBeforeFirstAction}
           onChange={(checked) => draft.update((d) => (d.agents.confirmBeforeFirstAction = checked))}
         />
@@ -363,7 +363,7 @@ function BackendRow({
             label="Model"
             hint={
               backend.kind === "anthropic"
-                ? "Any Claude model id. Newer models work without updating Orbit."
+                ? "Any Claude model id. Newer models work without updating Caduceus."
                 : "Whatever your endpoint serves."
             }
           >
@@ -467,7 +467,7 @@ function BackendRow({
               <p className="mb-1 text-[13px] font-semibold text-ink">Computer use</p>
               <p className="mb-4 text-2xs leading-relaxed text-ink-faint">
                 These strings track Anthropic's API versions. They are plain text fields on purpose:
-                when a newer tool version ships you can point Orbit at it here, rather than waiting
+                when a newer tool version ships you can point Caduceus at it here, rather than waiting
                 for a new release.
               </p>
 
@@ -536,7 +536,7 @@ function BackendRow({
       {expanded && isNull && (
         <div className="border-t border-line px-3 pb-4 pt-4">
           <Callout tone="info">
-            This is the placeholder Orbit ships with so that a fresh install has something valid
+            This is the placeholder Caduceus ships with so that a fresh install has something valid
             selected. Add a real backend above; you can delete this one afterwards.
           </Callout>
         </div>

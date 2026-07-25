@@ -44,7 +44,7 @@ export function VoiceTab({ draft, info }: { draft: Draft; info: RuntimeInfo | nu
     <>
       <Section
         title="Push to talk"
-        description="Hold the key, speak, release. Orbit transcribes what you said and decides where it goes."
+        description="Hold the key, speak, release. Caduceus transcribes what you said and decides where it goes."
       >
         <Toggle
           label="Enable voice input"
@@ -86,7 +86,7 @@ export function VoiceTab({ draft, info }: { draft: Draft; info: RuntimeInfo | nu
 
         <div className="mt-4">
           <Callout tone="info" title="No wake word, deliberately">
-            Orbit never listens in the background. Always-on wake-word detection would mean a
+            Caduceus never listens in the background. Always-on wake-word detection would mean a
             process with permanent microphone access that also has screen capture and input
             simulation — too much to ask of a utility you installed from GitHub. This is push-to-talk
             only.
@@ -186,7 +186,7 @@ export function VoiceTab({ draft, info }: { draft: Draft; info: RuntimeInfo | nu
 
       <Section
         title="Keyword routing"
-        description="After transcription, Orbit checks whether what you said starts with one of these. The longest match across every group wins, so “search my mac” beats “search”."
+        description="After transcription, Caduceus checks whether what you said starts with one of these. The longest match across every group wins, so “search my mac” beats “search”."
         actions={
           <Button
             tone="primary"

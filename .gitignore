@@ -35,5 +35,5 @@ pnpm-debug.log*
 /tmp/
 *.local
 
-# Built by src-tauri/build.rs from macos/OrbitSTT.swift
+# Built by src-tauri/build.rs from macos/CaduceusSTT.swift
 src-tauri/bin/

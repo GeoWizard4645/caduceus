@@ -662,7 +662,7 @@ mod tests {
     fn store() -> ClipboardStore {
         // A per-test file in the OS temp dir; `:memory:` would not exercise the
         // WAL pragmas or VACUUM.
-        let p = std::env::temp_dir().join(format!("orbit-test-{}.db", uuid::Uuid::new_v4()));
+        let p = std::env::temp_dir().join(format!("caduceus-test-{}.db", uuid::Uuid::new_v4()));
         ClipboardStore::open(p).unwrap()
     }
 

@@ -1,8 +1,8 @@
-//! Window management: the orb, the Command Center, and Settings.
+//! Window management: the staff, the Command Center, and Settings.
 //!
-//! # How the orb stays out of your way
+//! # How the staff stays out of your way
 //!
-//! The orb lives in a fixed 340×340 transparent, always-on-top window — big
+//! The staff lives in a fixed 340×340 transparent, always-on-top window — big
 //! enough to hold the fully expanded radial pop-out. A window that size sitting
 //! on top of everything would normally swallow every click in a 340px square,
 //! which would be intolerable.
@@ -11,8 +11,8 @@
 //! tracker:
 //!
 //! ```text
-//!   cursor far away        →  window is click-through, orb is a calm dot
-//!   cursor over the orb    →  window becomes interactive, pop-out expands
+//!   cursor far away        →  window is click-through, staff is a calm dot
+//!   cursor over the staff    →  window becomes interactive, pop-out expands
 //!   cursor leaves for Ns   →  pop-out collapses, window goes click-through
 //! ```
 //!
@@ -26,28 +26,28 @@ use std::sync::Arc;
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, Runtime, WebviewWindow};
 
-use crate::settings::{OrbEdge, Point, SettingsManager};
+use crate::settings::{StaffEdge, Point, SettingsManager};
 
-pub const ORB_WINDOW: &str = "orb";
+pub const STAFF_WINDOW: &str = "staff";
 pub const COMMAND_CENTER_WINDOW: &str = "command-center";
 pub const SETTINGS_WINDOW: &str = "settings";
 
-/// Emitted to the orb window as the pointer moves in and out.
-pub const ORB_HOVER_EVENT: &str = "orbit://orb-hover";
+/// Emitted to the staff window as the pointer moves in and out.
+pub const STAFF_HOVER_EVENT: &str = "caduceus://staff-hover";
 /// Asks the Command Center to open in a particular mode.
-pub const COMMAND_CENTER_OPEN_EVENT: &str = "orbit://command-center-open";
+pub const COMMAND_CENTER_OPEN_EVENT: &str = "caduceus://command-center-open";
 
-/// Side length of the orb window. Fixed so the radial pop-out always has room;
-/// the *visible* orb inside it is what `appearance.orbSize` controls.
-pub const ORB_WINDOW_SIZE: f64 = 340.0;
+/// Side length of the staff window. Fixed so the radial pop-out always has room;
+/// the *visible* staff inside it is what `appearance.staffSize` controls.
+pub const STAFF_WINDOW_SIZE: f64 = 340.0;
 
-/// Gap between the orb and the screen edge when it snaps.
+/// Gap between the staff and the screen edge when it snaps.
 const EDGE_MARGIN: f64 = 14.0;
 
 #[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
-pub struct OrbHoverState {
-    /// The pointer is over the orb or its pop-out.
+pub struct StaffHoverState {
+    /// The pointer is over the staff or its pop-out.
     pub hovering: bool,
     /// The pop-out is showing.
     pub expanded: bool,
@@ -80,8 +80,8 @@ impl Default for CommandCenterOpenPayload {
 // Lookups
 // ---------------------------------------------------------------------------
 
-pub fn orb<R: Runtime>(app: &AppHandle<R>) -> Option<WebviewWindow<R>> {
-    app.get_webview_window(ORB_WINDOW)
+pub fn staff<R: Runtime>(app: &AppHandle<R>) -> Option<WebviewWindow<R>> {
+    app.get_webview_window(STAFF_WINDOW)
 }
 
 pub fn command_center<R: Runtime>(app: &AppHandle<R>) -> Option<WebviewWindow<R>> {
@@ -93,17 +93,17 @@ pub fn settings_window<R: Runtime>(app: &AppHandle<R>) -> Option<WebviewWindow<R
 }
 
 // ---------------------------------------------------------------------------
-// Orb
+// Staff
 // ---------------------------------------------------------------------------
 
-/// Place the orb window at its saved position, or snap it to the configured
+/// Place the staff window at its saved position, or snap it to the configured
 /// edge on first run.
 ///
 /// Also runs at startup for a saved position, because a monitor may have been
-/// unplugged since — an orb parked at x=3000 on a since-removed display would
+/// unplugged since — an staff parked at x=3000 on a since-removed display would
 /// otherwise be invisible and unreachable.
-pub fn position_orb<R: Runtime>(app: &AppHandle<R>, settings: &SettingsManager) -> tauri::Result<()> {
-    let Some(window) = orb(app) else {
+pub fn position_staff<R: Runtime>(app: &AppHandle<R>, settings: &SettingsManager) -> tauri::Result<()> {
+    let Some(window) = staff(app) else {
         return Ok(());
     };
 
@@ -125,37 +125,37 @@ pub fn position_orb<R: Runtime>(app: &AppHandle<R>, settings: &SettingsManager) 
     };
 
     let cfg = settings.get();
-    let saved = cfg.general.orb_position.and_then(|p| {
-        let inside = p.x >= screen_x - ORB_WINDOW_SIZE
+    let saved = cfg.general.staff_position.and_then(|p| {
+        let inside = p.x >= screen_x - STAFF_WINDOW_SIZE
             && p.x <= screen_x + screen_w
-            && p.y >= screen_y - ORB_WINDOW_SIZE
+            && p.y >= screen_y - STAFF_WINDOW_SIZE
             && p.y <= screen_y + screen_h;
         inside.then_some(p)
     });
 
     let position = saved.unwrap_or_else(|| {
-        let y = screen_y + (screen_h - ORB_WINDOW_SIZE) / 2.0;
-        let x = match cfg.general.orb_edge {
-            OrbEdge::Right => screen_x + screen_w - ORB_WINDOW_SIZE + EDGE_MARGIN,
-            OrbEdge::Left => screen_x - EDGE_MARGIN,
+        let y = screen_y + (screen_h - STAFF_WINDOW_SIZE) / 2.0;
+        let x = match cfg.general.staff_edge {
+            StaffEdge::Right => screen_x + screen_w - STAFF_WINDOW_SIZE + EDGE_MARGIN,
+            StaffEdge::Left => screen_x - EDGE_MARGIN,
         };
         Point { x, y }
     });
 
-    window.set_size(LogicalSize::new(ORB_WINDOW_SIZE, ORB_WINDOW_SIZE))?;
+    window.set_size(LogicalSize::new(STAFF_WINDOW_SIZE, STAFF_WINDOW_SIZE))?;
     window.set_position(LogicalPosition::new(position.x, position.y))?;
     Ok(())
 }
 
-/// Show or hide the orb and persist the choice.
-pub fn set_orb_visible<R: Runtime>(
+/// Show or hide the staff and persist the choice.
+pub fn set_staff_visible<R: Runtime>(
     app: &AppHandle<R>,
     settings: &SettingsManager,
     visible: bool,
 ) -> Result<(), String> {
-    if let Some(window) = orb(app) {
+    if let Some(window) = staff(app) {
         if visible {
-            let _ = position_orb(app, settings);
+            let _ = position_staff(app, settings);
             window.show().map_err(|e| e.to_string())?;
             // Re-assert always-on-top: macOS drops it when a window is hidden
             // while another app is in full screen.
@@ -166,25 +166,25 @@ pub fn set_orb_visible<R: Runtime>(
     }
 
     let mut next = settings.get();
-    if next.general.orb_visible != visible {
-        next.general.orb_visible = visible;
+    if next.general.staff_visible != visible {
+        next.general.staff_visible = visible;
         crate::settings::save(app, &next)?;
     }
     Ok(())
 }
 
-pub fn toggle_orb<R: Runtime>(app: &AppHandle<R>, settings: &SettingsManager) -> Result<bool, String> {
-    let visible = orb(app).and_then(|w| w.is_visible().ok()).unwrap_or(false);
-    set_orb_visible(app, settings, !visible)?;
+pub fn toggle_staff<R: Runtime>(app: &AppHandle<R>, settings: &SettingsManager) -> Result<bool, String> {
+    let visible = staff(app).and_then(|w| w.is_visible().ok()).unwrap_or(false);
+    set_staff_visible(app, settings, !visible)?;
     Ok(!visible)
 }
 
-/// Record the orb's position after a drag.
-pub fn persist_orb_position<R: Runtime>(
+/// Record the staff's position after a drag.
+pub fn persist_staff_position<R: Runtime>(
     app: &AppHandle<R>,
     settings: &SettingsManager,
 ) -> Result<(), String> {
-    let Some(window) = orb(app) else { return Ok(()) };
+    let Some(window) = staff(app) else { return Ok(()) };
     let scale = window.scale_factor().unwrap_or(1.0);
     let Ok(pos) = window.outer_position() else {
         return Ok(());
@@ -192,7 +192,7 @@ pub fn persist_orb_position<R: Runtime>(
     let logical = pos.to_logical::<f64>(scale);
 
     let mut next = settings.get();
-    next.general.orb_position = Some(Point {
+    next.general.staff_position = Some(Point {
         x: logical.x,
         y: logical.y,
     });
@@ -215,7 +215,7 @@ impl CursorTracker {
     }
 }
 
-/// Start the loop that drives orb hover, auto-collapse and click-through.
+/// Start the loop that drives staff hover, auto-collapse and click-through.
 pub fn spawn_cursor_tracker<R: Runtime>(
     app: AppHandle<R>,
     settings: SettingsManager,
@@ -224,11 +224,11 @@ pub fn spawn_cursor_tracker<R: Runtime>(
     let stop = tracker.stop.clone();
 
     tauri::async_runtime::spawn(async move {
-        let mut state = OrbHoverState {
+        let mut state = StaffHoverState {
             hovering: false,
             expanded: false,
         };
-        // When the pointer first entered the orb, for the expand delay.
+        // When the pointer first entered the staff, for the expand delay.
         let mut entered_at: Option<std::time::Instant> = None;
         // When the pointer last left, for the collapse delay.
         let mut left_at: Option<std::time::Instant> = None;
@@ -243,7 +243,7 @@ pub fn spawn_cursor_tracker<R: Runtime>(
             let (general, appearance) = cfg;
             tokio::time::sleep(std::time::Duration::from_millis(general.cursor_poll_ms)).await;
 
-            let Some(window) = app.get_webview_window(ORB_WINDOW) else {
+            let Some(window) = app.get_webview_window(STAFF_WINDOW) else {
                 continue;
             };
             if !window.is_visible().unwrap_or(false) {
@@ -269,7 +269,7 @@ pub fn spawn_cursor_tracker<R: Runtime>(
             let centre_y = origin.y as f64 + size.height as f64 / 2.0;
             let distance = ((cursor.x - centre_x).powi(2) + (cursor.y - centre_y).powi(2)).sqrt();
 
-            let orb_radius = (appearance.orb_size as f64 / 2.0 + 8.0) * scale;
+            let orb_radius = (appearance.staff_size as f64 / 2.0 + 8.0) * scale;
             let popout_radius =
                 (appearance.popout_radius as f64 + appearance.popout_icon_size as f64 / 2.0 + 12.0)
                     * scale;
@@ -285,14 +285,14 @@ pub fn spawn_cursor_tracker<R: Runtime>(
                 if !state.expanded
                     && entry.elapsed() >= std::time::Duration::from_millis(general.hover_expand_delay_ms)
                 {
-                    state = OrbHoverState {
+                    state = StaffHoverState {
                         hovering: true,
                         expanded: true,
                     };
-                    let _ = window.emit(ORB_HOVER_EVENT, state);
+                    let _ = window.emit(STAFF_HOVER_EVENT, state);
                 } else if !state.hovering {
                     state.hovering = true;
-                    let _ = window.emit(ORB_HOVER_EVENT, state);
+                    let _ = window.emit(STAFF_HOVER_EVENT, state);
                 }
             } else {
                 entered_at = None;
@@ -301,16 +301,16 @@ pub fn spawn_cursor_tracker<R: Runtime>(
                 if state.expanded && !over_popout {
                     let left = *left_at.get_or_insert_with(std::time::Instant::now);
                     if left.elapsed() >= std::time::Duration::from_millis(general.collapse_idle_ms) {
-                        state = OrbHoverState {
+                        state = StaffHoverState {
                             hovering: false,
                             expanded: false,
                         };
                         left_at = None;
-                        let _ = window.emit(ORB_HOVER_EVENT, state);
+                        let _ = window.emit(STAFF_HOVER_EVENT, state);
                     }
                 } else if !state.expanded && state.hovering {
                     state.hovering = false;
-                    let _ = window.emit(ORB_HOVER_EVENT, state);
+                    let _ = window.emit(STAFF_HOVER_EVENT, state);
                 } else if over_popout {
                     left_at = None;
                 }
@@ -407,7 +407,7 @@ pub fn open_settings<R: Runtime>(app: &AppHandle<R>, tab: Option<&str>) -> Resul
     window.unminimize().ok();
     window.set_focus().map_err(|e| e.to_string())?;
     if let Some(tab) = tab {
-        let _ = window.emit("orbit://settings-tab", tab);
+        let _ = window.emit("caduceus://settings-tab", tab);
     }
 
     // Settings is the one window that should look like a normal app window, so

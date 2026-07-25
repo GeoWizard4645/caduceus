@@ -1,9 +1,9 @@
 {
-  "name": "orbit",
+  "name": "caduceus",
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "Orbit — a fast, local-first AI command center for your desktop.",
+  "description": "Caduceus — a fast, local-first AI command center for your desktop.",
   "license": "MIT",
   "scripts": {
     "dev": "vite",

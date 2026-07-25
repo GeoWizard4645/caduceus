@@ -17,7 +17,7 @@ export function GeneralTab({ draft, info }: { draft: Draft; info: RuntimeInfo | 
       >
         <div className="grid grid-cols-2 gap-5">
           <Field
-            label="Show / hide the orb"
+            label="Show / hide the staff"
             hint="Also available from the menu-bar icon."
           >
             <HotkeyInput
@@ -39,19 +39,19 @@ export function GeneralTab({ draft, info }: { draft: Draft; info: RuntimeInfo | 
       </Section>
 
       <Section
-        title="The orb"
-        description="The floating circle that sits on top of everything. Drag it anywhere; Orbit remembers where you left it."
+        title="The staff"
+        description="The floating circle that sits on top of everything. Drag it anywhere; Caduceus remembers where you left it."
       >
         <div className="grid grid-cols-2 gap-5">
-          <Field label="Docked edge" hint="Used until you drag the orb somewhere else.">
+          <Field label="Docked edge" hint="Used until you drag the staff somewhere else.">
             <Select
-              value={general.orbEdge}
+              value={general.staffEdge}
               onChange={(value) => {
                 draft.update((d) => {
-                  d.general.orbEdge = value;
+                  d.general.staffEdge = value;
                   // Clearing the saved position is what makes the new edge take
-                  // effect; without this the orb stays where it was dragged.
-                  d.general.orbPosition = null;
+                  // effect; without this the staff stays where it was dragged.
+                  d.general.staffPosition = null;
                 });
               }}
               options={[
@@ -64,14 +64,14 @@ export function GeneralTab({ draft, info }: { draft: Draft; info: RuntimeInfo | 
           <Field label="Position">
             <div className="row h-[38px]">
               <span className="text-2xs text-ink-faint">
-                {general.orbPosition
-                  ? `Custom · ${Math.round(general.orbPosition.x)}, ${Math.round(general.orbPosition.y)}`
+                {general.staffPosition
+                  ? `Custom · ${Math.round(general.staffPosition.x)}, ${Math.round(general.staffPosition.y)}`
                   : "Snapped to the edge"}
               </span>
-              {general.orbPosition && (
+              {general.staffPosition && (
                 <Button
                   size="sm"
-                  onClick={() => draft.update((d) => (d.general.orbPosition = null))}
+                  onClick={() => draft.update((d) => (d.general.staffPosition = null))}
                 >
                   Reset
                 </Button>
@@ -81,7 +81,7 @@ export function GeneralTab({ draft, info }: { draft: Draft; info: RuntimeInfo | 
 
           <Field
             label="Expand delay"
-            hint="How long the pointer must rest on the orb before the icons appear. 0 means instantly."
+            hint="How long the pointer must rest on the staff before the icons appear. 0 means instantly."
           >
             <NumberInput
               value={general.hoverExpandDelayMs}
@@ -110,18 +110,18 @@ export function GeneralTab({ draft, info }: { draft: Draft; info: RuntimeInfo | 
 
         <div className="mt-4 space-y-1 border-t border-line pt-4">
           <Toggle
-            label="Show the orb"
-            hint="Orbit keeps working without it — the hotkey and menu-bar icon still open everything."
-            checked={general.orbVisible}
-            onChange={(checked) => draft.update((d) => (d.general.orbVisible = checked))}
+            label="Show the staff"
+            hint="Caduceus keeps working without it — the hotkey and menu-bar icon still open everything."
+            checked={general.staffVisible}
+            onChange={(checked) => draft.update((d) => (d.general.staffVisible = checked))}
           />
         </div>
       </Section>
 
       <Section title="Startup">
         <Toggle
-          label="Launch Orbit at login"
-          hint="Starts in the background with no window — just the menu-bar icon and the orb."
+          label="Launch Caduceus at login"
+          hint="Starts in the background with no window — just the menu-bar icon and the staff."
           checked={general.launchAtLogin}
           onChange={(checked) => draft.update((d) => (d.general.launchAtLogin = checked))}
         />
@@ -133,7 +133,7 @@ export function GeneralTab({ draft, info }: { draft: Draft; info: RuntimeInfo | 
       >
         <Field
           label="Cursor tracking interval"
-          hint="How often Orbit checks where your pointer is, to drive orb hover and auto-collapse. Lower is snappier and uses marginally more CPU."
+          hint="How often Caduceus checks where your pointer is, to drive staff hover and auto-collapse. Lower is snappier and uses marginally more CPU."
         >
           <NumberInput
             value={general.cursorPollMs}
@@ -148,7 +148,7 @@ export function GeneralTab({ draft, info }: { draft: Draft; info: RuntimeInfo | 
 
       <Section
         title="About"
-        description="Orbit is MIT-licensed and works entirely on your machine unless you configure an AI backend."
+        description="Caduceus is MIT-licensed and works entirely on your machine unless you configure an AI backend."
       >
         <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-2 text-[13px]">
           <dt className="text-ink-faint">Version</dt>
@@ -166,7 +166,7 @@ export function GeneralTab({ draft, info }: { draft: Draft; info: RuntimeInfo | 
         {info && !info.keychainAvailable && (
           <div className="mt-4">
             <Callout tone="warn" title="No keychain on this system">
-              Orbit stores API keys in your OS keychain and refuses to write them anywhere else.
+              Caduceus stores API keys in your OS keychain and refuses to write them anywhere else.
               Without one, AI backends that need a key cannot be configured. On Linux, install and
               run a Secret Service provider such as <code>gnome-keyring</code> or KWallet.
             </Callout>

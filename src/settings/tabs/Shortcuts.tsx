@@ -2,7 +2,7 @@ import { useState } from "react";
 
 import * as api from "@/shared/api";
 import type { RuntimeInfo, Shortcut, ShortcutKind } from "@/shared/types";
-import { ORB_POPOUT_LIMIT } from "@/shared/types";
+import { STAFF_POPOUT_LIMIT } from "@/shared/types";
 import {
   Button,
   Callout,
@@ -31,7 +31,7 @@ const TARGET_HINTS: Record<ShortcutKind, string> = {
   open_app:
     "A macOS bundle id (com.apple.Safari), an app path (/Applications/Notes.app), or an executable name.",
   run_command:
-    "Runs in your login shell. {query} is inserted safely quoted; the raw text is also in $ORBIT_QUERY.",
+    "Runs in your login shell. {query} is inserted safely quoted; the raw text is also in $CADUCEUS_QUERY.",
   run_applescript: "AppleScript source. {query} is substituted verbatim.",
   clipboard_view: "No target needed.",
 };
@@ -42,7 +42,7 @@ export function ShortcutsTab({ draft, info }: { draft: Draft; info: RuntimeInfo 
   if (!settings) return null;
 
   const shortcuts = [...settings.shortcuts].sort((a, b) => a.orderIndex - b.orderIndex);
-  const orbCount = shortcuts.filter((s) => s.showInOrb).length;
+  const orbCount = shortcuts.filter((s) => s.showInStaff).length;
 
   const mutate = (id: string, change: (s: Shortcut) => void) =>
     draft.update((d) => {
@@ -75,7 +75,7 @@ export function ShortcutsTab({ draft, info }: { draft: Draft; info: RuntimeInfo 
         target: "",
         args: [],
         chromeProfileDirectory: null,
-        showInOrb: false,
+        showInStaff: false,
         orderIndex: d.shortcuts.length,
         keywords: [],
         description: "",
@@ -89,13 +89,13 @@ export function ShortcutsTab({ draft, info }: { draft: Draft; info: RuntimeInfo 
     <>
       <Section
         title="Shortcuts"
-        description="One list powers both the orb's pop-out icons and the Command Center's results. Everything here is editable, including the six Orbit ships with."
+        description="One list powers both the staff's pop-out icons and the Command Center's results. Everything here is editable, including the six Caduceus ships with."
         actions={<Button tone="primary" onClick={add}>Add shortcut</Button>}
       >
-        {orbCount > ORB_POPOUT_LIMIT && (
+        {orbCount > STAFF_POPOUT_LIMIT && (
           <div className="mb-4">
             <Callout tone="warn">
-              {orbCount} shortcuts are marked for the orb, but it draws at most {ORB_POPOUT_LIMIT}.
+              {orbCount} shortcuts are marked for the staff, but it draws at most {STAFF_POPOUT_LIMIT}.
               The extras are still searchable in the Command Center — untick some, or reorder so the
               ones you want come first.
             </Callout>
@@ -195,11 +195,11 @@ function ShortcutRow({
         <label className="row shrink-0 cursor-pointer text-2xs text-ink-mute">
           <input
             type="checkbox"
-            checked={shortcut.showInOrb}
-            onChange={(e) => onChange((s) => (s.showInOrb = e.target.checked))}
-            className="h-3.5 w-3.5 accent-[rgb(var(--o-accent))]"
+            checked={shortcut.showInStaff}
+            onChange={(e) => onChange((s) => (s.showInStaff = e.target.checked))}
+            className="h-3.5 w-3.5 accent-[rgb(var(--c-accent))]"
           />
-          Orb
+          Staff
         </label>
 
         <div className="row shrink-0">
@@ -324,7 +324,7 @@ function ShortcutRow({
           <div className="col-span-2 flex items-center justify-between border-t border-line pt-3">
             <Toggle
               label="Hide from search"
-              hint="Still works from the orb."
+              hint="Still works from the staff."
               checked={shortcut.hidden}
               onChange={(checked) => onChange((s) => (s.hidden = checked))}
             />

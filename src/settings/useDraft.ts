@@ -1,7 +1,7 @@
 /**
  * Settings editing state.
  *
- * Orbit persists **immediately** rather than behind a Save button: edits apply
+ * Caduceus persists **immediately** rather than behind a Save button: edits apply
  * to a local draft on the keystroke (so the UI never lags), and the draft is
  * written to disk 500ms after you stop. A single status line reports what
  * happened. This is one pattern applied consistently across all seven tabs —

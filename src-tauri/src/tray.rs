@@ -1,7 +1,7 @@
 //! The menu-bar / system-tray icon.
 //!
-//! Orbit runs as an accessory app with no Dock icon, so this menu is the one
-//! guaranteed way to reach every part of the app — including turning the orb
+//! Caduceus runs as an accessory app with no Dock icon, so this menu is the one
+//! guaranteed way to reach every part of the app — including turning the staff
 //! back on after hiding it, which would otherwise be a dead end.
 
 use tauri::menu::{Menu, MenuEvent, MenuItem, PredefinedMenuItem};
@@ -12,7 +12,7 @@ use crate::settings::SettingsManager;
 use crate::window;
 
 const ID_COMMAND_CENTER: &str = "command-center";
-const ID_TOGGLE_ORB: &str = "toggle-orb";
+const ID_TOGGLE_ORB: &str = "toggle-staff";
 const ID_CLIPBOARD: &str = "clipboard";
 const ID_SETTINGS: &str = "settings";
 const ID_STOP_AGENTS: &str = "stop-agents";
@@ -21,8 +21,8 @@ const ID_QUIT: &str = "quit";
 pub fn build<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
     let menu = build_menu(app)?;
 
-    let mut builder = TrayIconBuilder::with_id("orbit-tray")
-        .tooltip("Orbit")
+    let mut builder = TrayIconBuilder::with_id("caduceus-tray")
+        .tooltip("Caduceus")
         .menu(&menu)
         // On macOS the left click opens the Command Center and the right click
         // opens the menu, which is what a menu-bar utility is expected to do.
@@ -60,7 +60,7 @@ pub fn build<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
 }
 
 fn build_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
-    let orb_visible = window::orb(app)
+    let staff_visible = window::staff(app)
         .and_then(|w| w.is_visible().ok())
         .unwrap_or(true);
 
@@ -77,7 +77,7 @@ fn build_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
             &MenuItem::with_id(
                 app,
                 ID_TOGGLE_ORB,
-                if orb_visible { "Hide Orb" } else { "Show Orb" },
+                if staff_visible { "Hide Staff" } else { "Show Staff" },
                 true,
                 None::<&str>,
             )?,
@@ -86,7 +86,7 @@ fn build_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
             &MenuItem::with_id(app, ID_SETTINGS, "Settings\u{2026}", true, Some("CmdOrCtrl+,"))?,
             &MenuItem::with_id(app, ID_STOP_AGENTS, "Stop All Agents", true, None::<&str>)?,
             &PredefinedMenuItem::separator(app)?,
-            &MenuItem::with_id(app, ID_QUIT, "Quit Orbit", true, Some("CmdOrCtrl+Q"))?,
+            &MenuItem::with_id(app, ID_QUIT, "Quit Caduceus", true, Some("CmdOrCtrl+Q"))?,
         ],
     )
 }
@@ -102,7 +102,7 @@ fn accelerator_hint<R: Runtime>(app: &AppHandle<R>) -> String {
 
 /// Rebuild the menu so the Show/Hide label matches reality.
 pub fn refresh<R: Runtime>(app: &AppHandle<R>) {
-    let Some(tray) = app.tray_by_id("orbit-tray") else {
+    let Some(tray) = app.tray_by_id("caduceus-tray") else {
         return;
     };
     match build_menu(app) {
@@ -123,8 +123,8 @@ fn handle_menu_event<R: Runtime>(app: &AppHandle<R>, event: MenuEvent) {
             let _ = window::open_command_center(app, Default::default());
         }
         ID_TOGGLE_ORB => {
-            if let Err(e) = window::toggle_orb(app, &settings) {
-                log::error!("could not toggle the orb: {e}");
+            if let Err(e) = window::toggle_staff(app, &settings) {
+                log::error!("could not toggle the staff: {e}");
             }
             refresh(app);
         }

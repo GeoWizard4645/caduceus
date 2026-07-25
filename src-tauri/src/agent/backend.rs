@@ -1,6 +1,6 @@
-//! The `AgentBackend` trait — Orbit's AI plug point.
+//! The `AgentBackend` trait — Caduceus's AI plug point.
 //!
-//! Implement this and Orbit can use your provider for chat (`/`), for voice
+//! Implement this and Caduceus can use your provider for chat (`/`), for voice
 //! routing, and — if you set `supports_computer_use` — for driving the screen
 //! (`/c`). See `docs/PLUGIN_GUIDE.md` for a worked example.
 
@@ -13,7 +13,7 @@ use crate::settings::BackendConfig;
 /// Where step events go while an agent runs.
 ///
 /// A boxed closure rather than the generic `impl Fn(AgentStep)` you might
-/// expect: Orbit keeps backends in a `Vec<Arc<dyn AgentBackend>>` registry, and
+/// expect: Caduceus keeps backends in a `Vec<Arc<dyn AgentBackend>>` registry, and
 /// a generic method parameter would make the trait non-object-safe. The
 /// callback is invoked from the async runtime and must not block.
 pub type StepSink = std::sync::Arc<dyn Fn(AgentStep) + Send + Sync>;
@@ -78,7 +78,7 @@ impl ApprovalGate {
     }
 }
 
-/// A provider Orbit can talk to.
+/// A provider Caduceus can talk to.
 #[async_trait]
 pub trait AgentBackend: Send + Sync {
     /// Stable identifier matching [`BackendConfig::kind`]'s serialised form.
