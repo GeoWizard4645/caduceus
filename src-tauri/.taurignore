@@ -1,0 +1,8 @@
+# Paths the Tauri dev watcher must ignore.
+#
+# `build.rs` compiles the macOS speech helper into bin/ on every build. Without
+# this, the watcher sees those files change, triggers a rebuild, which runs
+# build.rs again — an infinite rebuild loop.
+bin/
+target/
+gen/
