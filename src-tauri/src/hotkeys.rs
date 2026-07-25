@@ -7,7 +7,7 @@
 //! |----------------------|-----------------------------|----------------------|
 //! | toggle the staff       | `F12`                       | on key-down          |
 //! | Command Center       | `Alt+Space`                 | on key-down          |
-//! | push-to-talk         | `CommandOrControl+Shift+Space` | hold to record    |
+//! | push-to-talk         | `Alt+Shift+V`               | hold to record    |
 //!
 //! # Why push-to-talk is not bound to `Fn`
 //!
@@ -221,7 +221,7 @@ mod tests {
 
     #[test]
     fn accepts_the_shipped_defaults() {
-        for a in ["F12", "Alt+Space", "CommandOrControl+Shift+Space", "F13"] {
+        for a in ["F12", "Alt+Space", "Alt+Shift+V", "F13"] {
             assert!(validate(a).is_ok(), "{a} should be valid");
         }
     }

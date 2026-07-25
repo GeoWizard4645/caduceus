@@ -14,6 +14,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as api from "@/shared/api";
 import { CaduceusMark } from "@/shared/CaduceusMark";
 import { useSettings, useTauriEvent } from "@/shared/hooks";
+import { ShortcutIcon } from "@/shared/ShortcutIcon";
 import { cx } from "@/shared/ui";
 import type { StaffHoverState, Shortcut } from "@/shared/types";
 import { EVENTS, STAFF_POPOUT_LIMIT } from "@/shared/types";
@@ -24,14 +25,29 @@ const ARC_SPREAD_DEG = 76;
 /** Pointer travel, in px, before a press becomes a drag rather than a click. */
 const DRAG_THRESHOLD = 4;
 
+const POPOUT_EXPAND_MS = 260;
+const POPOUT_FADE_MS = 100;
+
 export function Staff() {
   const { settings } = useSettings();
   const [hover, setHover] = useState<StaffHoverState>({ hovering: false, expanded: false });
   const [side, setSide] = useState<"left" | "right">("right");
   const [busyId, setBusyId] = useState<string | null>(null);
   const [flash, setFlash] = useState<{ text: string; ok: boolean } | null>(null);
+  /** Keep icons on the arc while fading out — never slide them back to the staff. */
+  const [arcHeld, setArcHeld] = useState(false);
+  const sideWhileExpanded = useRef<"left" | "right">("right");
+  const popoutRadiusWhileExpanded = useRef(0);
 
   useTauriEvent<StaffHoverState>(EVENTS.staffHover, setHover);
+
+  useEffect(() => {
+    if (hover.expanded) {
+      setArcHeld(true);
+      sideWhileExpanded.current = side;
+      if (settings) popoutRadiusWhileExpanded.current = settings.appearance.popoutRadius;
+    }
+  }, [hover.expanded, side, settings]);
 
   // Which way the arc opens depends on where the staff currently sits, not on
   // the saved edge preference — the user may have dragged it across the screen.
@@ -103,6 +119,7 @@ export function Staff() {
   };
 
   const runShortcut = async (shortcut: Shortcut) => {
+    void api.collapseStaffPopout();
     setBusyId(shortcut.id);
     try {
       const outcome = await api.runShortcut(shortcut.id);
@@ -118,6 +135,10 @@ export function Staff() {
     }
   };
 
+  const releaseArcLayout = () => {
+    setArcHeld(false);
+  };
+
   // Errors are shown briefly on the staff itself: there is no other surface
   // here, and silently doing nothing is the worst possible outcome.
   useEffect(() => {
@@ -126,11 +147,21 @@ export function Staff() {
     return () => clearTimeout(timer);
   }, [flash]);
 
+  useEffect(() => {
+    if (!arcHeld || hover.expanded) return;
+    const timer = setTimeout(releaseArcLayout, POPOUT_FADE_MS + 50);
+    return () => clearTimeout(timer);
+  }, [arcHeld, hover.expanded]);
+
   if (!settings) return null;
 
   const { staffSize, popoutRadius, popoutIconSize, staffIdleOpacity, staffIdleAnimation } =
     settings.appearance;
   const expanded = hover.expanded;
+  const onArc = expanded || arcHeld;
+  const fadingOut = arcHeld && !expanded;
+  const arcSide = onArc ? sideWhileExpanded.current : side;
+  const arcRadius = onArc ? popoutRadiusWhileExpanded.current || popoutRadius : popoutRadius;
 
   return (
     <div className="relative h-full w-full overflow-hidden">
@@ -138,8 +169,9 @@ export function Staff() {
       <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
         {/* --- pop-out icons ------------------------------------------- */}
         {staffShortcuts.map((shortcut, index) => {
-          const { x, y } = arcPosition(index, staffShortcuts.length, side, popoutRadius);
+          const { x, y } = arcPosition(index, staffShortcuts.length, arcSide, arcRadius);
           const isBusy = busyId === shortcut.id;
+          const visible = expanded && !fadingOut;
 
           return (
             <button
@@ -148,32 +180,43 @@ export function Staff() {
               title={`${shortcut.label}${shortcut.description ? ` — ${shortcut.description}` : ""}`}
               aria-label={shortcut.label}
               onClick={() => void runShortcut(shortcut)}
+              onTransitionEnd={(e) => {
+                if (fadingOut && e.propertyName === "opacity") releaseArcLayout();
+              }}
               style={{
                 width: popoutIconSize,
                 height: popoutIconSize,
-                // Icons animate out from the staff's centre, staggered so the
-                // ring unfurls rather than snapping into place.
-                transform: expanded
-                  ? `translate(calc(-50% + ${x}px), calc(-50% + ${y}px)) scale(1)`
-                  : "translate(-50%, -50%) scale(0.4)",
-                opacity: expanded ? 1 : 0,
-                transitionDelay: expanded
-                  ? `${index * 26}ms`
-                  : `${(staffShortcuts.length - index) * 12}ms`,
+                transform: onArc
+                  ? `translate(calc(-50% + ${x}px), calc(-50% + ${y}px))`
+                  : "translate(-50%, -50%) scale(0.5)",
+                opacity: visible ? 1 : 0,
+                transitionProperty: fadingOut ? "opacity" : "transform, opacity",
+                transitionDuration: fadingOut
+                  ? `${POPOUT_FADE_MS}ms`
+                  : `${POPOUT_EXPAND_MS}ms`,
+                transitionDelay: expanded && !fadingOut ? `${index * 24}ms` : "0ms",
                 pointerEvents: expanded ? "auto" : "none",
               }}
               className={cx(
-                "absolute left-0 top-0 flex items-center justify-center rounded-full",
+                "group absolute left-0 top-0 flex items-center justify-center rounded-full",
                 "glass-raised shadow-float backdrop-blur-glass",
-                "text-[15px] leading-none text-ink",
-                "transition-[transform,opacity,box-shadow,background-color] duration-[260ms] ease-cad",
-                "hover:!scale-[1.14] hover:border-accent/40 hover:text-accent",
+                "text-[15px] leading-none text-ink ease-cad",
                 "focus-visible:ring-2 focus-visible:ring-accent",
                 isBusy && "animate-pulse",
               )}
             >
-              <span className="pointer-events-none select-none">
-                {shortcut.icon || shortcut.label.charAt(0)}
+              <span
+                className={cx(
+                  "pointer-events-none flex h-[62%] w-[62%] select-none items-center justify-center",
+                  expanded && "transition-transform duration-150 ease-cad group-hover:scale-110",
+                )}
+              >
+                <ShortcutIcon
+                  icon={shortcut.icon}
+                  label={shortcut.label}
+                  className="h-full w-full text-[15px]"
+                  imgClassName="rounded-sm"
+                />
               </span>
             </button>
           );

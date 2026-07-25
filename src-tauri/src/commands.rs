@@ -323,6 +323,31 @@ pub fn save_staff_position<R: Runtime>(
     window::persist_staff_position(&app, &settings)
 }
 
+/// Collapse the staff pop-out immediately (e.g. after a shortcut click).
+#[tauri::command]
+pub fn collapse_staff_popout<R: Runtime>(app: AppHandle<R>) -> Res<()> {
+    if let Some(tracker) = app.try_state::<window::CursorTracker>() {
+        tracker.request_collapse();
+    }
+    Ok(())
+}
+
+/// Resolve an `image:…` icon token to an absolute path for display in the webview.
+#[tauri::command]
+pub fn resolve_shortcut_icon<R: Runtime>(app: AppHandle<R>, icon: String) -> Res<Option<String>> {
+    Ok(shortcuts::icons::resolve_path(&app, &icon).map(|p| p.to_string_lossy().into_owned()))
+}
+
+/// Import a user-picked image as this shortcut's icon.
+#[tauri::command]
+pub fn import_shortcut_icon<R: Runtime>(
+    app: AppHandle<R>,
+    shortcut_id: String,
+    source_path: String,
+) -> Res<String> {
+    shortcuts::icons::import_icon(&app, &shortcut_id, std::path::Path::new(&source_path))
+}
+
 // ---------------------------------------------------------------------------
 // Clipboard
 // ---------------------------------------------------------------------------

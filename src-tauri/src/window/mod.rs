@@ -234,11 +234,18 @@ fn next_delay(distance: f64, popout_radius: f64, fast_ms: u64, active: bool) -> 
 #[derive(Clone, Default)]
 pub struct CursorTracker {
     stop: Arc<AtomicBool>,
+    /// Set by the staff webview after a pop-out click so the ring collapses
+    /// immediately instead of waiting for the idle timer.
+    collapse_now: Arc<AtomicBool>,
 }
 
 impl CursorTracker {
     pub fn stop(&self) {
         self.stop.store(true, Ordering::Relaxed);
+    }
+
+    pub fn request_collapse(&self) {
+        self.collapse_now.store(true, Ordering::Relaxed);
     }
 }
 
@@ -249,6 +256,7 @@ pub fn spawn_cursor_tracker<R: Runtime>(
 ) -> CursorTracker {
     let tracker = CursorTracker::default();
     let stop = tracker.stop.clone();
+    let collapse_now = tracker.collapse_now.clone();
 
     tauri::async_runtime::spawn(async move {
         let mut state = StaffHoverState {
@@ -260,6 +268,16 @@ pub fn spawn_cursor_tracker<R: Runtime>(
         // When the pointer last left, for the collapse delay.
         let mut left_at: Option<std::time::Instant> = None;
         let mut click_through = true;
+        // After a pop-out click, do not re-open until the pointer leaves the staff.
+        let mut block_expand = false;
+        let mut last_emitted = state;
+
+        let emit_state = |window: &WebviewWindow<R>, state: &StaffHoverState, last: &mut StaffHoverState| {
+            if *state != *last {
+                *last = *state;
+                let _ = window.emit(STAFF_HOVER_EVENT, state);
+            }
+        };
 
         // Adaptive poll interval. Polling at 30Hz forever costs about 1% of a
         // CPU on an always-on app, which is real battery for something that is
@@ -316,25 +334,55 @@ pub fn spawn_cursor_tracker<R: Runtime>(
                 (appearance.popout_radius as f64 + appearance.popout_icon_size as f64 / 2.0 + 12.0)
                     * scale;
 
-            let over_orb = distance <= orb_radius;
-            let over_popout = state.expanded && distance <= popout_radius;
+            // Looser thresholds while expanded so icons do not flicker on the edge.
+            let hover_slack = if state.expanded || state.hovering {
+                14.0 * scale
+            } else {
+                0.0
+            };
+            let over_orb = distance <= orb_radius + hover_slack;
+            let over_popout = state.expanded && distance <= popout_radius + hover_slack;
             let inside = over_orb || over_popout;
+            let near_staff = distance <= popout_radius + 28.0 * scale;
+
+            if !near_staff {
+                block_expand = false;
+            }
+
+            if collapse_now.swap(false, Ordering::Relaxed) && state.expanded {
+                block_expand = true;
+                state = StaffHoverState {
+                    hovering: false,
+                    expanded: false,
+                };
+                entered_at = None;
+                left_at = None;
+                emit_state(&window, &state, &mut last_emitted);
+            }
 
             // --- expand ---------------------------------------------------
             if over_orb {
                 left_at = None;
-                let entry = *entered_at.get_or_insert_with(std::time::Instant::now);
-                if !state.expanded
-                    && entry.elapsed() >= std::time::Duration::from_millis(general.hover_expand_delay_ms)
-                {
-                    state = StaffHoverState {
-                        hovering: true,
-                        expanded: true,
-                    };
-                    let _ = window.emit(STAFF_HOVER_EVENT, state);
-                } else if !state.hovering {
-                    state.hovering = true;
-                    let _ = window.emit(STAFF_HOVER_EVENT, state);
+                if block_expand {
+                    if !state.hovering {
+                        state.hovering = true;
+                        emit_state(&window, &state, &mut last_emitted);
+                    }
+                } else {
+                    let entry = *entered_at.get_or_insert_with(std::time::Instant::now);
+                    if !state.expanded
+                        && entry.elapsed()
+                            >= std::time::Duration::from_millis(general.hover_expand_delay_ms)
+                    {
+                        state = StaffHoverState {
+                            hovering: true,
+                            expanded: true,
+                        };
+                        emit_state(&window, &state, &mut last_emitted);
+                    } else if !state.hovering {
+                        state.hovering = true;
+                        emit_state(&window, &state, &mut last_emitted);
+                    }
                 }
             } else {
                 entered_at = None;
@@ -348,11 +396,11 @@ pub fn spawn_cursor_tracker<R: Runtime>(
                             expanded: false,
                         };
                         left_at = None;
-                        let _ = window.emit(STAFF_HOVER_EVENT, state);
+                        emit_state(&window, &state, &mut last_emitted);
                     }
-                } else if !state.expanded && state.hovering {
+                } else if !state.expanded && state.hovering && !over_popout {
                     state.hovering = false;
-                    let _ = window.emit(STAFF_HOVER_EVENT, state);
+                    emit_state(&window, &state, &mut last_emitted);
                 } else if over_popout {
                     left_at = None;
                 }

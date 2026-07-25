@@ -27,6 +27,7 @@ import type {
 } from "@/shared/types";
 import { EVENTS } from "@/shared/types";
 import { Kbd, Spinner, cx } from "@/shared/ui";
+import { ShortcutIcon } from "@/shared/ShortcutIcon";
 
 import { AgentPanel } from "./AgentPanel";
 import { ClipboardView } from "./ClipboardView";
@@ -475,11 +476,11 @@ function ResultRow({
       <span
         aria-hidden="true"
         className={cx(
-          "flex h-7 w-7 shrink-0 items-center justify-center rounded-md border text-[13px] leading-none",
+          "flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-md border text-[13px] leading-none",
           active ? "border-accent/40 bg-accent/15 text-accent" : "border-line bg-raised text-ink-mute",
         )}
       >
-        {item.icon}
+        <ShortcutIcon icon={item.icon} label={item.title} className="h-5 w-5" />
       </span>
 
       <div className="min-w-0 flex-1">

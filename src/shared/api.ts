@@ -84,6 +84,14 @@ export const toggleStaff = () => invoke<boolean>("toggle_staff");
 
 export const saveStaffPosition = () => invoke<void>("save_staff_position");
 
+export const collapseStaffPopout = () => invoke<void>("collapse_staff_popout");
+
+export const resolveShortcutIcon = (icon: string) =>
+  invoke<string | null>("resolve_shortcut_icon", { icon });
+
+export const importShortcutIcon = (shortcutId: string, sourcePath: string) =>
+  invoke<string>("import_shortcut_icon", { shortcutId, sourcePath });
+
 // --- clipboard -------------------------------------------------------------
 
 export const clipboardList = (query = "", limit = 60, pinnedOnly = false) =>

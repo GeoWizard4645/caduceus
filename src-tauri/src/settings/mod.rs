@@ -149,7 +149,54 @@ fn migrate(s: &mut Settings) {
     s.appearance.staff_idle_opacity = s.appearance.staff_idle_opacity.clamp(0.15, 1.0);
     s.voice.max_recording_secs = s.voice.max_recording_secs.clamp(3, 600);
 
+    // Claude should open the desktop app, not the website.
+    for shortcut in &mut s.shortcuts {
+        if shortcut.id == "sc-claude"
+            && (shortcut.target == "https://claude.ai"
+                || shortcut.target.starts_with("https://claude.ai/"))
+        {
+            shortcut.kind = crate::shortcuts::ShortcutKind::OpenApp;
+            shortcut.target = default_claude_desktop_target().into();
+            shortcut.description = "Open the Claude desktop app".into();
+            if shortcut.icon == "✳" || shortcut.icon.is_empty() {
+                shortcut.icon = "brand:claude".into();
+            }
+        }
+        if shortcut.id.starts_with("sc-") && shortcut.icon.chars().count() <= 2 {
+            // Upgrade legacy emoji defaults to bundled brand marks where we know them.
+            let brand = match shortcut.id.as_str() {
+                "sc-gemini" => Some("brand:gemini"),
+                "sc-gmail" => Some("brand:gmail"),
+                "sc-chrome" => Some("brand:chrome"),
+                "sc-claude" => Some("brand:claude"),
+                "sc-clipboard" => Some("brand:clipboard"),
+                _ => None,
+            };
+            if let Some(token) = brand {
+                shortcut.icon = token.into();
+            }
+        }
+    }
+
+    if s.voice.enabled && s.voice.stt_backend == crate::settings::SttBackendKind::Disabled {
+        s.voice.stt_backend = crate::settings::SttBackendKind::SystemNative;
+    }
+    if s.voice.push_to_talk_hotkey == "CommandOrControl+Shift+Space" {
+        s.voice.push_to_talk_hotkey = "Alt+Shift+V".into();
+    }
+
     s.version = Settings::CURRENT_VERSION;
+}
+
+fn default_claude_desktop_target() -> &'static str {
+    #[cfg(target_os = "macos")]
+    {
+        "com.anthropic.claudefordesktop"
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        "Claude"
+    }
 }
 
 fn backup_corrupt_settings<R: Runtime>(app: &AppHandle<R>, raw: &serde_json::Value) {

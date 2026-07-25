@@ -66,39 +66,52 @@ guard recognizer.isAvailable else {
     fail("the speech recogniser is currently unavailable.")
 }
 
-let request = SFSpeechURLRecognitionRequest(url: audioURL)
-request.shouldReportPartialResults = false
-// Prefer on-device recognition: it keeps audio off Apple's servers and works
-// without a network connection. Falls back automatically when the language pack
-// is not installed.
-if recognizer.supportsOnDeviceRecognition {
-    request.requiresOnDeviceRecognition = true
-}
-
-let done = DispatchSemaphore(value: 0)
-var transcript = ""
-var failure: String?
-
-let task = recognizer.recognitionTask(with: request) { result, error in
-    if let error {
-        failure = error.localizedDescription
-        done.signal()
-        return
+func transcribe(requireOnDevice: Bool) -> String? {
+    let request = SFSpeechURLRecognitionRequest(url: audioURL)
+    request.shouldReportPartialResults = false
+    if recognizer.supportsOnDeviceRecognition && requireOnDevice {
+        request.requiresOnDeviceRecognition = true
     }
-    guard let result else { return }
-    if result.isFinal {
-        transcript = result.bestTranscription.formattedString
-        done.signal()
+
+    let done = DispatchSemaphore(value: 0)
+    var transcript = ""
+    var failure: String?
+
+    let task = recognizer.recognitionTask(with: request) { result, error in
+        if let error {
+            failure = error.localizedDescription
+            done.signal()
+            return
+        }
+        guard let result else { return }
+        if result.isFinal {
+            transcript = result.bestTranscription.formattedString
+            done.signal()
+        }
     }
+
+    if done.wait(timeout: .now() + 120) == .timedOut {
+        task.cancel()
+        failure = "speech recognition timed out."
+    }
+
+    if let failure {
+        FileHandle.standardError.write(Data(("attempt (onDevice=\(requireOnDevice)): \(failure)\n").utf8))
+        return nil
+    }
+    let trimmed = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
+    return trimmed.isEmpty ? nil : trimmed
 }
 
-if done.wait(timeout: .now() + 120) == .timedOut {
-    task.cancel()
-    fail("speech recognition timed out.")
+// Prefer on-device (private, works offline). If the language pack is missing,
+// Apple fails that mode — retry without forcing on-device.
+if let text = transcribe(requireOnDevice: true) {
+    print(text)
+} else if let text = transcribe(requireOnDevice: false) {
+    print(text)
+} else {
+    fail(
+        "could not transcribe the recording. Install the dictation language for your locale in " +
+            "System Settings > Keyboard > Dictation, or download the on-device speech pack."
+    )
 }
-
-if let failure {
-    fail(failure)
-}
-
-print(transcript)

@@ -1,6 +1,8 @@
 import { useState } from "react";
+import { open } from "@tauri-apps/plugin-dialog";
 
 import * as api from "@/shared/api";
+import { ShortcutIcon } from "@/shared/ShortcutIcon";
 import type { RuntimeInfo, Shortcut, ShortcutKind } from "@/shared/types";
 import { STAFF_POPOUT_LIMIT } from "@/shared/types";
 import {
@@ -176,9 +178,9 @@ function ShortcutRow({
       <div className="flex items-center gap-3 px-3 py-2.5">
         <span
           aria-hidden="true"
-          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-line bg-raised text-[13px]"
+          className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-md border border-line bg-raised text-[13px]"
         >
-          {shortcut.icon || shortcut.label.charAt(0)}
+          <ShortcutIcon icon={shortcut.icon} label={shortcut.label} className="h-6 w-6" />
         </span>
 
         <button type="button" onClick={onToggle} className="min-w-0 flex-1 text-left">
@@ -222,8 +224,54 @@ function ShortcutRow({
             <TextInput value={shortcut.label} onChange={(v) => onChange((s) => (s.label = v))} />
           </Field>
 
-          <Field label="Icon" hint="Any emoji or a short symbol.">
-            <TextInput value={shortcut.icon} onChange={(v) => onChange((s) => (s.icon = v))} />
+          <Field
+            label="Icon"
+            hint="Pick a bundled brand mark, upload your own image, or type an emoji."
+          >
+            <div className="row">
+              <TextInput
+                value={shortcut.icon}
+                onChange={(v) => onChange((s) => (s.icon = v))}
+                placeholder="brand:gemini or ✦"
+              />
+              <Button
+                size="sm"
+                onClick={async () => {
+                  const path = await open({
+                    multiple: false,
+                    filters: [
+                      {
+                        name: "Images",
+                        extensions: ["png", "jpg", "jpeg", "webp", "gif"],
+                      },
+                    ],
+                  });
+                  if (!path || typeof path !== "string") return;
+                  try {
+                    const token = await api.importShortcutIcon(shortcut.id, path);
+                    onChange((s) => (s.icon = token));
+                    setTestResult("Icon saved");
+                  } catch (error) {
+                    setTestResult(api.errorMessage(error));
+                  }
+                }}
+              >
+                Upload…
+              </Button>
+            </div>
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {(["gemini", "gmail", "chrome", "claude", "clipboard"] as const).map((id) => (
+                <button
+                  key={id}
+                  type="button"
+                  title={`Use brand:${id}`}
+                  onClick={() => onChange((s) => (s.icon = `brand:${id}`))}
+                  className="flex h-8 w-8 items-center justify-center rounded-md border border-line bg-raised transition-colors hover:border-accent/40"
+                >
+                  <ShortcutIcon icon={`brand:${id}`} label={id} className="h-5 w-5" />
+                </button>
+              ))}
+            </div>
           </Field>
 
           <Field label="Type">
