@@ -41,13 +41,33 @@ pub const STAFF_HOVER_EVENT: &str = "caduceus://staff-hover";
 /// Asks the Command Center to open in a particular mode.
 pub const COMMAND_CENTER_OPEN_EVENT: &str = "caduceus://command-center-open";
 
+/// Height the walkthrough card needs for its longest step, plus its own padding.
+const ONBOARDING_CARD_HEIGHT: f64 = 210.0;
+/// Gap between the top of the window and the card, and between card and mark.
+const ONBOARDING_CARD_GAP: f64 = 16.0;
+
 /// Side length of the staff window. Grows with staff size and pop-out reach so
 /// icons are never clipped; clamped to a sane range.
+///
+/// While the first-run walkthrough is unfinished the window also has to hold its
+/// card, which is drawn in the top half so the mark at the centre stays visible
+/// and clickable. At the default staff size the ordinary window is 280px, which
+/// leaves the card 88px for content that needs about 210 — so it arrived
+/// scrolled and cut in half. The window is click-through everywhere except the
+/// mark and the card, so making it bigger for the duration costs nothing.
 pub fn staff_window_side(settings: &Settings) -> f64 {
     let a = &settings.appearance;
     let mark = a.staff_size as f64;
     let reach = a.popout_radius as f64 + a.popout_icon_size as f64 / 2.0 + 24.0;
-    (reach * 2.0).max(mark * 2.2).clamp(280.0, 480.0)
+    let base = (reach * 2.0).max(mark * 2.2).clamp(280.0, 480.0);
+
+    if settings.general.onboarding_done {
+        return base;
+    }
+
+    // Half the window must fit: top gap, the card, a gap, and the mark's radius.
+    let half_needed = ONBOARDING_CARD_GAP + ONBOARDING_CARD_HEIGHT + ONBOARDING_CARD_GAP + mark / 2.0;
+    base.max((half_needed * 2.0).min(680.0))
 }
 
 /// Keep the staff above other apps, including another app's full-screen space.

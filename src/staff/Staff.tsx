@@ -256,7 +256,14 @@ export function Staff() {
   const { popoutRadius, popoutIconSize, staffIdleOpacity, staffIdleAnimation } =
     settings.appearance;
   const staffSize = liveStaffSize ?? settings.appearance.staffSize;
-  const showResize = (hover.hovering || resizing) && !hover.expanded;
+  // Not gated on `!hover.expanded`. The pop-out expands on the same tick as
+  // hover at the default delay of 0ms, so that condition was never true while
+  // the pointer was on the mark and the knobs could not be reached at all. The
+  // knob square sits ~72px out at the default size and the pop-out icons ~96px,
+  // so both can be on screen without fighting — and the tracker already widens
+  // its capture radius to `resize_reach` whenever hovering, which only makes
+  // sense if the knobs are visible then.
+  const showResize = hover.hovering || resizing;
   const expanded = hover.expanded;
   const onArc = expanded || arcHeld;
   const fadingOut = arcHeld && !expanded;

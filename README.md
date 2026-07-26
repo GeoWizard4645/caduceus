@@ -183,11 +183,12 @@ Then drag it across:
 cp -R src-tauri/target/release/bundle/macos/Caduceus.app /Applications/
 ```
 
-Releases ship a single universal `.dmg` covering Apple Silicon and Intel, which
-needs the Intel target installed once (`rustup target add x86_64-apple-darwin`):
+Releases ship a single universal `.dmg` covering Apple Silicon and Intel. See **[RELEASE.md](./RELEASE.md)** for the full release checklist (version bump, lipo, `gh release create`).
+
+For a local Intel slice only: `rustup target add x86_64-apple-darwin`, then:
 
 ```bash
-npm run tauri -- build --target universal-apple-darwin --bundles dmg
+npm run tauri -- build --target x86_64-apple-darwin --bundles app
 ```
 
 Tests:

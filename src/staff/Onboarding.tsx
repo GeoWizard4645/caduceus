@@ -165,14 +165,22 @@ export function Onboarding({
 
   // Park the card in the top half of the staff window so the mark at the centre
   // stays visible and clickable. (1.0.1 centred the card on the mark and hid it.)
+  // Rust grows the window while the walkthrough is unfinished so this half is
+  // actually big enough for the card — see `staff_window_side`.
   const staffClearance = Math.round(staffSize / 2) + 16;
 
   return (
     <div className="pointer-events-none absolute inset-0 z-40">
+      {/* Centred with auto margins, NOT `left-1/2 -translate-x-1/2`: the
+          `animate-fade-rise` keyframes end on a `transform` and the animation is
+          declared with fill-mode `both`, so that final transform sticks and
+          silently wins over any translate utility on the same element. The card
+          lost its centring offset, sat with its left edge on the window's
+          midline, and ran off the right-hand side. */}
       <div
         ref={cardRef}
         className={cx(
-          "pointer-events-auto absolute left-1/2 top-2 w-[min(290px,calc(100%-16px))] -translate-x-1/2",
+          "pointer-events-auto absolute inset-x-2 top-2 mx-auto w-[min(290px,calc(100%-16px))]",
           "overflow-y-auto animate-fade-rise rounded-cad px-4 py-3.5",
           "glass shadow-float",
         )}
