@@ -12,6 +12,7 @@ import type {
   AgentResponse,
   CalcResult,
   HermesStatus,
+  LocalAiScan,
   InstalledApp,
   BackendConfig,
   BrowserInstall,
@@ -185,6 +186,9 @@ export const agentBackendTemplates = () => invoke<BackendConfig[]>("agent_backen
 // --- Hermes Agent ----------------------------------------------------------
 
 export const hermesStatus = () => invoke<HermesStatus>("hermes_status");
+
+/** Probe this Mac for AI runtimes that are installed and serving. Read-only. */
+export const detectLocalAi = () => invoke<LocalAiScan>("detect_local_ai");
 
 /** Opens Terminal with the install command typed but NOT run. */
 export const openHermesInstaller = () => invoke<ExecOutcome>("open_hermes_installer");

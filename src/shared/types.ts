@@ -240,6 +240,22 @@ export interface BrowserInstall {
   profiles: BrowserProfile[];
 }
 
+/** One AI runtime the "Configure AI" scan probed for. */
+export interface DetectedProvider {
+  id: string;
+  displayName: string;
+  baseUrl: string;
+  /** The server answered. Not-running entries are still returned, with a hint. */
+  running: boolean;
+  models: string[];
+  detail: string;
+}
+
+export interface LocalAiScan {
+  providers: DetectedProvider[];
+  hermes: HermesStatus;
+}
+
 export interface RuntimeInfo {
   version: string;
   platform: string;

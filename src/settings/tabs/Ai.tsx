@@ -30,6 +30,7 @@ import {
   cx,
 } from "@/shared/ui";
 
+import { ConfigureAi } from "../ConfigureAi";
 import type { Draft } from "../useDraft";
 
 const HERMES_INSTALL_COMMAND =
@@ -66,6 +67,8 @@ export function AiTab({
 
   return (
     <>
+      <ConfigureAi draft={draft} onReloadInfo={onReloadInfo} />
+
       <Section
         title="Hermes Agent"
         description="Caduceus runs its AI through Hermes — an open-source agent from Nous Research that brings its own models, tools, memory and screen control."

@@ -1,5 +1,4 @@
 import * as api from "@/shared/api";
-import { DOCS_REMOTE } from "@/shared/docsUrls";
 import type { FunctionKeyBinding, RuntimeInfo } from "@/shared/types";
 import { Button, Callout, Field, HotkeyInput, NumberInput, Section, Select, Toggle } from "@/shared/ui";
 
@@ -272,21 +271,6 @@ export function GeneralTab({
             onChange={(value) => draft.update((d) => (d.general.cursorPollMs = value))}
           />
         </Field>
-      </Section>
-
-      <Section
-        title="Control from your phone"
-        description="Caduceus is Mac-only; these are ways to reach the same AI and automation from iOS or Android."
-      >
-        <p className="text-[13px] leading-relaxed text-ink-mute">
-          Free options include Tailscale + SSH (run Hermes on your Mac from Termius) and DIY Telegram bots.
-          Paid options include Pushover-triggered Mac Shortcuts and full remote desktop.
-        </p>
-        <div className="row mt-3">
-          <Button size="sm" onClick={() => void api.openExternalUrl(DOCS_REMOTE)}>
-            Compare options &amp; costs
-          </Button>
-        </div>
       </Section>
 
       <Section

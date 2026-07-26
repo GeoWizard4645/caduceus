@@ -120,7 +120,15 @@
 
   /* --- install -------------------------------------------------------- */
 
-  .install { position: relative; margin-top: 40px; }
+  /* The three options sit side by side and break out of the 940px .wrap, so
+     option 2's checkbox list is not crushed into a third of a narrow page. */
+  .install {
+    position: relative;
+    margin-top: 40px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: min(1320px, calc(100vw - 48px));
+  }
 
   .install-choices {
     margin: 0 auto 28px;
@@ -130,9 +138,16 @@
     text-wrap: balance;
   }
 
+  .install-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 18px;
+    align-items: stretch;
+    text-align: left;
+  }
+
   .install-step {
-    max-width: 660px;
-    margin: 0 auto 10px;
+    margin: 0 0 10px;
     text-align: left;
     font-size: 0.72rem;
     letter-spacing: 0.12em;
@@ -141,11 +156,23 @@
     font-weight: 600;
   }
 
-  .install-block { margin-bottom: 32px; }
+  /* Each option is a card; the command block is pushed to the bottom so the
+     three copy buttons line up regardless of how long the blurbs run. */
+  .install-block {
+    display: flex;
+    flex-direction: column;
+    margin: 0;
+    padding: 20px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: var(--surface);
+  }
+
+  .install-block > :last-child { margin-bottom: 0; }
+  .install-block .cmd { margin-top: auto; }
 
   .install-best {
-    max-width: 660px;
-    margin: 0 auto 14px;
+    margin: 0 0 14px;
     text-align: left;
     font-size: 0.88rem;
     color: var(--ink-mute);
@@ -208,6 +235,11 @@
     color: var(--ink-soft);
   }
 
+  @media (max-width: 1080px) {
+    .install-grid { grid-template-columns: 1fr; }
+    .install { width: min(660px, calc(100vw - 48px)); }
+  }
+
   @media (max-width: 620px) {
     .cmd { flex-direction: column; align-items: stretch; gap: 12px; padding: 14px; }
     .cmd code { white-space: pre-wrap; word-break: break-all; }
@@ -264,17 +296,18 @@
 
   /* --- the configured-package picker ---------------------------------- */
 
+  /* Nested inside .install-block, which already draws the card. */
   .bundle-panel {
-    max-width: 660px;
-    margin: 0 auto;
+    margin: 0;
     text-align: left;
     font-size: 0.88rem;
     color: var(--ink-mute);
-    border: 1px solid var(--line);
-    border-radius: var(--radius);
-    background: var(--surface);
-    padding: 18px;
+    display: flex;
+    flex-direction: column;
+    flex: 1;
   }
+
+  .bundle-panel .cmd { margin-top: auto; }
 
   .bundle-panel > p:first-child { margin-top: 0; }
 
@@ -506,7 +539,6 @@
       <a href="https://caduceus.vivaanshahani.com/" aria-current="page">Overview</a>
       <a href="https://caduceus.vivaanshahani.com/features">All features</a>
       <a href="https://caduceus.vivaanshahani.com/configure-ai">Configure AI</a>
-      <a href="https://caduceus.vivaanshahani.com/remote">From your phone</a>
     </nav>
     <img class="mark" src="caduceus-mark.png" alt="The Caduceus mark: a pixel-art winged staff with two coiled snakes">
     <h1>Caduceus</h1>
@@ -528,6 +560,7 @@
         or the <strong>.dmg</strong>.
       </p>
 
+      <div class="install-grid">
       <div class="install-block">
         <p class="install-step">Option 1 — Caduceus only</p>
         <p class="install-best">
@@ -597,6 +630,7 @@
           Developer certificate yet, so macOS quarantines it until you trust it.
         </p>
         <pre>xattr -dr com.apple.quarantine /Applications/Caduceus.app</pre>
+      </div>
       </div>
     </div>
   </div>
@@ -704,49 +738,6 @@
         </p>
       </div>
     </div>
-  </div>
-</section>
-
-<section>
-  <div class="wrap">
-    <h2>From your phone</h2>
-    <p class="sub">
-      Caduceus runs on your Mac. These paths let you message your machine, run the same Hermes / Ollama stack,
-      or open the full desktop — including at least one completely free setup.
-    </p>
-
-    <table>
-      <tr>
-        <td><strong>Free</strong> — Tailscale + SSH</td>
-        <td>
-          SSH from Termius or Shortcuts into your Mac; run <code>hermes</code> or scripts. Same AI engine as
-          <code>/</code> and <code>/c</code>. <strong>$0</strong> on Tailscale’s personal plan.
-        </td>
-      </tr>
-      <tr>
-        <td><strong>Free</strong> — DIY Telegram bot</td>
-        <td>
-          A bot on your Mac forwards chat to Hermes or shell. Text from your phone like an assistant.
-          <strong>$0</strong> (Telegram API); you maintain the script.
-        </td>
-      </tr>
-      <tr>
-        <td>Push notification → Mac</td>
-        <td>
-          Pushover (~$5 once) or Pushcut triggers a Mac Shortcut — great for one-tap “do this on my Mac”, not full chat.
-        </td>
-      </tr>
-      <tr>
-        <td>Remote desktop</td>
-        <td>
-          Jump Desktop, Screens, etc. — see and click Caduceus itself. Paid apps; often paired with Tailscale.
-        </td>
-      </tr>
-    </table>
-
-    <p class="sub" style="margin-top: -8px;">
-      <a href="https://caduceus.vivaanshahani.com/remote">Full comparison, costs, and setup steps →</a>
-    </p>
   </div>
 </section>
 

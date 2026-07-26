@@ -17,6 +17,7 @@
 //! `docs/PLUGIN_GUIDE.md`.
 
 pub mod backend;
+pub mod discover;
 pub mod hermes;
 mod http;
 pub mod null;

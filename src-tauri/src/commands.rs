@@ -719,6 +719,17 @@ pub async fn hermes_status() -> crate::agent::hermes::HermesStatus {
     crate::agent::hermes::status().await
 }
 
+/// Probe this machine for AI runtimes that are already installed and serving.
+///
+/// Read-only: it reports what it found and never edits settings. Connecting a
+/// result is a separate, explicit step in the UI, because adding a backend and
+/// repointing the `/` prefix is a change someone should choose rather than
+/// have happen as a side effect of looking.
+#[tauri::command]
+pub async fn detect_local_ai() -> crate::agent::discover::LocalAiScan {
+    crate::agent::discover::scan().await
+}
+
 /// Open Terminal with the Hermes install command pre-typed.
 ///
 /// Deliberately does *not* run it: piping a remote script into a shell is the

@@ -113,6 +113,7 @@ pub fn run() {
             commands::agent_list_models,
             commands::agent_backend_templates,
             commands::hermes_status,
+            commands::detect_local_ai,
             commands::open_hermes_installer,
             // launcher + calculator
             commands::list_installed_apps,
