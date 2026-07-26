@@ -15,9 +15,13 @@ import * as api from "@/shared/api";
 import {
   DOCS_CONFIGURE_AI,
   DOCS_FEATURES,
+  DOCS_GUIDE,
   DOCS_HOME,
   DOCS_INSTALL,
+  DOCS_ISSUES,
   DOCS_SOURCE,
+  SUPPORT_EMAIL,
+  SUPPORT_MAILTO,
 } from "@/shared/docsUrls";
 import { commandCenterKey, hotkeyLabel, toggleStaffKey } from "@/shared/hotkeyLabel";
 import type { RuntimeInfo } from "@/shared/types";
@@ -144,6 +148,7 @@ export function HelpTab({
       <Section title="Documentation" description="Everything published about Caduceus.">
         <div className="grid grid-cols-2 gap-2">
           {[
+            { label: "Full docs", detail: "Every feature and setting", url: DOCS_GUIDE },
             { label: "Overview", detail: "What Caduceus is", url: DOCS_HOME },
             { label: "All features", detail: "The complete list", url: DOCS_FEATURES },
             { label: "Configure AI", detail: "Local models and cloud keys", url: DOCS_CONFIGURE_AI },
@@ -165,6 +170,32 @@ export function HelpTab({
               <span className="mt-0.5 block text-2xs text-ink-faint">{doc.detail}</span>
             </button>
           ))}
+        </div>
+      </Section>
+
+      <Section
+        title="Contact"
+        description="Bug reports, questions, or feedback."
+      >
+        <p className="text-[13px] leading-relaxed text-ink-mute">
+          Email{" "}
+          <button
+            type="button"
+            className="font-medium text-accent underline decoration-accent/40 underline-offset-2"
+            onClick={() => void api.openExternalUrl(SUPPORT_MAILTO)}
+          >
+            {SUPPORT_EMAIL}
+          </button>{" "}
+          — or file an issue on GitHub if something is broken and you can describe steps to
+          reproduce.
+        </p>
+        <div className="row mt-3">
+          <Button size="sm" onClick={() => void api.openExternalUrl(SUPPORT_MAILTO)}>
+            Email support
+          </Button>
+          <Button size="sm" onClick={() => void api.openExternalUrl(DOCS_ISSUES)}>
+            GitHub issues
+          </Button>
         </div>
       </Section>
 

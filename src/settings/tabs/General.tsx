@@ -1,4 +1,5 @@
 import * as api from "@/shared/api";
+import { SUPPORT_EMAIL, SUPPORT_MAILTO } from "@/shared/docsUrls";
 import type { FunctionKeyBinding, RuntimeInfo } from "@/shared/types";
 import { Button, Callout, Field, HotkeyInput, NumberInput, Section, Select, Toggle } from "@/shared/ui";
 
@@ -299,6 +300,19 @@ export function GeneralTab({
             </Callout>
           </div>
         )}
+
+        <p className="mt-4 text-[13px] leading-relaxed text-ink-mute">
+          Questions or feedback? Open the <strong className="font-medium text-ink-soft">Help</strong>{" "}
+          tab in the sidebar, or email{" "}
+          <button
+            type="button"
+            className="text-accent underline decoration-accent/40 underline-offset-2"
+            onClick={() => void api.openExternalUrl(SUPPORT_MAILTO)}
+          >
+            {SUPPORT_EMAIL}
+          </button>
+          .
+        </p>
 
         <div className="row mt-5 border-t border-line pt-4">
           <Button
