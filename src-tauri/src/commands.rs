@@ -323,7 +323,6 @@ pub fn save_staff_position<R: Runtime>(
     window::persist_staff_position(&app, &settings)
 }
 
-<<<<<<< HEAD
 /// Collapse the staff pop-out immediately (e.g. after a shortcut click).
 #[tauri::command]
 pub fn collapse_staff_popout<R: Runtime>(app: AppHandle<R>) -> Res<()> {
@@ -349,8 +348,6 @@ pub fn import_shortcut_icon<R: Runtime>(
     shortcuts::icons::import_icon(&app, &shortcut_id, std::path::Path::new(&source_path))
 }
 
-=======
->>>>>>> d825e2ab66b2027e92a91e65ee60d0c173887fbc
 // ---------------------------------------------------------------------------
 // Clipboard
 // ---------------------------------------------------------------------------

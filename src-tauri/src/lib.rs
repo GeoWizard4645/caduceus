@@ -84,12 +84,9 @@ pub fn run() {
             commands::open_settings_window,
             commands::toggle_staff,
             commands::save_staff_position,
-<<<<<<< HEAD
             commands::collapse_staff_popout,
             commands::resolve_shortcut_icon,
             commands::import_shortcut_icon,
-=======
->>>>>>> d825e2ab66b2027e92a91e65ee60d0c173887fbc
             // clipboard
             commands::clipboard_list,
             commands::clipboard_copy,

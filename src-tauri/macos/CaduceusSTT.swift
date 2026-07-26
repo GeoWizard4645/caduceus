@@ -66,7 +66,6 @@ guard recognizer.isAvailable else {
     fail("the speech recogniser is currently unavailable.")
 }
 
-<<<<<<< HEAD
 func transcribe(requireOnDevice: Bool) -> String? {
     let request = SFSpeechURLRecognitionRequest(url: audioURL)
     request.shouldReportPartialResults = false
@@ -116,41 +115,3 @@ if let text = transcribe(requireOnDevice: true) {
             "System Settings > Keyboard > Dictation, or download the on-device speech pack."
     )
 }
-=======
-let request = SFSpeechURLRecognitionRequest(url: audioURL)
-request.shouldReportPartialResults = false
-// Prefer on-device recognition: it keeps audio off Apple's servers and works
-// without a network connection. Falls back automatically when the language pack
-// is not installed.
-if recognizer.supportsOnDeviceRecognition {
-    request.requiresOnDeviceRecognition = true
-}
-
-let done = DispatchSemaphore(value: 0)
-var transcript = ""
-var failure: String?
-
-let task = recognizer.recognitionTask(with: request) { result, error in
-    if let error {
-        failure = error.localizedDescription
-        done.signal()
-        return
-    }
-    guard let result else { return }
-    if result.isFinal {
-        transcript = result.bestTranscription.formattedString
-        done.signal()
-    }
-}
-
-if done.wait(timeout: .now() + 120) == .timedOut {
-    task.cancel()
-    fail("speech recognition timed out.")
-}
-
-if let failure {
-    fail(failure)
-}
-
-print(transcript)
->>>>>>> d825e2ab66b2027e92a91e65ee60d0c173887fbc

@@ -99,11 +99,7 @@ export function GeneralTab({ draft, info }: { draft: Draft; info: RuntimeInfo | 
           >
             <NumberInput
               value={general.collapseIdleMs}
-<<<<<<< HEAD
               min={500}
-=======
-              min={1000}
->>>>>>> d825e2ab66b2027e92a91e65ee60d0c173887fbc
               max={10000}
               step={250}
               suffix="ms"

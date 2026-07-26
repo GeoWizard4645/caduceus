@@ -77,11 +77,7 @@ pub struct GeneralSettings {
     /// `0` means "immediately", which is the documented default behaviour.
     pub hover_expand_delay_ms: u64,
     /// How long the pointer must be away from the staff before the pop-out
-<<<<<<< HEAD
     /// collapses again. Settings UI constrains this to 500–10000ms.
-=======
-    /// collapses again. Settings UI constrains this to 1000–10000ms.
->>>>>>> d825e2ab66b2027e92a91e65ee60d0c173887fbc
     pub collapse_idle_ms: u64,
     /// Register Caduceus as a login item.
     pub launch_at_login: bool,
@@ -101,11 +97,7 @@ impl Default for GeneralSettings {
             staff_edge: StaffEdge::Right,
             staff_position: None,
             hover_expand_delay_ms: 0,
-<<<<<<< HEAD
             collapse_idle_ms: 500,
-=======
-            collapse_idle_ms: 3000,
->>>>>>> d825e2ab66b2027e92a91e65ee60d0c173887fbc
             launch_at_login: false,
             cursor_poll_ms: 33,
         }
@@ -294,11 +286,7 @@ impl Default for VoiceSettings {
             // On by default: the recogniser is Apple's, runs on-device, and the
             // microphone only opens while the key is physically held.
             enabled: true,
-<<<<<<< HEAD
             push_to_talk_hotkey: "Alt+Shift+V".into(),
-=======
-            push_to_talk_hotkey: "CommandOrControl+Shift+Space".into(),
->>>>>>> d825e2ab66b2027e92a91e65ee60d0c173887fbc
             stt_backend: SttBackendKind::SystemNative,
             stt_endpoint: "http://127.0.0.1:8080/v1/audio/transcriptions".into(),
             stt_model: "whisper-1".into(),

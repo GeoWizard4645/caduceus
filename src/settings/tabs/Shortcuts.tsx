@@ -1,13 +1,8 @@
 import { useState } from "react";
-<<<<<<< HEAD
 import { open } from "@tauri-apps/plugin-dialog";
 
 import * as api from "@/shared/api";
 import { ShortcutIcon } from "@/shared/ShortcutIcon";
-=======
-
-import * as api from "@/shared/api";
->>>>>>> d825e2ab66b2027e92a91e65ee60d0c173887fbc
 import type { RuntimeInfo, Shortcut, ShortcutKind } from "@/shared/types";
 import { STAFF_POPOUT_LIMIT } from "@/shared/types";
 import {
@@ -183,15 +178,9 @@ function ShortcutRow({
       <div className="flex items-center gap-3 px-3 py-2.5">
         <span
           aria-hidden="true"
-<<<<<<< HEAD
           className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-md border border-line bg-raised text-[13px]"
         >
           <ShortcutIcon icon={shortcut.icon} label={shortcut.label} className="h-6 w-6" />
-=======
-          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-line bg-raised text-[13px]"
-        >
-          {shortcut.icon || shortcut.label.charAt(0)}
->>>>>>> d825e2ab66b2027e92a91e65ee60d0c173887fbc
         </span>
 
         <button type="button" onClick={onToggle} className="min-w-0 flex-1 text-left">
@@ -235,7 +224,6 @@ function ShortcutRow({
             <TextInput value={shortcut.label} onChange={(v) => onChange((s) => (s.label = v))} />
           </Field>
 
-<<<<<<< HEAD
           <Field
             label="Icon"
             hint="Pick a bundled brand mark, upload your own image, or type an emoji."
@@ -284,10 +272,6 @@ function ShortcutRow({
                 </button>
               ))}
             </div>
-=======
-          <Field label="Icon" hint="Any emoji or a short symbol.">
-            <TextInput value={shortcut.icon} onChange={(v) => onChange((s) => (s.icon = v))} />
->>>>>>> d825e2ab66b2027e92a91e65ee60d0c173887fbc
           </Field>
 
           <Field label="Type">

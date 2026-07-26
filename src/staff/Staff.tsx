@@ -14,10 +14,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as api from "@/shared/api";
 import { CaduceusMark } from "@/shared/CaduceusMark";
 import { useSettings, useTauriEvent } from "@/shared/hooks";
-<<<<<<< HEAD
 import { ShortcutIcon } from "@/shared/ShortcutIcon";
-=======
->>>>>>> d825e2ab66b2027e92a91e65ee60d0c173887fbc
 import { cx } from "@/shared/ui";
 import type { StaffHoverState, Shortcut } from "@/shared/types";
 import { EVENTS, STAFF_POPOUT_LIMIT } from "@/shared/types";
@@ -28,19 +25,15 @@ const ARC_SPREAD_DEG = 76;
 /** Pointer travel, in px, before a press becomes a drag rather than a click. */
 const DRAG_THRESHOLD = 4;
 
-<<<<<<< HEAD
 const POPOUT_EXPAND_MS = 260;
 const POPOUT_FADE_MS = 100;
 
-=======
->>>>>>> d825e2ab66b2027e92a91e65ee60d0c173887fbc
 export function Staff() {
   const { settings } = useSettings();
   const [hover, setHover] = useState<StaffHoverState>({ hovering: false, expanded: false });
   const [side, setSide] = useState<"left" | "right">("right");
   const [busyId, setBusyId] = useState<string | null>(null);
   const [flash, setFlash] = useState<{ text: string; ok: boolean } | null>(null);
-<<<<<<< HEAD
   /** Keep icons on the arc while fading out — never slide them back to the staff. */
   const [arcHeld, setArcHeld] = useState(false);
   const sideWhileExpanded = useRef<"left" | "right">("right");
@@ -56,11 +49,6 @@ export function Staff() {
     }
   }, [hover.expanded, side, settings]);
 
-=======
-
-  useTauriEvent<StaffHoverState>(EVENTS.staffHover, setHover);
-
->>>>>>> d825e2ab66b2027e92a91e65ee60d0c173887fbc
   // Which way the arc opens depends on where the staff currently sits, not on
   // the saved edge preference — the user may have dragged it across the screen.
   const recomputeSide = useCallback(async () => {
@@ -131,10 +119,7 @@ export function Staff() {
   };
 
   const runShortcut = async (shortcut: Shortcut) => {
-<<<<<<< HEAD
     void api.collapseStaffPopout();
-=======
->>>>>>> d825e2ab66b2027e92a91e65ee60d0c173887fbc
     setBusyId(shortcut.id);
     try {
       const outcome = await api.runShortcut(shortcut.id);
@@ -150,13 +135,10 @@ export function Staff() {
     }
   };
 
-<<<<<<< HEAD
   const releaseArcLayout = () => {
     setArcHeld(false);
   };
 
-=======
->>>>>>> d825e2ab66b2027e92a91e65ee60d0c173887fbc
   // Errors are shown briefly on the staff itself: there is no other surface
   // here, and silently doing nothing is the worst possible outcome.
   useEffect(() => {
@@ -165,27 +147,21 @@ export function Staff() {
     return () => clearTimeout(timer);
   }, [flash]);
 
-<<<<<<< HEAD
   useEffect(() => {
     if (!arcHeld || hover.expanded) return;
     const timer = setTimeout(releaseArcLayout, POPOUT_FADE_MS + 50);
     return () => clearTimeout(timer);
   }, [arcHeld, hover.expanded]);
 
-=======
->>>>>>> d825e2ab66b2027e92a91e65ee60d0c173887fbc
   if (!settings) return null;
 
   const { staffSize, popoutRadius, popoutIconSize, staffIdleOpacity, staffIdleAnimation } =
     settings.appearance;
   const expanded = hover.expanded;
-<<<<<<< HEAD
   const onArc = expanded || arcHeld;
   const fadingOut = arcHeld && !expanded;
   const arcSide = onArc ? sideWhileExpanded.current : side;
   const arcRadius = onArc ? popoutRadiusWhileExpanded.current || popoutRadius : popoutRadius;
-=======
->>>>>>> d825e2ab66b2027e92a91e65ee60d0c173887fbc
 
   return (
     <div className="relative h-full w-full overflow-hidden">
@@ -193,14 +169,9 @@ export function Staff() {
       <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
         {/* --- pop-out icons ------------------------------------------- */}
         {staffShortcuts.map((shortcut, index) => {
-<<<<<<< HEAD
           const { x, y } = arcPosition(index, staffShortcuts.length, arcSide, arcRadius);
           const isBusy = busyId === shortcut.id;
           const visible = expanded && !fadingOut;
-=======
-          const { x, y } = arcPosition(index, staffShortcuts.length, side, popoutRadius);
-          const isBusy = busyId === shortcut.id;
->>>>>>> d825e2ab66b2027e92a91e65ee60d0c173887fbc
 
           return (
             <button
@@ -209,7 +180,6 @@ export function Staff() {
               title={`${shortcut.label}${shortcut.description ? ` — ${shortcut.description}` : ""}`}
               aria-label={shortcut.label}
               onClick={() => void runShortcut(shortcut)}
-<<<<<<< HEAD
               onTransitionEnd={(e) => {
                 if (fadingOut && e.propertyName === "opacity") releaseArcLayout();
               }}
@@ -231,33 +201,10 @@ export function Staff() {
                 "group absolute left-0 top-0 flex items-center justify-center rounded-full",
                 "glass-raised shadow-float backdrop-blur-glass",
                 "text-[15px] leading-none text-ink ease-cad",
-=======
-              style={{
-                width: popoutIconSize,
-                height: popoutIconSize,
-                // Icons animate out from the staff's centre, staggered so the
-                // ring unfurls rather than snapping into place.
-                transform: expanded
-                  ? `translate(calc(-50% + ${x}px), calc(-50% + ${y}px)) scale(1)`
-                  : "translate(-50%, -50%) scale(0.4)",
-                opacity: expanded ? 1 : 0,
-                transitionDelay: expanded
-                  ? `${index * 26}ms`
-                  : `${(staffShortcuts.length - index) * 12}ms`,
-                pointerEvents: expanded ? "auto" : "none",
-              }}
-              className={cx(
-                "absolute left-0 top-0 flex items-center justify-center rounded-full",
-                "glass-raised shadow-float backdrop-blur-glass",
-                "text-[15px] leading-none text-ink",
-                "transition-[transform,opacity,box-shadow,background-color] duration-[260ms] ease-cad",
-                "hover:!scale-[1.14] hover:border-accent/40 hover:text-accent",
->>>>>>> d825e2ab66b2027e92a91e65ee60d0c173887fbc
                 "focus-visible:ring-2 focus-visible:ring-accent",
                 isBusy && "animate-pulse",
               )}
             >
-<<<<<<< HEAD
               <span
                 className={cx(
                   "pointer-events-none flex h-[62%] w-[62%] select-none items-center justify-center",
@@ -270,10 +217,6 @@ export function Staff() {
                   className="h-full w-full text-[15px]"
                   imgClassName="rounded-sm"
                 />
-=======
-              <span className="pointer-events-none select-none">
-                {shortcut.icon || shortcut.label.charAt(0)}
->>>>>>> d825e2ab66b2027e92a91e65ee60d0c173887fbc
               </span>
             </button>
           );
