@@ -10,6 +10,12 @@ function rewritePath(pathname) {
   if (pathname === "/features" || pathname === "/features/") {
     return "/features.html";
   }
+  if (pathname === "/configure-ai" || pathname === "/configure-ai/") {
+    return "/configure-ai.html";
+  }
+  if (pathname === "/remote" || pathname === "/remote/") {
+    return "/remote.html";
+  }
   return pathname;
 }
 

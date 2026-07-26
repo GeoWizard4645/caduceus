@@ -122,6 +122,60 @@
 
   .install { position: relative; margin-top: 40px; }
 
+  .install-choices {
+    margin: 0 auto 28px;
+    max-width: 660px;
+    font-size: 0.92rem;
+    color: var(--ink-mute);
+    text-wrap: balance;
+  }
+
+  .install-step {
+    max-width: 660px;
+    margin: 0 auto 10px;
+    text-align: left;
+    font-size: 0.72rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    font-weight: 600;
+  }
+
+  .install-block { margin-bottom: 32px; }
+
+  .install-best {
+    max-width: 660px;
+    margin: 0 auto 14px;
+    text-align: left;
+    font-size: 0.88rem;
+    color: var(--ink-mute);
+    line-height: 1.5;
+  }
+
+  .install-best .tag {
+    display: inline-block;
+    margin-right: 6px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    border: 1px solid var(--line);
+    background: var(--raised);
+    font-size: 0.68rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    vertical-align: 0.05em;
+  }
+
+  .install-follow {
+    max-width: 660px;
+    margin: 14px auto 0;
+    text-align: left;
+    font-size: 0.85rem;
+    color: var(--ink-faint);
+    line-height: 1.5;
+  }
+
   .install-label {
     font-size: 0.72rem;
     letter-spacing: 0.14em;
@@ -210,45 +264,26 @@
 
   /* --- the configured-package picker ---------------------------------- */
 
-  details.bundle {
+  .bundle-panel {
     max-width: 660px;
-    margin: 22px auto 0;
+    margin: 0 auto;
     text-align: left;
     font-size: 0.88rem;
     color: var(--ink-mute);
     border: 1px solid var(--line);
     border-radius: var(--radius);
     background: var(--surface);
+    padding: 18px;
   }
 
-  details.bundle > summary {
-    cursor: pointer;
-    color: var(--ink-soft);
-    font-weight: 500;
-    padding: 13px 18px;
-    list-style: none;
-  }
-
-  details.bundle > summary::-webkit-details-marker { display: none; }
-
-  details.bundle > summary::before {
-    content: "\25B8";
-    display: inline-block;
-    width: 1em;
-    color: var(--ink-faint);
-    transition: transform 0.15s ease;
-  }
-
-  details.bundle[open] > summary::before { transform: rotate(90deg); }
-
-  .bundle-body { padding: 0 18px 18px; border-top: 1px solid var(--line); }
-  .bundle-body > p:first-child { margin-top: 14px; }
+  .bundle-panel > p:first-child { margin-top: 0; }
 
   ul.opts { list-style: none; margin: 16px 0; padding: 0; display: grid; gap: 2px; }
 
   ul.opts label {
-    display: flex;
-    gap: 10px;
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 3px 10px;
     align-items: baseline;
     padding: 7px 9px;
     border-radius: 9px;
@@ -257,13 +292,37 @@
 
   ul.opts label:hover { background: var(--raised); }
 
-  ul.opts input { margin: 0; accent-color: var(--accent); flex-shrink: 0; }
+  ul.opts input { margin: 0; accent-color: var(--accent); }
 
   ul.opts .name { color: var(--ink-soft); font-weight: 500; }
 
+  ul.opts .name a {
+    color: inherit;
+    text-decoration: underline;
+    text-decoration-color: rgb(124 124 255 / 0.45);
+  }
+
+  ul.opts .name a:hover { color: var(--accent); }
+
   ul.opts .detail { color: var(--ink-faint); font-size: 0.82rem; }
 
-  ul.opts .info {
+  ul.opts .est {
+    color: var(--ink-faint);
+    font-size: 0.78rem;
+    font-weight: 500;
+    white-space: nowrap;
+  }
+
+  ul.opts label .row-main {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0 6px;
+    align-items: baseline;
+    min-width: 0;
+  }
+
+  ul.opts label .info {
+    grid-column: 2;
     display: block;
     margin-top: 3px;
     color: var(--ink-faint);
@@ -287,8 +346,8 @@
 
   .opts-note { margin: 12px 0 0; font-size: 0.8rem; color: var(--ink-faint); min-height: 1.2em; }
 
-  details.bundle .cmd { margin: 0; box-shadow: none; }
-  details.bundle .cmd code { white-space: pre-wrap; word-break: break-all; font-size: 0.8rem; }
+  .bundle-panel .cmd { margin: 0; box-shadow: none; }
+  .bundle-panel .cmd code { white-space: pre-wrap; word-break: break-all; font-size: 0.8rem; }
 
   .manual pre {
     background: var(--surface);
@@ -446,6 +505,8 @@
     <nav class="site-nav" aria-label="Site">
       <a href="https://caduceus.vivaanshahani.com/" aria-current="page">Overview</a>
       <a href="https://caduceus.vivaanshahani.com/features">All features</a>
+      <a href="https://caduceus.vivaanshahani.com/configure-ai">Configure AI</a>
+      <a href="https://caduceus.vivaanshahani.com/remote">From your phone</a>
     </nav>
     <img class="mark" src="caduceus-mark.png" alt="The Caduceus mark: a pixel-art winged staff with two coiled snakes">
     <h1>Caduceus</h1>
@@ -458,41 +519,53 @@
       <span class="badge">~5 MB</span>
     </div>
 
-    <div class="install">
+    <div class="install" id="install">
       <p class="install-label">Install</p>
-
-      <div class="cmd">
-        <code id="cmd"><span class="prompt">$ </span>curl -fsSL https://vivaanshahani.com/caduceus/install.sh | bash</code>
-        <button class="copy" id="copy" type="button">Copy</button>
-      </div>
-      <p class="cmd-meta" id="cmd-meta">
-        <strong>~5 MB</strong> download · <strong>~10 s</strong> on a fast connection ·
-        <strong>Idempotent</strong> — safe to run again; skips the app if it is already installed.
+      <p class="install-choices">
+        Pick one path — <strong>Caduceus only</strong>, the <strong>full local stack</strong>
+        (app + <a href="https://ollama.com/" rel="noopener">Ollama</a> +
+        <a href="https://hermes-agent.nousresearch.com/" rel="noopener">Hermes Agent</a> + models),
+        or the <strong>.dmg</strong>.
       </p>
 
-      <p class="alt">
-        or <a href="https://github.com/GeoWizard4645/caduceus/releases/latest">download the .dmg</a>
-      </p>
-
-      <div class="manual">
-        <p class="manual-title">Installing the .dmg by hand? One extra step.</p>
-        <p>
-          Drag Caduceus to Applications, then run this once. Caduceus is not
-          signed with an Apple Developer certificate yet, so macOS quarantines it
-          and refuses to open it until you say you trust it.
+      <div class="install-block">
+        <p class="install-step">Option 1 — Caduceus only</p>
+        <p class="install-best">
+          <span class="tag">Best for</span>
+          getting started fast — palette, launcher, clipboard, dictation, and web search in about ten seconds.
+          Add AI whenever you are ready.
         </p>
-        <pre>xattr -dr com.apple.quarantine /Applications/Caduceus.app</pre>
+        <div class="cmd">
+          <code id="cmd"><span class="prompt">$ </span>curl -fsSL https://vivaanshahani.com/caduceus/install.sh | bash</code>
+          <button class="copy" id="copy" type="button">Copy</button>
+        </div>
+        <p class="cmd-meta" id="cmd-meta">
+          <strong>~5 MB</strong> download · <strong>~10 s</strong> on a fast connection ·
+          <strong>Idempotent</strong> — safe to run again; skips the app if it is already installed.
+        </p>
       </div>
 
-      <details class="bundle">
-        <summary>Or install the fully configured package</summary>
-        <div class="bundle-body">
+      <div class="install-block">
+        <p class="install-step">Option 2 — Full local stack</p>
+        <p class="install-best">
+          <span class="tag">Best for</span>
+          using <code>/</code> and <code>/c</code> with local models and zero follow-up wiring — Ollama,
+          Hermes, and Caduceus settings are configured for you.
+        </p>
+        <div class="bundle-panel">
           <p>
-            One <strong>idempotent</strong> command: installs Caduceus, Ollama, Hermes Agent,
-            pulls the models, points <code>/</code> at your local chat model over
-            <code>http://localhost:11434/v1</code>, and wires <code>/c</code> to Hermes
-            <code>computer_use</code> (screen driver + vision model). Untick anything you
-            already have.
+            One <strong>idempotent</strong> command: Caduceus,
+            <a href="https://ollama.com/" rel="noopener">Ollama</a>,
+            <a href="https://hermes-agent.nousresearch.com/" rel="noopener">Hermes Agent</a>,
+            model pulls, <code>/</code> on <code>http://localhost:11434/v1</code>, and
+            <code>/c</code> via Hermes <code>computer_use</code>. Untick what you already have;
+            model pulls require Ollama (see
+            <a href="https://github.com/ollama/ollama/tree/main/docs" rel="noopener">Ollama docs</a>
+            and
+            <a href="https://github.com/NousResearch/hermes-agent" rel="noopener">Hermes Agent on GitHub</a>
+            if you prefer to install by hand).
+            <strong>Do not worry if you picked option 1 first</strong> — you can run this same command later;
+            it skips what is already installed and only fills in AI pieces.
           </p>
 
           <ul class="opts" id="opts"></ul>
@@ -504,8 +577,27 @@
 
           <p class="cmd-meta" id="bundle-meta"></p>
           <p class="opts-note" id="opts-note"></p>
+          <p class="install-follow">
+            Would rather use your own AI CLI or cloud API?
+            <a href="https://caduceus.vivaanshahani.com/configure-ai">Learn how to configure that with Caduceus</a>.
+          </p>
         </div>
-      </details>
+      </div>
+
+      <div class="install-block manual">
+        <p class="install-step">Option 3 — Download the .dmg</p>
+        <p class="install-best">
+          <span class="tag">Best for</span>
+          downloading the app file yourself — corporate policies, offline transfer, or if you prefer not to
+          pipe a script into <code>bash</code>.
+        </p>
+        <p>
+          <a href="https://github.com/GeoWizard4645/caduceus/releases/latest">Get the latest .dmg</a>,
+          drag Caduceus to Applications, then run this once. Caduceus is not signed with an Apple
+          Developer certificate yet, so macOS quarantines it until you trust it.
+        </p>
+        <pre>xattr -dr com.apple.quarantine /Applications/Caduceus.app</pre>
+      </div>
     </div>
   </div>
 </header>
@@ -617,6 +709,49 @@
 
 <section>
   <div class="wrap">
+    <h2>From your phone</h2>
+    <p class="sub">
+      Caduceus runs on your Mac. These paths let you message your machine, run the same Hermes / Ollama stack,
+      or open the full desktop — including at least one completely free setup.
+    </p>
+
+    <table>
+      <tr>
+        <td><strong>Free</strong> — Tailscale + SSH</td>
+        <td>
+          SSH from Termius or Shortcuts into your Mac; run <code>hermes</code> or scripts. Same AI engine as
+          <code>/</code> and <code>/c</code>. <strong>$0</strong> on Tailscale’s personal plan.
+        </td>
+      </tr>
+      <tr>
+        <td><strong>Free</strong> — DIY Telegram bot</td>
+        <td>
+          A bot on your Mac forwards chat to Hermes or shell. Text from your phone like an assistant.
+          <strong>$0</strong> (Telegram API); you maintain the script.
+        </td>
+      </tr>
+      <tr>
+        <td>Push notification → Mac</td>
+        <td>
+          Pushover (~$5 once) or Pushcut triggers a Mac Shortcut — great for one-tap “do this on my Mac”, not full chat.
+        </td>
+      </tr>
+      <tr>
+        <td>Remote desktop</td>
+        <td>
+          Jump Desktop, Screens, etc. — see and click Caduceus itself. Paid apps; often paired with Tailscale.
+        </td>
+      </tr>
+    </table>
+
+    <p class="sub" style="margin-top: -8px;">
+      <a href="https://caduceus.vivaanshahani.com/remote">Full comparison, costs, and setup steps →</a>
+    </p>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
     <h2>The AI is Hermes</h2>
     <p class="sub">
       Caduceus does not ship its own model or its own agent loop. It drives
@@ -665,7 +800,7 @@
     // The Command Line Tools are ~1.5 GB, but nearly every machine that gets
     // this far already has them, so counting them in the total would overstate
     // it for almost everyone. Called out in the checkbox's own info line instead.
-    deps: { sizeMB: 0, size: "0", time: "~0–10 min" },
+    deps: { sizeMB: 0, size: "~0 MB*", time: "~0–10 min" },
     caduceus: { sizeMB: 5, size: "~5 MB", time: "~10 s" },
     hermes: { sizeMB: 150, size: "~150 MB", time: "~2–5 min" },
     ollama: { sizeMB: 80, size: "~80 MB", time: "~1 min" },
@@ -682,13 +817,27 @@
       detail: "Xcode Command Line Tools + python3",
       info:
         "Ollama and Hermes Agent both need these, and the installer uses python3 to write " +
-        "Caduceus's config. Skipped entirely if you already have them; a first-time Command " +
-        "Line Tools download is ~1.5 GB and opens Apple's own installer window.",
+        "Caduceus's config. Skipped if you already have them. *First-time Xcode Command Line Tools " +
+        "download is ~1.5 GB via Apple's installer.",
       on: true,
     },
     { id: "caduceus", kind: "component", name: "Caduceus", detail: "the app itself", on: true },
-    { id: "hermes", kind: "component", name: "Hermes Agent", detail: "computer_use for /c", on: true },
-    { id: "ollama", kind: "component", name: "Ollama", detail: "local OpenAI API on :11434", on: true },
+    {
+      id: "hermes",
+      kind: "component",
+      name: "Hermes Agent",
+      detail: "computer_use for /c",
+      docUrl: "https://github.com/NousResearch/hermes-agent",
+      on: true,
+    },
+    {
+      id: "ollama",
+      kind: "component",
+      name: "Ollama",
+      detail: "local OpenAI API on :11434",
+      docUrl: "https://ollama.com/",
+      on: true,
+    },
     { id: "qwen3.5:4b", kind: "model", role: "ai", name: "qwen3.5:4b", detail: "Caduceus / via localhost API", on: true },
     {
       id: "qwen2.5vl:7b",
@@ -717,14 +866,44 @@
       box.checked = part.on;
       box.dataset.id = part.id;
 
-      const text = document.createElement("span");
-      text.innerHTML =
-        '<span class="name"></span> <span class="detail"></span><span class="info"></span>';
-      text.querySelector(".name").textContent = part.name;
-      text.querySelector(".detail").textContent = "\u2014 " + part.detail;
-      if (part.info) text.querySelector(".info").textContent = part.info;
+      const rowMain = document.createElement("span");
+      rowMain.className = "row-main";
 
-      label.append(box, text);
+      const nameEl = document.createElement("span");
+      nameEl.className = "name";
+      if (part.docUrl) {
+        const a = document.createElement("a");
+        a.href = part.docUrl;
+        a.target = "_blank";
+        a.rel = "noopener";
+        a.textContent = part.name;
+        nameEl.append(a);
+      } else {
+        nameEl.textContent = part.name;
+      }
+
+      const detailEl = document.createElement("span");
+      detailEl.className = "detail";
+      detailEl.textContent = "\u2014 " + part.detail;
+
+      const est = DOWNLOAD_EST[part.id];
+      const estEl = document.createElement("span");
+      estEl.className = "est";
+      if (est) estEl.textContent = est.size + " \u00b7 " + est.time;
+
+      rowMain.append(nameEl, detailEl, estEl);
+
+      const text = document.createElement("span");
+      text.style.display = "contents";
+      if (part.info) {
+        const infoEl = document.createElement("span");
+        infoEl.className = "info";
+        infoEl.textContent = part.info;
+        label.append(box, rowMain, infoEl);
+      } else {
+        label.append(box, rowMain);
+      }
+
       li.append(label);
       optsList.append(li);
     }
@@ -759,28 +938,34 @@
       const picked = (kind) =>
         PARTS.filter((p) => p.kind === kind && boxFor(p.id).checked);
 
-      // Models cannot be pulled without Ollama, so selecting one forces it on
-      // rather than silently emitting a command that would fail at the pull.
-      const models = picked("model");
       const ollamaBox = boxFor("ollama");
       const hermesBox = boxFor("hermes");
-      const forcedOllama = models.length > 0;
-      if (forcedOllama) ollamaBox.checked = true;
-      ollamaBox.disabled = forcedOllama;
-      optsList.querySelector('label[data-for="ollama"]').classList.toggle("locked", forcedOllama);
-
-      const needsHermes = models.some((p) => p.role === "hermesModel");
-      if (needsHermes) hermesBox.checked = true;
-      hermesBox.disabled = needsHermes;
-      optsList.querySelector('label[data-for="hermes"]').classList.toggle("locked", needsHermes);
-
-      // Ollama and Hermes both need the toolchain, and configure_models needs
-      // python3 to edit the settings JSON. Not optional once either is in play:
-      // ticked, locked, and badged rather than left as a trap to discover at
-      // the point the install fails.
       const depsBox = boxFor("deps");
-      const needsDeps = ollamaBox.checked || hermesBox.checked;
       const depsLabel = optsList.querySelector('label[data-for="deps"]');
+
+      // Model pulls need Ollama; vision /c model needs Hermes — sync checks, never grey out.
+      for (const part of PARTS.filter((p) => p.kind === "model")) {
+        const modelBox = boxFor(part.id);
+        if (modelBox.checked && !ollamaBox.checked) ollamaBox.checked = true;
+        if (part.role === "hermesModel" && modelBox.checked && !hermesBox.checked) {
+          hermesBox.checked = true;
+        }
+      }
+
+      if (!ollamaBox.checked) {
+        for (const part of PARTS.filter((p) => p.kind === "model")) {
+          boxFor(part.id).checked = false;
+        }
+      }
+
+      if (!hermesBox.checked) {
+        for (const part of PARTS.filter((p) => p.role === "hermesModel")) {
+          boxFor(part.id).checked = false;
+        }
+      }
+
+      const models = picked("model");
+      const needsDeps = ollamaBox.checked || hermesBox.checked;
       if (needsDeps) depsBox.checked = true;
       depsBox.disabled = needsDeps;
       depsLabel.classList.toggle("locked", needsDeps);
@@ -812,13 +997,27 @@
       optsNote.textContent = nothing
         ? "Tick at least one thing to get a command."
         : needsDeps
-          ? "Required tools, Ollama and Hermes stay on because the rest of your selection needs them."
-          : forcedOllama || needsHermes
-            ? "Ollama and Hermes stay on when the selected models need them."
-            : "";
+          ? "Required tools are included whenever Ollama or Hermes is in the command."
+          : "";
     };
 
-    optsList.addEventListener("change", render);
+    optsList.addEventListener("change", (ev) => {
+      const target = ev.target;
+      if (!(target instanceof HTMLInputElement) || target.type !== "checkbox") return;
+      const id = target.dataset.id;
+
+      if (id === "ollama" && !target.checked) {
+        for (const part of PARTS.filter((p) => p.kind === "model")) {
+          boxFor(part.id).checked = false;
+        }
+      }
+      if (id === "hermes" && !target.checked) {
+        for (const part of PARTS.filter((p) => p.role === "hermesModel")) {
+          boxFor(part.id).checked = false;
+        }
+      }
+      render();
+    });
     render();
   }
 

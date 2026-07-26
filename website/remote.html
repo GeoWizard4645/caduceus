@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Caduceus — control from your phone</title>
+<meta name="description" content="Free and paid ways to message your Mac and run Caduceus / Hermes automation from iOS or Android.">
+<link rel="icon" href="caduceus-mark.png">
+<script>
+(function () {
+  var k = "caduceus-site-theme";
+  try {
+    var t = localStorage.getItem(k);
+    if (t !== "light" && t !== "dark") t = "dark";
+    document.documentElement.setAttribute("data-theme", t);
+  } catch {
+    document.documentElement.setAttribute("data-theme", "dark");
+  }
+})();
+</script>
+<link rel="stylesheet" href="theme.css">
+<style>
+  :root { --radius: 14px; --page: 820px; }
+  *, *::before, *::after { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--base);
+    color: var(--ink);
+    font: 16px/1.65 -apple-system, BlinkMacSystemFont, "Inter", system-ui, sans-serif;
+  }
+  a { color: var(--accent); }
+  .wrap { max-width: var(--page); margin: 0 auto; padding: 0 24px 56px; }
+  .site-nav {
+    display: flex;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 16px 20px;
+    padding: 28px 0 8px;
+    font-size: 0.9rem;
+  }
+  .site-nav a { color: var(--ink-mute); text-decoration: none; border-bottom: 1px solid transparent; }
+  .site-nav a:hover { color: var(--ink); border-bottom-color: var(--accent); }
+  h1 { margin: 0 0 10px; font-size: 1.85rem; letter-spacing: -0.02em; }
+  .lead { color: var(--ink-mute); margin: 0 0 24px; max-width: 62ch; }
+  .note {
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--gold);
+    border-radius: 0 10px 10px 0;
+    background: var(--surface);
+    padding: 14px 16px;
+    margin: 0 0 28px;
+    font-size: 0.92rem;
+    color: var(--ink-mute);
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9rem;
+    margin: 16px 0 32px;
+  }
+  th, td {
+    text-align: left;
+    padding: 12px 10px;
+    border-bottom: 1px solid var(--line);
+    vertical-align: top;
+  }
+  th { color: var(--ink-soft); font-weight: 600; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em; }
+  td { color: var(--ink-mute); }
+  td:first-child { color: var(--ink-soft); font-weight: 500; min-width: 11rem; }
+  .cost-free { color: var(--teal, #5eead4); font-weight: 600; }
+  h2 { margin: 32px 0 10px; font-size: 1.1rem; }
+  p { color: var(--ink-mute); font-size: 0.95rem; }
+  ul { color: var(--ink-mute); font-size: 0.95rem; }
+  pre {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 12px 14px;
+    overflow-x: auto;
+    font: 0.82rem/1.55 ui-monospace, "SF Mono", Menlo, monospace;
+    color: var(--ink-soft);
+  }
+  @media (max-width: 640px) {
+    table, thead, tbody, tr, th, td { display: block; }
+    th { display: none; }
+    tr { padding: 14px 0; border-bottom: 1px solid var(--line); }
+    td { border: 0; padding: 4px 0; }
+    td:first-child { padding-bottom: 6px; }
+  }
+</style>
+</head>
+<body>
+
+<button type="button" class="theme-toggle" id="theme-toggle" aria-label="Switch theme">
+  <span class="theme-seg theme-seg-sun" aria-hidden="true">☀</span>
+  <span class="theme-seg theme-seg-moon" aria-hidden="true">☾</span>
+</button>
+
+<a class="portfolio-back" href="https://vivaanshahani.com/" rel="noopener">
+  <span class="arrow" aria-hidden="true">←</span>
+  vivaanshahani.com
+</a>
+
+<div class="wrap">
+  <nav class="site-nav" aria-label="Site">
+    <a href="https://caduceus.vivaanshahani.com/">Overview</a>
+    <a href="https://caduceus.vivaanshahani.com/features">All features</a>
+    <a href="https://caduceus.vivaanshahani.com/configure-ai">Configure AI</a>
+    <a href="https://caduceus.vivaanshahani.com/remote" aria-current="page">From your phone</a>
+  </nav>
+
+  <h1>Control Caduceus from your phone</h1>
+  <p class="lead">
+    Caduceus is a Mac menu-bar app — there is no iPhone app yet. These are practical ways to
+    <strong>message your Mac</strong>, run the same AI stack Caduceus uses (<a href="https://github.com/NousResearch/hermes-agent" rel="noopener">Hermes</a>,
+    <a href="https://ollama.com/" rel="noopener">Ollama</a>), and trigger automation while you are away from the desk.
+  </p>
+
+  <div class="note">
+    <strong>What you get remotely:</strong> ask questions, run agent / computer-use tasks on the Mac,
+    kick off shell or Shortcuts workflows, and (with full remote desktop) use the Command Center UI itself.
+    <strong>What stays on the Mac:</strong> clipboard history, dictation, and the floating staff — those need you at the keyboard unless you script equivalents.
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Approach</th>
+        <th>Typical cost</th>
+        <th>Best for</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><span class="cost-free">Free</span> — Tailscale + SSH + Hermes CLI</td>
+        <td><span class="cost-free">$0</span> (Tailscale personal)</td>
+        <td>
+          Text-style commands from Termius or Prompt on iOS: SSH into your Mac and run
+          <code>hermes</code> (same engine as Caduceus <code>/</code> and <code>/c</code>).
+          Mac must be awake; enable Remote Login in System Settings.
+        </td>
+      </tr>
+      <tr>
+        <td><span class="cost-free">Free</span> — iOS Shortcuts + Tailscale SSH</td>
+        <td><span class="cost-free">$0</span></td>
+        <td>
+          One-tap phrases (“Summarize my inbox”, “Run backup”) as Shortcuts that SSH and run a script or
+          <code>hermes ask "…"</code>. Great for repeatable tasks; you build each Shortcut once.
+        </td>
+      </tr>
+      <tr>
+        <td><span class="cost-free">Free</span> — Telegram bot on your Mac (DIY)</td>
+        <td><span class="cost-free">$0</span> (Telegram API)</td>
+        <td>
+          A small always-on bot process on the Mac forwards chat messages to Hermes or a shell script.
+          You text from Telegram like a chat app. Requires basic scripting and keeping the Mac on.
+        </td>
+      </tr>
+      <tr>
+        <td>Hermes messaging / channels</td>
+        <td>Usually <span class="cost-free">$0</span> for self-hosted; cloud models cost extra</td>
+        <td>
+          If your Hermes install exposes a messaging channel (see
+          <a href="https://github.com/NousResearch/hermes-agent" rel="noopener">Hermes docs</a>),
+          your phone talks to the agent directly while Caduceus on the Mac stays in sync with the same config.
+        </td>
+      </tr>
+      <tr>
+        <td>Pushover or Pushcut → Mac Shortcut</td>
+        <td>Pushover ~$5 one-time; Pushcut subscription</td>
+        <td>
+          Send a notification from your phone that wakes a <strong>Shortcuts</strong> automation on the Mac
+          (must be on the same Apple ID / network or use a webhook). Good for “run this on my Mac” buttons, not full chat.
+        </td>
+      </tr>
+      <tr>
+        <td>Remote desktop (Jump, Screens, etc.)</td>
+        <td>Paid app + optional Tailscale</td>
+        <td>
+          Full visual control — open Caduceus, use the palette, approve <code>/c</code> prompts yourself.
+          Highest fidelity; uses more bandwidth and battery on the phone.
+        </td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>Example: free SSH from iPhone (Tailscale)</h2>
+  <ol>
+    <li>Install <a href="https://tailscale.com/download" rel="noopener">Tailscale</a> on Mac and iPhone (personal plan is free).</li>
+    <li>On the Mac: System Settings → General → Sharing → enable <strong>Remote Login</strong>.</li>
+    <li>On the phone: Termius → SSH to your Mac’s Tailscale IP → run Hermes or a script Caduceus would use.</li>
+  </ol>
+  <pre># Example after SSH (exact Hermes subcommands depend on your install)
+hermes ask "What's on my calendar today?"</pre>
+  <p>
+    Wire AI backends in Caduceus first — see
+    <a href="https://caduceus.vivaanshahani.com/configure-ai">Configure your own AI</a>.
+    In Settings → General, also open the <strong>Control from your phone</strong> link for this page.
+  </p>
+</div>
+
+<script src="theme.js"></script>
+</body>
+</html>

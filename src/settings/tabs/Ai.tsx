@@ -14,6 +14,7 @@
 import { useState } from "react";
 
 import * as api from "@/shared/api";
+import { DOCS_CONFIGURE_AI } from "@/shared/docsUrls";
 import type { BackendConfig, RuntimeInfo } from "@/shared/types";
 import {
   Button,
@@ -153,7 +154,22 @@ export function AiTab({
         title="Routing"
         description="Which backend handles each prefix."
       >
-        <div className="grid grid-cols-2 gap-5">
+        <Callout tone="info" title="Your own CLI or API">
+          <p className="text-[13px] leading-relaxed text-ink-mute">
+            Not using the bundled installer? Hermes, Ollama, LM Studio, and any OpenAI-compatible endpoint
+            work here — step-by-step on the web:{" "}
+            <button
+              type="button"
+              className="font-medium text-accent underline decoration-accent/40 underline-offset-2 hover:decoration-accent"
+              onClick={() => void api.openExternalUrl(DOCS_CONFIGURE_AI)}
+            >
+              Configure AI with Caduceus
+            </button>
+            .
+          </p>
+        </Callout>
+
+        <div className="mt-4 grid grid-cols-2 gap-5">
           <Field label="“/” — ask a question" hint="One-shot chat.">
             <Select
               value={agents.primaryBackendId ?? ""}
@@ -229,7 +245,15 @@ export function AiTab({
       >
         {extraBackends.length === 0 ? (
           <p className="text-[13px] text-ink-faint">
-            None configured. Most people do not need this.
+            None configured. Most people use Hermes or the{" "}
+            <button
+              type="button"
+              className="text-accent underline decoration-accent/40 underline-offset-2"
+              onClick={() => void api.openExternalUrl(DOCS_CONFIGURE_AI)}
+            >
+              configure-AI guide
+            </button>{" "}
+            for Ollama and other CLIs.
           </p>
         ) : (
           <div className="space-y-2">

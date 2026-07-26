@@ -15,6 +15,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import * as api from "@/shared/api";
+import { DOCS_CONFIGURE_AI } from "@/shared/docsUrls";
 import { STAFF_POPOUT_LIMIT, type Settings } from "@/shared/types";
 import { Button, Callout, Kbd, cx } from "@/shared/ui";
 
@@ -339,6 +340,11 @@ const TUTORIALS: Tutorial[] = [
           <li>
             On the AI tab, add a backend. Any OpenAI-compatible endpoint works, including
             one running locally, so this does not have to mean a paid API.
+            <Action>
+              <Button size="sm" onClick={() => void api.openExternalUrl(DOCS_CONFIGURE_AI)}>
+                Configure-AI guide (web)
+              </Button>
+            </Action>
           </li>
           <li>
             Keys go to your OS keychain, never to a config file, and there is no command to

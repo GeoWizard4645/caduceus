@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Caduceus — configure your own AI</title>
+<meta name="description" content="Use Hermes, Ollama, OpenAI-compatible CLIs, or cloud APIs with Caduceus / and /c routing.">
+<link rel="icon" href="caduceus-mark.png">
+<script>
+(function () {
+  var k = "caduceus-site-theme";
+  try {
+    var t = localStorage.getItem(k);
+    if (t !== "light" && t !== "dark") t = "dark";
+    document.documentElement.setAttribute("data-theme", t);
+  } catch {
+    document.documentElement.setAttribute("data-theme", "dark");
+  }
+})();
+</script>
+<link rel="stylesheet" href="theme.css">
+<style>
+  :root { --radius: 14px; --page: 720px; }
+  *, *::before, *::after { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--base);
+    color: var(--ink);
+    font: 16px/1.65 -apple-system, BlinkMacSystemFont, "Inter", system-ui, sans-serif;
+  }
+  a { color: var(--accent); }
+  .wrap { max-width: var(--page); margin: 0 auto; padding: 0 24px 56px; }
+  .site-nav {
+    display: flex;
+    justify-content: center;
+    gap: 20px;
+    padding: 28px 0 8px;
+    font-size: 0.9rem;
+  }
+  .site-nav a { color: var(--ink-mute); text-decoration: none; border-bottom: 1px solid transparent; }
+  .site-nav a:hover { color: var(--ink); border-bottom-color: var(--accent); }
+  h1 { margin: 0 0 10px; font-size: 1.85rem; letter-spacing: -0.02em; }
+  .lead { color: var(--ink-mute); margin: 0 0 28px; }
+  h2 { margin: 36px 0 12px; font-size: 1.15rem; }
+  p, li { color: var(--ink-mute); font-size: 0.95rem; }
+  code, pre {
+    font: 0.85rem/1.55 ui-monospace, "SF Mono", Menlo, monospace;
+  }
+  pre {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 14px 16px;
+    overflow-x: auto;
+    color: var(--ink-soft);
+  }
+  .note {
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--gold);
+    border-radius: 0 10px 10px 0;
+    background: var(--surface);
+    padding: 14px 16px;
+    margin: 20px 0;
+    font-size: 0.92rem;
+  }
+  ol { padding-left: 1.25rem; }
+  li { margin: 8px 0; }
+</style>
+</head>
+<body>
+
+<button type="button" class="theme-toggle" id="theme-toggle" aria-label="Switch theme">
+  <span class="theme-seg theme-seg-sun" aria-hidden="true">☀</span>
+  <span class="theme-seg theme-seg-moon" aria-hidden="true">☾</span>
+</button>
+
+<a class="portfolio-back" href="https://vivaanshahani.com/" rel="noopener">
+  <span class="arrow" aria-hidden="true">←</span>
+  vivaanshahani.com
+</a>
+
+<div class="wrap">
+  <nav class="site-nav" aria-label="Site">
+    <a href="https://caduceus.vivaanshahani.com/">Overview</a>
+    <a href="https://caduceus.vivaanshahani.com/features">All features</a>
+    <a href="https://caduceus.vivaanshahani.com/configure-ai" aria-current="page">Configure AI</a>
+    <a href="https://caduceus.vivaanshahani.com/remote">From your phone</a>
+  </nav>
+
+  <h1>Configure your own AI with Caduceus</h1>
+  <p class="lead">
+    Caduceus does not ship a model. It routes <code>/</code> (chat) and <code>/c</code> (control this Mac)
+    to whatever backend you pick in <strong>Settings → AI</strong>. Everything else — launcher, clipboard,
+    dictation, web search — works with zero AI setup.
+  </p>
+
+  <div class="note">
+    Started with the one-line app install? You can run the
+    <a href="https://caduceus.vivaanshahani.com/#install">full stack installer</a> later; it is idempotent
+    and skips pieces you already have.
+  </div>
+
+  <h2>Path A — Hermes Agent (recommended for <code>/c</code>)</h2>
+  <p>
+    <a href="https://hermes-agent.nousresearch.com/" rel="noopener">Hermes Agent</a> is an open-source CLI
+    from Nous Research. Caduceus talks to it locally; Hermes owns models, tools, memory, and
+    <code>computer_use</code> screen control.
+  </p>
+  <ol>
+    <li>Install Hermes (Settings → AI → <em>Open in Terminal</em>, or run the install script yourself).</li>
+    <li>Run <code>hermes setup --portal</code> or point Hermes at
+      <a href="https://ollama.com/" rel="noopener">Ollama</a> with <code>hermes model</code>.</li>
+    <li>In Caduceus, set <strong>“/”</strong> and <strong>“/c”</strong> to <em>Hermes Agent</em>.</li>
+  </ol>
+  <p>
+    Docs:
+    <a href="https://github.com/NousResearch/hermes-agent" rel="noopener">Hermes on GitHub</a>.
+  </p>
+
+  <h2>Path B — OpenAI-compatible endpoint (your CLI or local server)</h2>
+  <p>
+    Use this if you already run <strong>Ollama</strong>, <strong>LM Studio</strong>,
+    <strong>llama.cpp server</strong>, <strong>vLLM</strong>, or any HTTP API that speaks the OpenAI
+    chat format. Caduceus calls it directly — Hermes is not required for <code>/</code>.
+  </p>
+  <ol>
+    <li>Start your server (example: <code>ollama serve</code> on port 11434).</li>
+    <li>In Caduceus: <strong>Settings → AI → Advanced: direct model endpoint → Add endpoint</strong>.</li>
+    <li>Set <strong>Base URL</strong> (e.g. <code>http://localhost:11434/v1</code>) and <strong>Model</strong> tag.</li>
+    <li>Add an API key only if your server requires one (stored in the macOS keychain).</li>
+    <li>Set <strong>Routing → “/”</strong> to that backend.</li>
+  </ol>
+  <pre>Base URL:  http://localhost:11434/v1
+Model:     qwen3.5:4b</pre>
+  <p>
+    <code>/c</code> needs a backend with screen control. Today that means <strong>Hermes</strong> with
+    <code>computer_use</code> enabled — a plain chat endpoint cannot drive the mouse.
+  </p>
+
+  <h2>Path C — Cloud APIs (OpenAI, OpenRouter, etc.)</h2>
+  <p>
+    Add an OpenAI-compatible backend with the provider’s base URL and model name. Put the API key in
+    Settings (never stored in plain JSON — only the keychain). Costs depend on the provider; Caduceus
+    itself is free.
+  </p>
+
+  <h2>Path D — Hybrid</h2>
+  <p>
+    Common setup: <code>/</code> → local Ollama (free, private), <code>/c</code> → Hermes with a vision
+    model for screen tasks. You can add multiple backends and switch routing anytime.
+  </p>
+
+  <h2>Verify it works</h2>
+  <ol>
+    <li>Open the Command Center (<kbd>Alt+Space</kbd> or click the staff).</li>
+    <li>Type <code>/ hello</code> — you should get a reply in the palette.</li>
+    <li>For computer use, type <code>/c …</code> and approve the prompt if confirmation is on.</li>
+  </ol>
+</div>
+
+<script src="theme.js"></script>
+</body>
+</html>
