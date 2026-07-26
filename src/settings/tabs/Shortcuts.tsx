@@ -28,6 +28,7 @@ const KIND_LABELS: Record<ShortcutKind, string> = {
   run_command: "Run a shell command",
   run_applescript: "Run AppleScript",
   clipboard_view: "Open clipboard history",
+  system_monitor: "Open system status",
 };
 
 const TARGET_HINTS: Record<ShortcutKind, string> = {
@@ -38,6 +39,7 @@ const TARGET_HINTS: Record<ShortcutKind, string> = {
     "Runs in your login shell. {query} is inserted safely quoted; the raw text is also in $CADUCEUS_QUERY.",
   run_applescript: "AppleScript source. {query} is substituted verbatim.",
   clipboard_view: "No target needed.",
+  system_monitor: "No target needed.",
 };
 
 export function ShortcutsTab({ draft, info }: { draft: Draft; info: RuntimeInfo | null }) {
@@ -159,7 +161,9 @@ function ShortcutRow({
   onDelete: () => void;
 }) {
   const [testResult, setTestResult] = useState<string | null>(null);
-  const needsTarget = shortcut.kind !== "clipboard_view";
+  // The frontend-handled kinds have nothing to point at.
+  const needsTarget =
+    shortcut.kind !== "clipboard_view" && shortcut.kind !== "system_monitor";
   const incomplete = needsTarget && !shortcut.target.trim();
 
 

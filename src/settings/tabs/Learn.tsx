@@ -325,42 +325,75 @@ const TUTORIALS: Tutorial[] = [
   {
     id: "ai",
     icon: "✳",
-    title: "Connect a model",
-    blurb: "Optional. Caduceus is fully useful without one.",
+    title: "Set up AI",
+    blurb: "Optional. Everything except / and /c already works without it.",
     done: (s) => s.agents.primaryBackendId !== null,
-    body: ({ goTo }) => (
-      <>
-        <p>
-          Everything so far — the staff, prefixes, clipboard, launching apps, the calculator
-          — runs with no API key and no network. A model only adds the <Kbd>/</Kbd> and{" "}
-          <Kbd>/c</Kbd> prefixes.
-        </p>
+    body: ({ settings, goTo }) => {
+      const connected = settings.agents.backends.find(
+        (b) => b.id === settings.agents.primaryBackendId,
+      );
+      return (
+        <>
+          <p>
+            Everything so far — the staff, prefixes, clipboard, launching apps, the system
+            monitor, the calculator — runs with no API key and no network. A model only adds
+            the <Kbd>/</Kbd> and <Kbd>/c</Kbd> prefixes. There are three ways to get one, in
+            increasing order of effort.
+          </p>
 
-        <Steps>
-          <li>
-            On the AI tab, add a backend. Any OpenAI-compatible endpoint works, including
-            one running locally, so this does not have to mean a paid API.
-            <Action>
-              <Button size="sm" onClick={() => void api.openExternalUrl(DOCS_CONFIGURE_AI)}>
-                Configure-AI guide (web)
-              </Button>
-            </Action>
-          </li>
-          <li>
-            Keys go to your OS keychain, never to a config file, and there is no command to
-            read one back out — so a compromised webview cannot exfiltrate them.
-          </li>
-          <li>
-            Mark one backend <b>primary</b>. That is the one <Kbd>/</Kbd> talks to.
-            <Action>
-              <Button size="sm" tone="primary" onClick={() => goTo("ai")}>
-                Open the AI tab
-              </Button>
-            </Action>
-          </li>
-        </Steps>
-      </>
-    ),
+          <Steps>
+            <li>
+              <b>Let Caduceus find one.</b> The AI tab has a <b>Scan this Mac</b> button that
+              checks the default ports for Ollama, LM Studio, llama.cpp, Jan and vLLM, and
+              asks Hermes Agent whether it is configured. If you already run any of them,
+              this is one click and you are done.
+              <Action>
+                <Button size="sm" tone="primary" onClick={() => goTo("ai")}>
+                  Open the AI tab
+                </Button>
+              </Action>
+            </li>
+            <li>
+              <b>Install the whole local stack.</b> The Caduceus site has a one-command
+              installer that sets up Ollama, Hermes and the models, and wires{" "}
+              <Kbd>/</Kbd> and <Kbd>/c</Kbd> for you. Nothing leaves your machine and there
+              is no key to buy.
+              <Action>
+                <Button size="sm" onClick={() => void api.openExternalUrl(DOCS_CONFIGURE_AI)}>
+                  Configure-AI guide (web)
+                </Button>
+              </Action>
+            </li>
+            <li>
+              <b>Point it at a cloud provider.</b> Any OpenAI-compatible endpoint works — add
+              it under <i>Advanced: direct model endpoint</i> on the AI tab and paste the key.
+              Keys go to your OS keychain, never to a config file, and there is no command to
+              read one back out, so a compromised webview cannot exfiltrate them.
+            </li>
+            <li>
+              Whichever route you take, one backend has to be marked <b>primary</b>. That is
+              the one <Kbd>/</Kbd> talks to. <Kbd>/c</Kbd> uses the computer-use backend,
+              which should be Hermes if you want it to actually drive the screen.
+            </li>
+          </Steps>
+
+          {connected ? (
+            <Callout tone="positive" title="Connected">
+              <Kbd>/</Kbd> is talking to <b>{connected.displayName || connected.id}</b>
+              {connected.model ? ` (${connected.model})` : ""}.
+              {settings.agents.computerUseBackendId
+                ? " Computer use is set up too."
+                : " Computer use has no backend yet, so /c will not work."}
+            </Callout>
+          ) : (
+            <Callout tone="info">
+              Nothing is connected yet, so <Kbd>/</Kbd> will tell you to set a model up rather
+              than answering. Everything else in Caduceus is unaffected.
+            </Callout>
+          )}
+        </>
+      );
+    },
   },
 ];
 

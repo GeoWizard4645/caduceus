@@ -13,10 +13,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import * as api from "@/shared/api";
 import { StaffMark } from "@/shared/StaffMark";
+import { Onboarding, type OnboardingSignals } from "./Onboarding";
 import { useSettings, useTauriEvent } from "@/shared/hooks";
 import { ShortcutIcon } from "@/shared/ShortcutIcon";
 import { cx } from "@/shared/ui";
-import type { StaffHoverState, Shortcut } from "@/shared/types";
+import type { StaffHoverState, Shortcut, VoiceState } from "@/shared/types";
 import { EVENTS, STAFF_POPOUT_LIMIT } from "@/shared/types";
 
 /** How far the arc spreads either side of straight-out-from-the-edge. */
@@ -25,8 +26,13 @@ const ARC_SPREAD_DEG = 76;
 /** Pointer travel, in px, before a press becomes a drag rather than a click. */
 const DRAG_THRESHOLD = 4;
 
-const POPOUT_EXPAND_MS = 260;
-const POPOUT_FADE_MS = 100;
+// Expand time is felt as latency, not as polish: the ring is not usable until
+// it lands. 260ms plus a 24ms stagger meant the sixth icon arrived 380ms after
+// the pointer did, on top of however long the tracker took to notice.
+const POPOUT_EXPAND_MS = 160;
+const POPOUT_FADE_MS = 90;
+/** Per-icon delay. Six icons, so this multiplies by five on the last one. */
+const POPOUT_STAGGER_MS = 10;
 
 export function Staff() {
   const { settings } = useSettings();
@@ -36,10 +42,40 @@ export function Staff() {
   const [flash, setFlash] = useState<{ text: string; ok: boolean } | null>(null);
   /** Keep icons on the arc while fading out — never slide them back to the staff. */
   const [arcHeld, setArcHeld] = useState(false);
+  const [voice, setVoice] = useState<VoiceState>("idle");
+  // First-run walkthrough. Steps complete on the real interaction, so the staff
+  // records what has actually happened rather than what has been read.
+  const [signals, setSignals] = useState<OnboardingSignals>({
+    hovered: false,
+    expanded: false,
+    commandCenterOpened: false,
+    hotkeyUsed: false,
+  });
   const sideWhileExpanded = useRef<"left" | "right">("right");
   const popoutRadiusWhileExpanded = useRef(0);
 
   useTauriEvent<StaffHoverState>(EVENTS.staffHover, setHover);
+  // The staff is the only Caduceus surface always on screen, so it is where
+  // "your microphone is live" has to be visible — the Command Center can be
+  // behind another window or scrolled off a second display.
+  useTauriEvent<VoiceState>(EVENTS.voiceState, setVoice);
+
+  useTauriEvent<string>(EVENTS.commandCenterShown, (source) => {
+    setSignals((current) => ({
+      ...current,
+      commandCenterOpened: true,
+      hotkeyUsed: current.hotkeyUsed || source === "hotkey",
+    }));
+  });
+
+  useEffect(() => {
+    if (!hover.hovering && !hover.expanded) return;
+    setSignals((current) =>
+      current.hovered && current.expanded
+        ? current
+        : { ...current, hovered: true, expanded: current.expanded || hover.expanded },
+    );
+  }, [hover.hovering, hover.expanded]);
 
   useEffect(() => {
     if (hover.expanded) {
@@ -84,7 +120,8 @@ export function Staff() {
   // --- drag vs click -------------------------------------------------------
   const pressOrigin = useRef<{ x: number; y: number } | null>(null);
   const dragging = useRef(false);
-  const singleClickTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** Open while a second click would still count as a double-click. */
+  const doubleClickWindow = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const onPointerDown = (e: React.PointerEvent) => {
     if (e.button !== 0) return;
@@ -118,22 +155,29 @@ export function Staff() {
     dragging.current = false;
     if (wasDrag) return;
 
-    // Single click opens the Command Center; double-click toggles dictation (F1 does the same).
-    if (singleClickTimer.current) {
-      clearTimeout(singleClickTimer.current);
-      singleClickTimer.current = null;
+    // Single click opens the Command Center; double-click also starts dictation
+    // (F1 does the same).
+    //
+    // The first click acts immediately rather than waiting out a double-click
+    // window. Deferring it made every single click feel ~280ms slow, and there
+    // is nothing to undo: starting dictation opens the Command Center too, so a
+    // second click just adds the microphone to a window that is already up.
+    if (doubleClickWindow.current) {
+      clearTimeout(doubleClickWindow.current);
+      doubleClickWindow.current = null;
       void api.toggleDictation();
       return;
     }
-    singleClickTimer.current = setTimeout(() => {
-      singleClickTimer.current = null;
-      void api.openCommandCenter();
+
+    void api.openCommandCenter(undefined, undefined, "staff");
+    doubleClickWindow.current = setTimeout(() => {
+      doubleClickWindow.current = null;
     }, 280);
   };
 
   useEffect(
     () => () => {
-      if (singleClickTimer.current) clearTimeout(singleClickTimer.current);
+      if (doubleClickWindow.current) clearTimeout(doubleClickWindow.current);
     },
     [],
   );
@@ -145,6 +189,8 @@ export function Staff() {
       const outcome = await api.runShortcut(shortcut.id);
       if (outcome.frontendAction === "clipboard_view") {
         await api.openCommandCenter("clipboard");
+      } else if (outcome.frontendAction === "system_monitor") {
+        await api.openCommandCenter("system");
       } else if (!outcome.ok) {
         setFlash({ text: outcome.message, ok: false });
       }
@@ -214,12 +260,12 @@ export function Staff() {
                 transitionDuration: fadingOut
                   ? `${POPOUT_FADE_MS}ms`
                   : `${POPOUT_EXPAND_MS}ms`,
-                transitionDelay: expanded && !fadingOut ? `${index * 24}ms` : "0ms",
+                transitionDelay: expanded && !fadingOut ? `${index * POPOUT_STAGGER_MS}ms` : "0ms",
                 pointerEvents: expanded ? "auto" : "none",
               }}
               className={cx(
                 "group absolute left-0 top-0 flex items-center justify-center rounded-full",
-                "glass-raised shadow-float backdrop-blur-glass",
+                "staff-popout shadow-float",
                 "text-[15px] leading-none text-ink ease-cad",
                 "focus-visible:ring-2 focus-visible:ring-accent",
                 isBusy && "animate-pulse",
@@ -253,10 +299,10 @@ export function Staff() {
             e.preventDefault();
             void api.openSettingsWindow();
           }}
-          style={{ opacity: expanded || hover.hovering ? 1 : staffIdleOpacity }}
+          style={{ opacity: expanded || hover.hovering || voice !== "idle" ? 1 : staffIdleOpacity }}
           className={cx(
             "group relative flex -translate-x-1/2 -translate-y-1/2 items-center justify-center",
-            "transition-[opacity,transform] duration-300 ease-cad",
+            "transition-[opacity,transform] duration-150 ease-cad",
             "hover:scale-[1.08] active:scale-[0.96]",
             "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2",
           )}
@@ -266,7 +312,7 @@ export function Staff() {
           <span
             aria-hidden="true"
             className={cx(
-              "absolute rounded-full transition-opacity duration-500 ease-cad",
+              "absolute rounded-full transition-opacity duration-200 ease-cad",
               expanded ? "opacity-100" : "opacity-70",
               staffIdleAnimation && !expanded && "animate-staff-pulse",
             )}
@@ -283,8 +329,42 @@ export function Staff() {
             icon={settings.appearance.staffMarkIcon}
             className="relative drop-shadow-[0_2px_6px_rgb(0_0_0/0.55)]"
           />
+
+          {/* Recording tell. Red rather than the accent colour on purpose: the
+              accent is used all over the staff for ordinary state, and "the mic
+              is on" should never be mistakable for any of it. */}
+          {voice !== "idle" && (
+            <span
+              aria-hidden="true"
+              className="absolute -right-0.5 -top-0.5 flex h-3 w-3"
+              style={{ transform: `translate(${staffSize * 0.18}px, ${staffSize * -0.18}px)` }}
+            >
+              {voice === "recording" && (
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#ff3b30] opacity-75" />
+              )}
+              <span
+                className={cx(
+                  "relative inline-flex h-3 w-3 rounded-full border border-black/30 bg-[#ff3b30]",
+                  "shadow-[0_0_8px_rgb(255_59_48/0.9)]",
+                  voice === "transcribing" && "animate-pulse opacity-70",
+                )}
+              />
+            </span>
+          )}
         </button>
       </div>
+
+      {settings.general.onboardingDone === false && (
+        <Onboarding
+          signals={signals}
+          onFinish={() =>
+            void api.updateSettings({
+              ...settings,
+              general: { ...settings.general, onboardingDone: true },
+            })
+          }
+        />
+      )}
 
       {/* --- transient error ------------------------------------------- */}
       {flash && (

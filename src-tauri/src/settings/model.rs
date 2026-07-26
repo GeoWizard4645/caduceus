@@ -84,6 +84,11 @@ pub struct GeneralSettings {
     /// Poll rate of the global cursor tracker that drives staff hover/collapse.
     /// Lower is more responsive, higher is cheaper. 16–100ms is sane.
     pub cursor_poll_ms: u64,
+    /// Whether the first-run walkthrough has been finished or dismissed.
+    ///
+    /// Lives in settings rather than a marker file so "show me that again" is a
+    /// checkbox rather than a support question about deleting hidden state.
+    pub onboarding_done: bool,
     /// Per-key actions for `F1`–`F12` (and `F13`–`F20` when present). macOS
     /// users often remap hardware keys to standard function keys in System
     /// Settings so Caduceus can intercept them globally.
@@ -93,7 +98,10 @@ pub struct GeneralSettings {
 impl Default for GeneralSettings {
     fn default() -> Self {
         Self {
-            toggle_orb_hotkey: "F12".into(),
+            // Empty by default: F12 toggles the staff via the function-key
+            // table below, so there is exactly one place F-keys are configured.
+            // This field still exists for non-F-key accelerators like ⌥⇧S.
+            toggle_orb_hotkey: String::new(),
             // Control+Space is free on a stock macOS install (Spotlight holds
             // Cmd+Space) and on Windows/Linux, where Alt+Space opens the window
             // menu in several desktop environments.
@@ -105,6 +113,7 @@ impl Default for GeneralSettings {
             collapse_idle_ms: 50,
             launch_at_login: false,
             cursor_poll_ms: 33,
+            onboarding_done: false,
             function_keys: default_function_key_bindings(),
         }
     }
@@ -157,12 +166,13 @@ pub fn default_function_key_bindings() -> Vec<FunctionKeyBinding> {
         .iter()
         .map(|label| FunctionKeyBinding {
             key: (*label).into(),
-            action: if *label == "F1" {
-                FunctionKeyAction::StartDictation
-            } else if *label == "F3" {
-                FunctionKeyAction::VoiceMemo
-            } else {
-                FunctionKeyAction::None
+            action: match *label {
+                "F1" => FunctionKeyAction::StartDictation,
+                "F3" => FunctionKeyAction::VoiceMemo,
+                // Was a separate `toggle_orb_hotkey` field. Living here means
+                // F1-F20 have exactly one place they are configured.
+                "F12" => FunctionKeyAction::ToggleStaff,
+                _ => FunctionKeyAction::None,
             },
             shortcut_id: String::new(),
         })

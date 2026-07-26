@@ -13,6 +13,7 @@ import type {
   CalcResult,
   HermesStatus,
   LocalAiScan,
+  SystemSnapshot,
   InstalledApp,
   BackendConfig,
   BrowserInstall,
@@ -88,8 +89,14 @@ export const dispatchInput = (input: string) =>
 
 export const hideCommandCenter = () => invoke<void>("hide_command_center");
 
-export const openCommandCenter = (mode?: string, prefill?: string) =>
-  invoke<void>("open_command_center", { mode: mode ?? null, prefill: prefill ?? null });
+export const openCommandCenter = (mode?: string, prefill?: string, source?: string) =>
+  invoke<void>("open_command_center", {
+    mode: mode ?? null,
+    prefill: prefill ?? null,
+    // Only the first-run walkthrough reads this — it needs to tell a click on
+    // the staff apart from the keyboard shortcut.
+    source: source ?? null,
+  });
 
 export const openSettingsWindow = (tab?: string) =>
   invoke<void>("open_settings_window", { tab: tab ?? null });
@@ -97,6 +104,10 @@ export const openSettingsWindow = (tab?: string) =>
 // --- staff -------------------------------------------------------------------
 
 export const toggleStaff = () => invoke<boolean>("toggle_staff");
+
+/** Hold the staff window clickable — used only by the first-run walkthrough. */
+export const setStaffInteractive = (interactive: boolean) =>
+  invoke<void>("set_staff_interactive", { interactive });
 
 export const saveStaffPosition = () => invoke<void>("save_staff_position");
 
@@ -189,6 +200,15 @@ export const hermesStatus = () => invoke<HermesStatus>("hermes_status");
 
 /** Probe this Mac for AI runtimes that are installed and serving. Read-only. */
 export const detectLocalAi = () => invoke<LocalAiScan>("detect_local_ai");
+
+// --- system monitor --------------------------------------------------------
+
+export const systemSnapshot = (limit = 40, sortByMemory = false) =>
+  invoke<SystemSnapshot>("system_snapshot", { limit, sortByMemory });
+
+/** SIGTERM by default; `force` escalates to SIGKILL. */
+export const systemKill = (pid: number, force = false) =>
+  invoke<void>("system_kill", { pid, force });
 
 /** Opens Terminal with the install command typed but NOT run. */
 export const openHermesInstaller = () => invoke<ExecOutcome>("open_hermes_installer");

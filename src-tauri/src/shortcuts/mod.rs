@@ -39,6 +39,9 @@ pub enum ShortcutKind {
     /// Open the Command Center pre-filtered to clipboard history. Handled in
     /// the frontend; `target` is ignored.
     ClipboardView,
+    /// Open the Command Center's system monitor. Frontend-handled like
+    /// `ClipboardView`; `target` is ignored.
+    SystemMonitor,
 }
 
 /// One user-configurable action.
@@ -152,15 +155,71 @@ pub fn default_shortcuts() -> Vec<Shortcut> {
             ..Default::default()
         },
         Shortcut {
+            id: "sc-system".into(),
+            label: "System".into(),
+            icon: "glyph:gauge".into(),
+            kind: ShortcutKind::SystemMonitor,
+            target: String::new(),
+            show_in_staff: true,
+            order_index: 4,
+            keywords: vec![
+                "activity".into(),
+                "monitor".into(),
+                "cpu".into(),
+                "ram".into(),
+                "memory".into(),
+                "force quit".into(),
+                "processes".into(),
+                "disk".into(),
+            ],
+            description: "CPU, memory, disks and what to quit".into(),
+            ..Default::default()
+        },
+        Shortcut {
             id: "sc-clipboard".into(),
             label: "Clipboard".into(),
             icon: "glyph:clipboard".into(),
             kind: ShortcutKind::ClipboardView,
             target: String::new(),
             show_in_staff: true,
-            order_index: 4,
             keywords: vec!["history".into(), "paste".into(), "copy".into()],
             description: "Browse everything you have copied".into(),
+            order_index: 5,
+            ..Default::default()
+        },
+        // The staff ring is full at six, so these ship searchable-only. They are
+        // the two Raycast staples that are *reversible* — "Empty Trash" and
+        // "Quit All Apps" are deliberately absent, because a fuzzy palette plus
+        // a reflexive Return is a bad way to lose files.
+        Shortcut {
+            id: "sc-dark-mode".into(),
+            label: "Toggle Dark Mode".into(),
+            icon: "glyph:window".into(),
+            kind: ShortcutKind::RunAppleScript,
+            target: "tell application \"System Events\" to tell appearance preferences \
+                     to set dark mode to not dark mode"
+                .into(),
+            show_in_staff: false,
+            order_index: 6,
+            keywords: vec![
+                "theme".into(),
+                "light".into(),
+                "dark".into(),
+                "appearance".into(),
+            ],
+            description: "Switch macOS between light and dark".into(),
+            ..Default::default()
+        },
+        Shortcut {
+            id: "sc-lock".into(),
+            label: "Lock Screen".into(),
+            icon: "glyph:bolt".into(),
+            kind: ShortcutKind::RunCommand,
+            target: "pmset displaysleepnow".into(),
+            show_in_staff: false,
+            order_index: 7,
+            keywords: vec!["lock".into(), "sleep".into(), "screen".into(), "away".into()],
+            description: "Sleep the display and lock".into(),
             ..Default::default()
         },
     ]
@@ -232,9 +291,10 @@ mod tests {
     fn defaults_fit_the_staff_without_overflowing_it() {
         let s = default_shortcuts();
         let shown = s.iter().filter(|x| x.show_in_staff).count();
-        // Five, not six: dictation is push-to-talk now, not an app to launch,
-        // so it is not a shortcut at all. There is deliberately one free slot.
-        assert_eq!(shown, 5);
+        // Six: the five originals plus the system monitor. Exactly fills the
+        // ring, so adding another default must displace one rather than
+        // silently not being drawn.
+        assert_eq!(shown, 6);
         assert!(shown <= STAFF_POPOUT_LIMIT, "defaults must all be drawable");
     }
 
@@ -250,7 +310,12 @@ mod tests {
     fn no_default_shortcut_ships_with_an_empty_target() {
         // An icon that does nothing when clicked is worse than no icon.
         for s in default_shortcuts() {
-            if s.kind != ShortcutKind::ClipboardView {
+            // The frontend-handled kinds have no target by design.
+            let frontend_only = matches!(
+                s.kind,
+                ShortcutKind::ClipboardView | ShortcutKind::SystemMonitor
+            );
+            if !frontend_only {
                 assert!(!s.target.trim().is_empty(), "{} has no target", s.label);
             }
         }

@@ -292,15 +292,33 @@ pub fn hide_command_center<R: Runtime>(app: AppHandle<R>) -> Res<()> {
 }
 
 #[tauri::command]
-pub fn open_command_center<R: Runtime>(app: AppHandle<R>, mode: Option<String>, prefill: Option<String>) -> Res<()> {
+pub fn open_command_center<R: Runtime>(
+    app: AppHandle<R>,
+    mode: Option<String>,
+    prefill: Option<String>,
+    source: Option<String>,
+) -> Res<()> {
     window::open_command_center(
         &app,
         window::CommandCenterOpenPayload {
             mode: mode.unwrap_or_else(|| "default".into()),
             prefill: prefill.unwrap_or_default(),
             select_all: true,
+            source: source.unwrap_or_else(|| "other".into()),
         },
     )
+}
+
+/// Keep the staff window clickable while the first-run walkthrough is showing.
+///
+/// Without this the walkthrough's own buttons fall through to whatever is
+/// behind the staff, because the window is click-through everywhere except the
+/// staff itself.
+#[tauri::command]
+pub fn set_staff_interactive<R: Runtime>(app: AppHandle<R>, interactive: bool) {
+    if let Some(tracker) = app.try_state::<window::CursorTracker>() {
+        tracker.set_force_interactive(interactive);
+    }
 }
 
 #[tauri::command]
@@ -717,6 +735,37 @@ pub struct CalcResult {
 #[tauri::command]
 pub async fn hermes_status() -> crate::agent::hermes::HermesStatus {
     crate::agent::hermes::status().await
+}
+
+// ---------------------------------------------------------------------------
+// System monitor
+// ---------------------------------------------------------------------------
+
+/// One refreshed snapshot of the machine: load, memory, disks, network, and the
+/// `limit` heaviest processes.
+#[tauri::command]
+pub fn system_snapshot(
+    monitor: tauri::State<'_, crate::sysmon::SysMonitor>,
+    limit: Option<usize>,
+    sort_by_memory: Option<bool>,
+) -> crate::sysmon::SystemSnapshot {
+    monitor.snapshot(
+        limit.unwrap_or(40).clamp(1, 500),
+        sort_by_memory.unwrap_or(false),
+    )
+}
+
+/// Ask a process to quit. `force` sends SIGKILL rather than SIGTERM.
+///
+/// Separate from [`system_snapshot`] on purpose: reading the process list and
+/// terminating something out of it should never be the same call.
+#[tauri::command]
+pub fn system_kill(
+    monitor: tauri::State<'_, crate::sysmon::SysMonitor>,
+    pid: u32,
+    force: Option<bool>,
+) -> Res<()> {
+    monitor.kill(pid, force.unwrap_or(false))
 }
 
 /// Probe this machine for AI runtimes that are already installed and serving.

@@ -54,10 +54,23 @@ fn compile_swift(bin_dir: &Path, source_rel: &str, output_name: &str, label: &st
         return;
     }
 
+    // Usage-description strings for the helpers, linked into the binary. Without
+    // this section macOS never prompts and never calls the authorisation
+    // callback, so the helper hangs instead of failing — see the plist itself.
+    let helper_plist = Path::new(&manifest_dir).join("macos/HelperInfo.plist");
+    println!("cargo:rerun-if-changed=macos/HelperInfo.plist");
+
     let output = bin_dir.join(output_name);
-    let up_to_date = match (std::fs::metadata(&output), std::fs::metadata(&source)) {
-        (Ok(out), Ok(src)) => match (out.modified(), src.modified()) {
-            (Ok(out_time), Ok(src_time)) => out_time >= src_time,
+    let up_to_date = match (
+        std::fs::metadata(&output),
+        std::fs::metadata(&source),
+        std::fs::metadata(&helper_plist),
+    ) {
+        (Ok(out), Ok(src), plist) => match (out.modified(), src.modified()) {
+            (Ok(out_time), Ok(src_time)) => {
+                let plist_time = plist.ok().and_then(|m| m.modified().ok());
+                out_time >= src_time && plist_time.is_none_or(|t| out_time >= t)
+            }
             _ => false,
         },
         _ => false,
@@ -66,13 +79,26 @@ fn compile_swift(bin_dir: &Path, source_rel: &str, output_name: &str, label: &st
         return;
     }
 
-    match Command::new("swiftc")
-        .arg("-O")
-        .arg("-o")
-        .arg(&output)
-        .arg(&source)
-        .output()
-    {
+    let mut cmd = Command::new("swiftc");
+    cmd.arg("-O").arg("-o").arg(&output).arg(&source);
+    if helper_plist.is_file() {
+        for arg in [
+            "-Xlinker",
+            "-sectcreate",
+            "-Xlinker",
+            "__TEXT",
+            "-Xlinker",
+            "__info_plist",
+            "-Xlinker",
+        ] {
+            cmd.arg(arg);
+        }
+        cmd.arg(&helper_plist);
+    } else {
+        println!("cargo:warning=macos/HelperInfo.plist is missing; {label} will not be able to ask for microphone or speech permission");
+    }
+
+    match cmd.output() {
         Ok(out) if out.status.success() => {
             println!("cargo:warning=built macOS {label} ({output_name})");
         }

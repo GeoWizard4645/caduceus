@@ -31,19 +31,33 @@ func fail(_ message: String) -> Never {
 
 // --- authorisation ---------------------------------------------------------
 
+// The very first run shows two system prompts, and a person takes seconds to
+// read them. `prompting` tells the Rust side to stop counting down its
+// start-up deadline — without it, a normal "click Allow" is reported as the
+// helper failing to start.
+if SFSpeechRecognizer.authorizationStatus() == .notDetermined
+    || AVCaptureDevice.authorizationStatus(for: .audio) == .notDetermined
+{
+    emit("prompting")
+}
+
 let authSem = DispatchSemaphore(value: 0)
 var speechAuth: SFSpeechRecognizerAuthorizationStatus = .notDetermined
 SFSpeechRecognizer.requestAuthorization { status in
     speechAuth = status
     authSem.signal()
 }
-_ = authSem.wait(timeout: .now() + 60)
+if authSem.wait(timeout: .now() + 120) == .timedOut {
+    fail("Timed out waiting for the speech-recognition prompt. Open System Settings → Privacy & Security → Speech Recognition and enable Caduceus.")
+}
 
 switch speechAuth {
 case .authorized:
     break
 case .denied:
     fail("Speech recognition denied. Enable it in System Settings → Privacy & Security → Speech Recognition.")
+case .restricted:
+    fail("Speech recognition is restricted on this Mac (device management or Screen Time).")
 default:
     fail("Speech recognition permission was not granted.")
 }
@@ -53,8 +67,17 @@ case .authorized:
     break
 case .notDetermined:
     let micSem = DispatchSemaphore(value: 0)
-    AVCaptureDevice.requestAccess(for: .audio) { _ in micSem.signal() }
-    _ = micSem.wait(timeout: .now() + 60)
+    var micGranted = false
+    AVCaptureDevice.requestAccess(for: .audio) { granted in
+        micGranted = granted
+        micSem.signal()
+    }
+    if micSem.wait(timeout: .now() + 120) == .timedOut {
+        fail("Timed out waiting for the microphone prompt. Open System Settings → Privacy & Security → Microphone and enable Caduceus.")
+    }
+    if !micGranted {
+        fail("Microphone access denied. Enable it in System Settings → Privacy & Security → Microphone.")
+    }
 default:
     fail("Microphone access denied. Enable it in System Settings → Privacy & Security → Microphone.")
 }

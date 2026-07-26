@@ -138,6 +138,39 @@ fn migrate(s: &mut Settings) {
         }
     }
 
+    // F1-F20 used to be configurable in two places: a dedicated
+    // `toggle_orb_hotkey` field and the function-key table, which rejected
+    // whatever the field held as "reserved". Fold the field into the table so
+    // there is one owner, and leave non-F-key accelerators (⌥⇧S and friends)
+    // exactly where they are.
+    {
+        let staff_key = s.general.toggle_orb_hotkey.trim().to_ascii_uppercase();
+        let is_function_key = FUNCTION_KEY_LABELS
+            .iter()
+            .any(|label| label.eq_ignore_ascii_case(&staff_key));
+        if is_function_key {
+            if let Some(binding) = s
+                .general
+                .function_keys
+                .iter_mut()
+                .find(|b| b.key.eq_ignore_ascii_case(&staff_key))
+            {
+                // Only claim the row if it is unused — someone who deliberately
+                // put another action on that key keeps it.
+                if binding.action == FunctionKeyAction::None {
+                    binding.action = FunctionKeyAction::ToggleStaff;
+                }
+            }
+            s.general.toggle_orb_hotkey.clear();
+        }
+    }
+
+    // A config that predates the function-key table has no rows at all, which
+    // would leave the staff with no way to be toggled.
+    if s.general.function_keys.is_empty() {
+        s.general.function_keys = default_function_key_bindings();
+    }
+
     // Clamp anything a hand-edited file could put out of range.
     // Floor of 0 ("fold back the moment the pointer leaves"), not 500: the
     // default is 50ms, and a floor above the default would silently rewrite it
@@ -279,4 +312,83 @@ pub fn reset_to_defaults<R: Runtime>(app: &AppHandle<R>) -> Result<Settings, Str
     let defaults = Settings::default();
     save(app, &defaults)?;
     Ok(defaults)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn action_for(s: &Settings, key: &str) -> FunctionKeyAction {
+        s.general
+            .function_keys
+            .iter()
+            .find(|b| b.key == key)
+            .map(|b| b.action)
+            .expect("function key row should exist")
+    }
+
+    #[test]
+    fn f12_toggles_the_staff_out_of_the_box() {
+        let s = Settings::default();
+        assert_eq!(action_for(&s, "F12"), FunctionKeyAction::ToggleStaff);
+        assert!(
+            s.general.toggle_orb_hotkey.is_empty(),
+            "F12 lives in the table, so the dedicated field must not also claim it"
+        );
+    }
+
+    #[test]
+    fn an_old_config_keeps_its_f_key_staff_toggle() {
+        // Before unification the staff toggle was its own field and the table
+        // rejected that key as reserved. Migrating must not silently unbind it.
+        let mut s = Settings::default();
+        s.general.toggle_orb_hotkey = "F9".into();
+        if let Some(b) = s.general.function_keys.iter_mut().find(|b| b.key == "F12") {
+            b.action = FunctionKeyAction::None;
+        }
+
+        migrate(&mut s);
+
+        assert_eq!(action_for(&s, "F9"), FunctionKeyAction::ToggleStaff);
+        assert!(s.general.toggle_orb_hotkey.is_empty(), "field should hand over to the table");
+    }
+
+    #[test]
+    fn migration_does_not_clobber_a_deliberate_binding() {
+        let mut s = Settings::default();
+        s.general.toggle_orb_hotkey = "F5".into();
+        if let Some(b) = s.general.function_keys.iter_mut().find(|b| b.key == "F5") {
+            b.action = FunctionKeyAction::Screenshot;
+        }
+
+        migrate(&mut s);
+
+        assert_eq!(
+            action_for(&s, "F5"),
+            FunctionKeyAction::Screenshot,
+            "a key the user already assigned must win over the migrated default"
+        );
+    }
+
+    #[test]
+    fn a_non_function_key_staff_hotkey_is_left_alone() {
+        let mut s = Settings::default();
+        s.general.toggle_orb_hotkey = "CommandOrControl+Shift+O".into();
+
+        migrate(&mut s);
+
+        assert_eq!(s.general.toggle_orb_hotkey, "CommandOrControl+Shift+O");
+    }
+
+    #[test]
+    fn an_empty_function_key_table_is_repopulated() {
+        // A config written before the table existed would otherwise leave the
+        // staff with no key at all.
+        let mut s = Settings::default();
+        s.general.function_keys.clear();
+
+        migrate(&mut s);
+
+        assert_eq!(action_for(&s, "F12"), FunctionKeyAction::ToggleStaff);
+    }
 }

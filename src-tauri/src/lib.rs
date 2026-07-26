@@ -31,6 +31,7 @@ pub mod hotkeys;
 pub mod palette;
 pub mod settings;
 pub mod shortcuts;
+pub mod sysmon;
 pub mod staff_mark;
 pub mod tray;
 pub mod voice;
@@ -86,6 +87,7 @@ pub fn run() {
             commands::open_command_center,
             commands::hide_command_center,
             commands::open_settings_window,
+            commands::set_staff_interactive,
             commands::toggle_staff,
             commands::save_staff_position,
             commands::collapse_staff_popout,
@@ -114,6 +116,9 @@ pub fn run() {
             commands::agent_backend_templates,
             commands::hermes_status,
             commands::detect_local_ai,
+            // system monitor
+            commands::system_snapshot,
+            commands::system_kill,
             commands::open_hermes_installer,
             // launcher + calculator
             commands::list_installed_apps,
@@ -185,6 +190,7 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     app.manage(apps::AppIndex::new());
     app.manage(voice::VoiceRuntime::new());
     app.manage(capture::CaptureRuntime::new());
+    app.manage(sysmon::SysMonitor::new());
 
     // --- windows ----------------------------------------------------------
     if let Some(staff) = window::staff(&handle) {

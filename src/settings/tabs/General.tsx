@@ -58,7 +58,7 @@ export function GeneralTab({
         <div className="grid grid-cols-2 gap-5">
           <Field
             label="Show / hide the staff"
-            hint="Also available from the menu-bar icon."
+            hint="Also on the menu-bar icon. Leave blank to use F12 — function keys are set in the table below."
           >
             <HotkeyInput
               value={general.toggleOrbHotkey}

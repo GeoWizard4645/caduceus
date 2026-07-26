@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Embedded into the speech helper binaries at link time via
+  `-sectcreate __TEXT __info_plist` (see build.rs).
+
+  This is not optional decoration. macOS TCC refuses to display a permission
+  prompt to a process that has no usage-description string, and the request
+  callback then never fires at all — the helper blocks on its authorisation
+  semaphore forever and the Rust side reports "did not become ready". A bare
+  command-line tool has no Info.plist unless it is linked in like this, so the
+  strings the app bundle carries do not cover the helpers it spawns.
+-->
+<plist version="1.0">
+<dict>
+  <key>CFBundleIdentifier</key>
+  <string>com.caduceus.desktop.speech-helper</string>
+  <key>CFBundleName</key>
+  <string>Caduceus Speech Helper</string>
+  <key>CFBundleShortVersionString</key>
+  <string>1.0</string>
+  <key>NSMicrophoneUsageDescription</key>
+  <string>Caduceus records audio only while you are dictating, so it can transcribe what you said into the Command Center.</string>
+  <key>NSSpeechRecognitionUsageDescription</key>
+  <string>Caduceus uses speech recognition to turn your dictation into text.</string>
+</dict>
+</plist>

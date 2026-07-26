@@ -80,6 +80,12 @@ pub struct StaffHoverState {
     pub expanded: bool,
 }
 
+/// Broadcast app-wide whenever the Command Center becomes visible.
+///
+/// [`COMMAND_CENTER_OPEN_EVENT`] is emitted to that window alone, so no other
+/// webview can observe it. The staff needs to.
+pub const COMMAND_CENTER_SHOWN_EVENT: &str = "caduceus://command-center-shown";
+
 /// What the Command Center should show when it opens.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -91,6 +97,12 @@ pub struct CommandCenterOpenPayload {
     pub mode: String,
     /// Focus the input and select any prefilled text.
     pub select_all: bool,
+    /// What opened it: `"hotkey"`, `"staff"`, `"tray"`, or `"other"`.
+    ///
+    /// Only the first-run walkthrough reads this — it asks you to use the
+    /// keyboard shortcut specifically, and cannot tell a hotkey from a click
+    /// without being told.
+    pub source: String,
 }
 
 impl Default for CommandCenterOpenPayload {
@@ -99,6 +111,7 @@ impl Default for CommandCenterOpenPayload {
             prefill: String::new(),
             mode: "default".into(),
             select_all: true,
+            source: "other".into(),
         }
     }
 }
@@ -236,9 +249,24 @@ const HIDDEN_POLL_MS: u64 = 1000;
 /// Interval used when the window or cursor cannot be read at all.
 const IDLE_POLL_MS: u64 = 500;
 /// Slowest interval used while the staff is visible but the pointer is far away.
-const FAR_POLL_MS: u64 = 400;
+///
+/// This is a latency floor, not just a CPU knob: the tracker cannot notice the
+/// pointer arriving until the next tick, so whatever this is set to is roughly
+/// the worst-case delay before the staff reacts. At the old 400ms that was a
+/// visible stall on both hover and the first click.
+const FAR_POLL_MS: u64 = 90;
 /// How many multiples of the pop-out radius count as "approaching".
-const APPROACH_BANDS: f64 = 3.0;
+///
+/// Larger keeps the fast rate over a wider area, so a pointer heading for the
+/// staff is already being sampled quickly by the time it arrives.
+const APPROACH_BANDS: f64 = 5.0;
+/// Extra radius, in logical px, where the window still captures clicks.
+///
+/// Click-through is toggled from a polled sample, so between the pointer
+/// entering the staff and the next tick the window is still transparent and the
+/// click lands on whatever is behind it. Arming capture slightly early closes
+/// that gap without making the visible hit area bigger.
+const CAPTURE_MARGIN: f64 = 10.0;
 
 /// Poll interval for the next tick, given how far the pointer is from the staff.
 ///
@@ -263,6 +291,13 @@ pub struct CursorTracker {
     /// Set by the staff webview after a pop-out click so the ring collapses
     /// immediately instead of waiting for the idle timer.
     collapse_now: Arc<AtomicBool>,
+    /// Keeps the whole staff window clickable regardless of pointer distance.
+    ///
+    /// The window is click-through everywhere except the staff itself, which is
+    /// what stops it swallowing a 340px square of your desktop. The first-run
+    /// walkthrough draws a card in that same window, and its buttons would be
+    /// unclickable without this.
+    force_interactive: Arc<AtomicBool>,
 }
 
 impl CursorTracker {
@@ -272,6 +307,10 @@ impl CursorTracker {
 
     pub fn request_collapse(&self) {
         self.collapse_now.store(true, Ordering::Relaxed);
+    }
+
+    pub fn set_force_interactive(&self, on: bool) {
+        self.force_interactive.store(on, Ordering::Relaxed);
     }
 }
 
@@ -283,6 +322,7 @@ pub fn spawn_cursor_tracker<R: Runtime>(
     let tracker = CursorTracker::default();
     let stop = tracker.stop.clone();
     let collapse_now = tracker.collapse_now.clone();
+    let force_interactive = tracker.force_interactive.clone();
 
     tauri::async_runtime::spawn(async move {
         let mut state = StaffHoverState {
@@ -435,7 +475,15 @@ pub fn spawn_cursor_tracker<R: Runtime>(
             // --- click-through -------------------------------------------
             // Only the circle the user can actually interact with captures the
             // pointer; the rest of the 340px square stays transparent to clicks.
-            let should_capture = inside;
+            //
+            // Armed a few pixels early (see CAPTURE_MARGIN): the toggle only
+            // happens on a poll tick, so capturing exactly at the visible edge
+            // means a fast pointer can land and click while the window is still
+            // transparent, sending the click to the app underneath.
+            let capture_margin = CAPTURE_MARGIN * scale;
+            let should_capture = force_interactive.load(Ordering::Relaxed)
+                || distance <= orb_radius + capture_margin
+                || (state.expanded && distance <= popout_radius + capture_margin);
             if should_capture == click_through {
                 let _ = window.set_ignore_cursor_events(!should_capture);
                 click_through = !should_capture;
@@ -494,9 +542,16 @@ pub fn open_command_center<R: Runtime>(
     window.show().map_err(|e| e.to_string())?;
     let _ = window.set_always_on_top(true);
     window.set_focus().map_err(|e| e.to_string())?;
+    let source = payload.source.clone();
     window
         .emit(COMMAND_CENTER_OPEN_EVENT, payload)
         .map_err(|e| e.to_string())?;
+    // The event above is window-scoped, so the staff never sees it. The
+    // walkthrough lives in the staff window and needs to know.
+    {
+        use tauri::Emitter;
+        let _ = app.emit(COMMAND_CENTER_SHOWN_EVENT, source);
+    }
     Ok(())
 }
 
@@ -514,7 +569,13 @@ pub fn toggle_command_center<R: Runtime>(app: &AppHandle<R>) -> Result<(), Strin
     if visible {
         hide_command_center(app)
     } else {
-        open_command_center(app, CommandCenterOpenPayload::default())
+        open_command_center(
+            app,
+            CommandCenterOpenPayload {
+                source: "hotkey".into(),
+                ..Default::default()
+            },
+        )
     }
 }
 
@@ -636,6 +697,30 @@ mod tests {
         // If the user asks for 500ms polling, honour it rather than "optimising"
         // them back down to our own ceiling.
         assert_eq!(next_delay(9999.0, 100.0, 500, false), 500);
+    }
+
+    #[test]
+    fn worst_case_latency_stays_imperceptible() {
+        // The poll interval *is* the reaction time: nothing is noticed until the
+        // next tick. This was 400ms and read as the staff being broken — both
+        // hover and, worse, the first click, which lands on the app underneath
+        // while the window is still click-through.
+        assert!(
+            FAR_POLL_MS <= 100,
+            "a pointer arriving at the staff waits up to FAR_POLL_MS ({FAR_POLL_MS}ms) \
+             before anything happens; keep it under human reaction time"
+        );
+    }
+
+    #[test]
+    fn approach_is_sampled_quickly_well_before_arrival() {
+        // Moving toward the staff should already be at or near the fast rate a
+        // couple of radii out, not only once the pointer is on top of it.
+        let approaching = next_delay(250.0, 100.0, 33, false);
+        assert!(
+            approaching <= 50,
+            "still {approaching}ms at 2.5x radius — the ramp backs off too early"
+        );
     }
 
     #[test]

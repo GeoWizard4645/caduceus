@@ -169,6 +169,20 @@
     border: 1px solid rgb(var(--c-glass-hair) / var(--c-glass-hair-alpha));
   }
 
+  /* The staff's pop-out icons, which are the one glass surface that *moves*.
+     `backdrop-filter` is re-sampled and re-blurred every frame an element is
+     transformed, and six of these animate at once — measured as the dominant
+     cost of expanding the ring. They are ~40px circles, so a near-opaque fill
+     reads almost identically to a blur at a fraction of the compositing cost.
+
+     `will-change` promotes them to their own layer up front, so the first
+     frame of the expand is not spent creating one. */
+  .staff-popout {
+    background: rgb(var(--c-raised) / 0.94);
+    border: 1px solid rgb(var(--c-glass-hair) / var(--c-glass-hair-alpha));
+    will-change: transform, opacity;
+  }
+
   /* Drag handles for frameless windows. Tauri reads these data attributes. */
   .drag-region {
     -webkit-app-region: drag;

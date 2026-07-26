@@ -6,6 +6,7 @@
  * does) is made in Rust so the same rules apply to voice input.
  */
 
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import * as api from "@/shared/api";
@@ -31,8 +32,9 @@ import { ShortcutIcon } from "@/shared/ShortcutIcon";
 
 import { AgentPanel } from "./AgentPanel";
 import { ClipboardView } from "./ClipboardView";
+import { SystemView } from "./SystemView";
 
-type Mode = "default" | "clipboard";
+type Mode = "default" | "clipboard" | "system";
 
 interface ChatReply {
   prompt: string;
@@ -58,7 +60,10 @@ export function CommandCenter() {
   const listRef = useRef<HTMLDivElement>(null);
   const activateClipboard = useRef<() => void>(() => {});
 
-  const debouncedInput = useDebounced(input, 90);
+  // 45ms, not 90: every provider behind this was measured in the tens of
+  // microseconds (parse 0.1ms, calculator 0.3ms, app list cached in-process),
+  // so the debounce was costing more than the work it was protecting.
+  const debouncedInput = useDebounced(input, 45);
 
   // --- palette actions handed to providers --------------------------------
   const actions = useMemo<PaletteActions>(
@@ -76,7 +81,9 @@ export function CommandCenter() {
 
   // --- window open --------------------------------------------------------
   useTauriEvent<CommandCenterOpenPayload>(EVENTS.commandCenterOpen, (payload) => {
-    setMode(payload.mode === "clipboard" ? "clipboard" : "default");
+    setMode(
+      payload.mode === "clipboard" || payload.mode === "system" ? payload.mode : "default",
+    );
     setInput(payload.prefill);
     setChat(null);
     setSelected(0);
@@ -238,7 +245,7 @@ export function CommandCenter() {
         e.preventDefault();
         if (session) setSession(null);
         else if (chat) setChat(null);
-        else if (mode === "clipboard") {
+        else if (mode === "clipboard" || mode === "system") {
           setMode("default");
           setInput("");
         } else if (input) setInput("");
@@ -302,7 +309,7 @@ export function CommandCenter() {
       {/* --- input row -------------------------------------------------- */}
       <div className="drag-region flex shrink-0 items-center gap-3 px-5 pb-3 pt-4">
         <span aria-hidden="true" className="shrink-0 text-ink-faint">
-          {busy ? <Spinner className="text-accent" /> : mode === "clipboard" ? "❐" : "⌕"}
+          {busy ? <Spinner className="text-accent" /> : mode === "clipboard" ? "❐" : mode === "system" ? "◔" : "⌕"}
         </span>
 
         <input
@@ -319,17 +326,34 @@ export function CommandCenter() {
           className="no-drag min-w-0 flex-1 bg-transparent text-[17px] font-normal tracking-[-0.01em] text-ink placeholder:text-ink-faint focus:outline-none"
         />
 
+        {/* Red, not accent: the accent colour means "ordinary Caduceus state"
+            everywhere else in this window, and a live microphone should not be
+            mistakable for any of it. */}
         {voice !== "idle" && (
-          <span className="row shrink-0 text-2xs text-accent">
+          <span
+            className={cx(
+              "row shrink-0 rounded-full border px-2 py-0.5 text-2xs font-medium",
+              voice === "recording"
+                ? "border-[#ff3b30]/40 bg-[#ff3b30]/12 text-[#ff5f57]"
+                : "border-line bg-raised text-ink-mute",
+            )}
+          >
             <span className="relative flex h-2 w-2">
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-accent opacity-60" />
-              <span className="relative inline-flex h-2 w-2 rounded-full bg-accent" />
+              {voice === "recording" && (
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#ff3b30] opacity-75" />
+              )}
+              <span
+                className={cx(
+                  "relative inline-flex h-2 w-2 rounded-full",
+                  voice === "recording" ? "bg-[#ff3b30]" : "bg-ink-faint",
+                )}
+              />
             </span>
-            {voice === "recording" ? (input.trim() ? "Dictating…" : "Listening…") : "Finishing…"}
+            {voice === "recording" ? (input.trim() ? "Recording…" : "Listening…") : "Transcribing…"}
           </span>
         )}
 
-        {mode === "clipboard" && (
+        {(mode === "clipboard" || mode === "system") && (
           <button
             type="button"
             onClick={() => {
@@ -373,6 +397,8 @@ export function CommandCenter() {
         />
       ) : chat ? (
         <ChatResult reply={chat} onDismiss={() => setChat(null)} onNotify={notify} />
+      ) : mode === "system" ? (
+        <SystemView query={debouncedInput} onNotify={notify} />
       ) : mode === "clipboard" ? (
         <ClipboardView
           query={debouncedInput}
@@ -431,13 +457,16 @@ export function CommandCenter() {
           <Kbd>esc</Kbd>
           <span>close</span>
         </div>
-        <button
-          type="button"
-          onClick={() => void api.openSettingsWindow()}
-          className="no-drag rounded px-1.5 py-0.5 transition-colors hover:bg-raised hover:text-ink"
-        >
-          Settings
-        </button>
+        <div className="row">
+          <button
+            type="button"
+            onClick={() => void api.openSettingsWindow()}
+            className="no-drag rounded px-1.5 py-0.5 transition-colors hover:bg-raised hover:text-ink"
+          >
+            Settings
+          </button>
+          <ResizeGrip onHide={() => void api.hideCommandCenter()} />
+        </div>
       </div>
 
       {/* --- toasts ------------------------------------------------------ */}
@@ -594,4 +623,42 @@ function prefixForRoute(
 function parsedRemainder(text: string): string {
   const match = text.match(/^\s*\S+\s+(.*)$/);
   return match?.[1] ?? text;
+}
+
+/**
+ * Bottom-right corner: drag to resize, double-click to hide.
+ *
+ * The window is undecorated, so macOS draws no resize affordance of its own —
+ * without a visible grip the edges are draggable but undiscoverable. Resizing
+ * is handed to the window manager via `startResizeDragging` rather than being
+ * tracked in JS, so it stays smooth and respects the min/max in tauri.conf.json.
+ */
+function ResizeGrip({ onHide }: { onHide: () => void }) {
+  return (
+    <span
+      role="button"
+      tabIndex={-1}
+      aria-label="Resize the Command Center. Double-click to hide."
+      title="Drag to resize · double-click to hide"
+      onPointerDown={(e) => {
+        if (e.button !== 0 || e.detail > 1) return;
+        void getCurrentWindow().startResizeDragging("SouthEast");
+      }}
+      onDoubleClick={onHide}
+      className={cx(
+        "no-drag ml-1 flex h-4 w-4 cursor-nwse-resize items-center justify-center",
+        "text-ink-faint transition-colors hover:text-ink-mute",
+      )}
+    >
+      <svg viewBox="0 0 10 10" className="h-2.5 w-2.5" aria-hidden="true">
+        <path
+          d="M9 1 1 9 M9 5 5 9 M9 9 9 9"
+          stroke="currentColor"
+          strokeWidth="1.4"
+          strokeLinecap="round"
+          fill="none"
+        />
+      </svg>
+    </span>
+  );
 }

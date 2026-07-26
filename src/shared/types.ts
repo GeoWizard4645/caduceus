@@ -28,7 +28,8 @@ export type ShortcutKind =
   | "open_app"
   | "run_command"
   | "run_applescript"
-  | "clipboard_view";
+  | "clipboard_view"
+  | "system_monitor";
 
 export interface Shortcut {
   id: string;
@@ -70,6 +71,8 @@ export interface GeneralSettings {
   hoverExpandDelayMs: number;
   collapseIdleMs: number;
   launchAtLogin: boolean;
+  /** False until the first-run walkthrough is finished or skipped. */
+  onboardingDone: boolean;
   cursorPollMs: number;
   functionKeys: FunctionKeyBinding[];
 }
@@ -256,6 +259,47 @@ export interface LocalAiScan {
   hermes: HermesStatus;
 }
 
+// ---------------------------------------------------------------------------
+// System monitor
+// ---------------------------------------------------------------------------
+
+export interface ProcessRow {
+  pid: number;
+  name: string;
+  /** Percent of one core, so >100 is normal for a threaded process. */
+  cpu: number;
+  memoryBytes: number;
+  /** Ours to kill. Anything else needs privileges Caduceus does not have. */
+  own: boolean;
+}
+
+export interface DiskRow {
+  name: string;
+  mountPoint: string;
+  totalBytes: number;
+  availableBytes: number;
+}
+
+export interface SystemSnapshot {
+  cpuPercent: number;
+  coreCount: number;
+  memoryUsedBytes: number;
+  memoryTotalBytes: number;
+  swapUsedBytes: number;
+  swapTotalBytes: number;
+  netDownBytes: number;
+  netUpBytes: number;
+  uptimeSecs: number;
+  loadAverage: [number, number, number];
+  hostName: string | null;
+  osVersion: string | null;
+  kernelVersion: string | null;
+  disks: DiskRow[];
+  processes: ProcessRow[];
+  /** Total before `limit` was applied, so the UI can say "40 of 612". */
+  processTotal: number;
+}
+
 export interface RuntimeInfo {
   version: string;
   platform: string;
@@ -437,6 +481,8 @@ export interface CommandCenterOpenPayload {
   prefill: string;
   mode: string;
   selectAll: boolean;
+  /** "hotkey" | "staff" | "tray" | "other". */
+  source: string;
 }
 
 /** Event names emitted by the Rust side. */
@@ -446,6 +492,7 @@ export const EVENTS = {
   agentStep: "caduceus://agent-step",
   staffHover: "caduceus://staff-hover",
   commandCenterOpen: "caduceus://command-center-open",
+  commandCenterShown: "caduceus://command-center-shown",
   settingsTab: "caduceus://settings-tab",
   voiceState: "caduceus://voice-state",
   voicePartial: "caduceus://voice-partial",

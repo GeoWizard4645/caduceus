@@ -58,7 +58,7 @@ export interface ProviderContext {
 export interface PaletteActions {
   close: () => void;
   setInput: (value: string) => void;
-  setMode: (mode: "default" | "clipboard") => void;
+  setMode: (mode: "default" | "clipboard" | "system") => void;
   notify: (message: string, tone?: "info" | "error") => void;
 }
 
@@ -119,10 +119,15 @@ function toItem(
     positions,
     run: async () => {
       const outcome = await api.runShortcut(shortcut.id);
-      // `clipboard_view` shortcuts are handled here rather than in Rust,
-      // because "switch the palette to clipboard mode" is a UI concept.
+      // These are handled here rather than in Rust because "switch the palette
+      // into another mode" is a UI concept with no backend meaning.
       if (outcome.frontendAction === "clipboard_view") {
         actions.setMode("clipboard");
+        actions.setInput("");
+        return false;
+      }
+      if (outcome.frontendAction === "system_monitor") {
+        actions.setMode("system");
         actions.setInput("");
         return false;
       }
@@ -147,6 +152,8 @@ function describeTarget(shortcut: Shortcut): string {
       return "AppleScript";
     case "clipboard_view":
       return "Browse clipboard history";
+    case "system_monitor":
+      return "CPU, memory, disks and processes";
   }
 }
 

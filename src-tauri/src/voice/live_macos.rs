@@ -43,7 +43,9 @@ impl LiveSession {
         let mut reader = BufReader::new(stdout);
         let mut ready = false;
         let mut line = String::new();
-        let deadline = std::time::Instant::now() + Duration::from_secs(15);
+        // Long enough for the microphone to spin up, short enough that a broken
+        // helper does not leave the UI hanging.
+        let mut deadline = std::time::Instant::now() + Duration::from_secs(15);
         while std::time::Instant::now() < deadline {
             line.clear();
             if reader.read_line(&mut line).map_err(|e| e.to_string())? == 0 {
@@ -54,12 +56,23 @@ impl LiveSession {
                 ready = true;
                 break;
             }
+            // First run only: macOS is showing its permission sheets and the
+            // clock should be the user's, not ours.
+            if trimmed == "prompting" {
+                deadline = std::time::Instant::now() + Duration::from_secs(180);
+                continue;
+            }
             if let Some(msg) = trimmed.strip_prefix("error\t") {
                 return Err(msg.to_string());
             }
         }
         if !ready {
-            return Err("Live speech helper did not become ready.".into());
+            return Err(
+                "Live speech helper did not become ready. If macOS never asked for \
+                 microphone or speech-recognition access, enable Caduceus under System \
+                 Settings → Privacy & Security for both."
+                    .into(),
+            );
         }
 
         let wav_path = Arc::new(Mutex::new(None::<PathBuf>));

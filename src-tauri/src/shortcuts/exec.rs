@@ -70,6 +70,13 @@ pub async fn execute_shortcut(
             output: None,
         },
 
+        ShortcutKind::SystemMonitor => ExecOutcome {
+            ok: true,
+            message: "Opening system status".into(),
+            frontend_action: Some("system_monitor".into()),
+            output: None,
+        },
+
         ShortcutKind::OpenUrl => {
             if shortcut.target.trim().is_empty() {
                 return ExecOutcome::err(format!(
