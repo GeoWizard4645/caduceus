@@ -321,6 +321,20 @@ pub fn set_staff_interactive<R: Runtime>(app: AppHandle<R>, interactive: bool) {
     }
 }
 
+/// Register a region of the staff window that should capture the pointer, or
+/// pass `None` to clear it.
+///
+/// For overlays that live in the staff window and need clicks without taking
+/// the whole window with them — the first-run walkthrough card. Coordinates are
+/// logical pixels relative to the window's top-left, i.e. straight out of
+/// `getBoundingClientRect()`.
+#[tauri::command]
+pub fn set_staff_capture_rect<R: Runtime>(app: AppHandle<R>, rect: Option<window::CaptureRect>) {
+    if let Some(tracker) = app.try_state::<window::CursorTracker>() {
+        tracker.set_capture_rect(rect);
+    }
+}
+
 #[tauri::command]
 pub fn open_settings_window<R: Runtime>(app: AppHandle<R>, tab: Option<String>) -> Res<()> {
     window::open_settings(&app, tab.as_deref())

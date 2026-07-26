@@ -15,7 +15,7 @@
  *    above the mark (not over it) so hover and click still reach the staff.
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import * as api from "@/shared/api";
 import { commandCenterKey, hotkeyLabel } from "@/shared/hotkeyLabel";
@@ -94,14 +94,42 @@ export function Onboarding({
   // because another app held the configured key.
   const STEPS = buildSteps(hotkeyLabel(commandCenterKey(settings)));
 
+  const cardRef = useRef<HTMLDivElement>(null);
+
   // The staff window is click-through except right at the staff, so this card's
-  // own buttons would otherwise land on whatever is behind it.
+  // buttons would otherwise land on whatever is behind it. Register the card's
+  // own bounds rather than forcing the entire window clickable: doing the latter
+  // made the whole 340px square swallow clicks for the length of the
+  // walkthrough, so the staff could not be dragged and nothing behind the window
+  // could be reached.
   useEffect(() => {
-    void api.setStaffInteractive(true);
+    const el = cardRef.current;
+    if (!el) return;
+
+    const publish = () => {
+      const r = el.getBoundingClientRect();
+      void api.setStaffCaptureRect({
+        x: r.left,
+        y: r.top,
+        width: r.width,
+        height: r.height,
+      });
+    };
+
+    publish();
+    // The card changes height with each step's body text, and the window
+    // resizes with the staff, so a rect measured once goes stale.
+    const observer = new ResizeObserver(publish);
+    observer.observe(el);
+    window.addEventListener("resize", publish);
+
     return () => {
-      void api.setStaffInteractive(false);
+      observer.disconnect();
+      window.removeEventListener("resize", publish);
+      void api.setStaffCaptureRect(null);
     };
   }, []);
+
   const step = STEPS[index];
   const isLast = index === STEPS.length - 1;
   const satisfied = step.done ? step.done(signals) : true;
@@ -142,6 +170,7 @@ export function Onboarding({
   return (
     <div className="pointer-events-none absolute inset-0 z-40">
       <div
+        ref={cardRef}
         className={cx(
           "pointer-events-auto absolute left-1/2 w-[min(290px,calc(100%-16px))] -translate-x-1/2",
           "overflow-y-auto animate-fade-rise rounded-cad px-4 py-3.5",

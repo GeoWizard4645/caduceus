@@ -88,6 +88,7 @@ pub fn run() {
             commands::hide_command_center,
             commands::open_settings_window,
             commands::set_staff_interactive,
+            commands::set_staff_capture_rect,
             commands::toggle_staff,
             commands::save_staff_position,
             commands::collapse_staff_popout,

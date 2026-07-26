@@ -23,7 +23,8 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
-use serde::Serialize;
+use parking_lot::RwLock;
+use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, Runtime, WebviewWindow};
 
 use crate::settings::{Settings, SettingsManager, StaffEdge, Point};
@@ -294,10 +295,46 @@ pub struct CursorTracker {
     /// Keeps the whole staff window clickable regardless of pointer distance.
     ///
     /// The window is click-through everywhere except the staff itself, which is
-    /// what stops it swallowing a 340px square of your desktop. The first-run
-    /// walkthrough draws a card in that same window, and its buttons would be
-    /// unclickable without this.
+    /// what stops it swallowing a 340px square of your desktop. Only for
+    /// gestures that own the pointer until they end — a resize drag, where the
+    /// pointer routinely leaves the mark's hit circle and losing capture
+    /// mid-drag would drop the gesture.
+    ///
+    /// Anything merely *drawn* in this window wants [`Self::capture_rect`]
+    /// instead. Forcing capture for as long as something is on screen makes a
+    /// square of the desktop dead to clicks for that whole time.
     force_interactive: Arc<AtomicBool>,
+    /// One extra region that captures the pointer, in logical pixels relative to
+    /// the staff window's top-left.
+    ///
+    /// The first-run walkthrough draws a card here and needs its buttons
+    /// clickable — but only the card. It used to set `force_interactive` for the
+    /// entire walkthrough, which swallowed every click in the window's bounds
+    /// until the tour ended: the staff could not be dragged and whatever was
+    /// behind the window could not be reached.
+    capture_rect: Arc<RwLock<Option<CaptureRect>>>,
+}
+
+/// A rectangle in the staff window's own coordinate space, in logical pixels.
+#[derive(Debug, Clone, Copy, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CaptureRect {
+    pub x: f64,
+    pub y: f64,
+    pub width: f64,
+    pub height: f64,
+}
+
+impl CaptureRect {
+    /// Is a physical-pixel screen point inside this rect?
+    fn contains(&self, cursor_x: f64, cursor_y: f64, origin_x: f64, origin_y: f64, scale: f64) -> bool {
+        let left = origin_x + self.x * scale;
+        let top = origin_y + self.y * scale;
+        cursor_x >= left
+            && cursor_x <= left + self.width * scale
+            && cursor_y >= top
+            && cursor_y <= top + self.height * scale
+    }
 }
 
 impl CursorTracker {
@@ -312,6 +349,10 @@ impl CursorTracker {
     pub fn set_force_interactive(&self, on: bool) {
         self.force_interactive.store(on, Ordering::Relaxed);
     }
+
+    pub fn set_capture_rect(&self, rect: Option<CaptureRect>) {
+        *self.capture_rect.write() = rect;
+    }
 }
 
 /// Start the loop that drives staff hover, auto-collapse and click-through.
@@ -323,6 +364,7 @@ pub fn spawn_cursor_tracker<R: Runtime>(
     let stop = tracker.stop.clone();
     let collapse_now = tracker.collapse_now.clone();
     let force_interactive = tracker.force_interactive.clone();
+    let capture_rect = tracker.capture_rect.clone();
 
     tauri::async_runtime::spawn(async move {
         let mut state = StaffHoverState {
@@ -497,7 +539,21 @@ pub fn spawn_cursor_tracker<R: Runtime>(
             } else {
                 orb_radius
             };
+            // A registered rect (the walkthrough card) captures on its own
+            // bounds only, so the rest of the window stays click-through and the
+            // staff underneath keeps working while the card is up.
+            let over_capture_rect = capture_rect.read().is_some_and(|r| {
+                r.contains(
+                    cursor.x,
+                    cursor.y,
+                    origin.x as f64,
+                    origin.y as f64,
+                    scale,
+                )
+            });
+
             let should_capture = force_interactive.load(Ordering::Relaxed)
+                || over_capture_rect
                 || distance <= capture_radius + capture_margin
                 || (state.expanded && distance <= popout_radius + capture_margin);
             if should_capture == click_through {
@@ -510,7 +566,10 @@ pub fn spawn_cursor_tracker<R: Runtime>(
                 distance,
                 popout_radius,
                 general.cursor_poll_ms,
-                inside || state.expanded,
+                // The card can sit further from the mark than the pop-out ring
+                // reaches, so distance alone would drop the loop to its lazy
+                // rate and make its buttons feel unresponsive.
+                inside || state.expanded || over_capture_rect,
             );
         }
     });

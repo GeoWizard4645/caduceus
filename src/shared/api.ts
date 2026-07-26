@@ -105,9 +105,26 @@ export const openSettingsWindow = (tab?: string) =>
 
 export const toggleStaff = () => invoke<boolean>("toggle_staff");
 
-/** Hold the staff window clickable — used only by the first-run walkthrough. */
+/**
+ * Hold the *whole* staff window clickable.
+ *
+ * Only for gestures that own the pointer until they end, like a resize drag.
+ * Anything that is merely on screen should use {@link setStaffCaptureRect}, or
+ * it makes a window-sized square of the desktop unclickable for as long as it
+ * is up.
+ */
 export const setStaffInteractive = (interactive: boolean) =>
   invoke<void>("set_staff_interactive", { interactive });
+
+/**
+ * Let one region of the staff window capture the pointer; `null` clears it.
+ *
+ * Pass a `getBoundingClientRect()` straight through — the coordinates are
+ * logical pixels relative to the window's top-left, which is what that returns.
+ */
+export const setStaffCaptureRect = (
+  rect: { x: number; y: number; width: number; height: number } | null,
+) => invoke<void>("set_staff_capture_rect", { rect });
 
 export const saveStaffPosition = () => invoke<void>("save_staff_position");
 
