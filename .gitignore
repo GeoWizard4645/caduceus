@@ -35,5 +35,8 @@ pnpm-debug.log*
 /tmp/
 *.local
 
+# Wrangler
+.wrangler/
+
 # Built by src-tauri/build.rs from macos/CaduceusSTT.swift
 src-tauri/bin/

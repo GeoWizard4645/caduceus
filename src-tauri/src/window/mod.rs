@@ -234,19 +234,25 @@ fn next_delay(distance: f64, popout_radius: f64, fast_ms: u64, active: bool) -> 
 #[derive(Clone, Default)]
 pub struct CursorTracker {
     stop: Arc<AtomicBool>,
+<<<<<<< HEAD
     /// Set by the staff webview after a pop-out click so the ring collapses
     /// immediately instead of waiting for the idle timer.
     collapse_now: Arc<AtomicBool>,
+=======
+>>>>>>> d825e2ab66b2027e92a91e65ee60d0c173887fbc
 }
 
 impl CursorTracker {
     pub fn stop(&self) {
         self.stop.store(true, Ordering::Relaxed);
     }
+<<<<<<< HEAD
 
     pub fn request_collapse(&self) {
         self.collapse_now.store(true, Ordering::Relaxed);
     }
+=======
+>>>>>>> d825e2ab66b2027e92a91e65ee60d0c173887fbc
 }
 
 /// Start the loop that drives staff hover, auto-collapse and click-through.
@@ -256,7 +262,10 @@ pub fn spawn_cursor_tracker<R: Runtime>(
 ) -> CursorTracker {
     let tracker = CursorTracker::default();
     let stop = tracker.stop.clone();
+<<<<<<< HEAD
     let collapse_now = tracker.collapse_now.clone();
+=======
+>>>>>>> d825e2ab66b2027e92a91e65ee60d0c173887fbc
 
     tauri::async_runtime::spawn(async move {
         let mut state = StaffHoverState {
@@ -268,6 +277,7 @@ pub fn spawn_cursor_tracker<R: Runtime>(
         // When the pointer last left, for the collapse delay.
         let mut left_at: Option<std::time::Instant> = None;
         let mut click_through = true;
+<<<<<<< HEAD
         // After a pop-out click, do not re-open until the pointer leaves the staff.
         let mut block_expand = false;
         let mut last_emitted = state;
@@ -278,6 +288,8 @@ pub fn spawn_cursor_tracker<R: Runtime>(
                 let _ = window.emit(STAFF_HOVER_EVENT, state);
             }
         };
+=======
+>>>>>>> d825e2ab66b2027e92a91e65ee60d0c173887fbc
 
         // Adaptive poll interval. Polling at 30Hz forever costs about 1% of a
         // CPU on an always-on app, which is real battery for something that is
@@ -334,6 +346,7 @@ pub fn spawn_cursor_tracker<R: Runtime>(
                 (appearance.popout_radius as f64 + appearance.popout_icon_size as f64 / 2.0 + 12.0)
                     * scale;
 
+<<<<<<< HEAD
             // Looser thresholds while expanded so icons do not flicker on the edge.
             let hover_slack = if state.expanded || state.hovering {
                 14.0 * scale
@@ -359,10 +372,16 @@ pub fn spawn_cursor_tracker<R: Runtime>(
                 left_at = None;
                 emit_state(&window, &state, &mut last_emitted);
             }
+=======
+            let over_orb = distance <= orb_radius;
+            let over_popout = state.expanded && distance <= popout_radius;
+            let inside = over_orb || over_popout;
+>>>>>>> d825e2ab66b2027e92a91e65ee60d0c173887fbc
 
             // --- expand ---------------------------------------------------
             if over_orb {
                 left_at = None;
+<<<<<<< HEAD
                 if block_expand {
                     if !state.hovering {
                         state.hovering = true;
@@ -383,6 +402,20 @@ pub fn spawn_cursor_tracker<R: Runtime>(
                         state.hovering = true;
                         emit_state(&window, &state, &mut last_emitted);
                     }
+=======
+                let entry = *entered_at.get_or_insert_with(std::time::Instant::now);
+                if !state.expanded
+                    && entry.elapsed() >= std::time::Duration::from_millis(general.hover_expand_delay_ms)
+                {
+                    state = StaffHoverState {
+                        hovering: true,
+                        expanded: true,
+                    };
+                    let _ = window.emit(STAFF_HOVER_EVENT, state);
+                } else if !state.hovering {
+                    state.hovering = true;
+                    let _ = window.emit(STAFF_HOVER_EVENT, state);
+>>>>>>> d825e2ab66b2027e92a91e65ee60d0c173887fbc
                 }
             } else {
                 entered_at = None;
@@ -396,11 +429,19 @@ pub fn spawn_cursor_tracker<R: Runtime>(
                             expanded: false,
                         };
                         left_at = None;
+<<<<<<< HEAD
                         emit_state(&window, &state, &mut last_emitted);
                     }
                 } else if !state.expanded && state.hovering && !over_popout {
                     state.hovering = false;
                     emit_state(&window, &state, &mut last_emitted);
+=======
+                        let _ = window.emit(STAFF_HOVER_EVENT, state);
+                    }
+                } else if !state.expanded && state.hovering {
+                    state.hovering = false;
+                    let _ = window.emit(STAFF_HOVER_EVENT, state);
+>>>>>>> d825e2ab66b2027e92a91e65ee60d0c173887fbc
                 } else if over_popout {
                     left_at = None;
                 }

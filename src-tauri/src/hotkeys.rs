@@ -7,7 +7,11 @@
 //! |----------------------|-----------------------------|----------------------|
 //! | toggle the staff       | `F12`                       | on key-down          |
 //! | Command Center       | `Alt+Space`                 | on key-down          |
+<<<<<<< HEAD
 //! | push-to-talk         | `Alt+Shift+V`               | hold to record    |
+=======
+//! | push-to-talk         | `CommandOrControl+Shift+Space` | hold to record    |
+>>>>>>> d825e2ab66b2027e92a91e65ee60d0c173887fbc
 //!
 //! # Why push-to-talk is not bound to `Fn`
 //!
@@ -221,7 +225,11 @@ mod tests {
 
     #[test]
     fn accepts_the_shipped_defaults() {
+<<<<<<< HEAD
         for a in ["F12", "Alt+Space", "Alt+Shift+V", "F13"] {
+=======
+        for a in ["F12", "Alt+Space", "CommandOrControl+Shift+Space", "F13"] {
+>>>>>>> d825e2ab66b2027e92a91e65ee60d0c173887fbc
             assert!(validate(a).is_ok(), "{a} should be valid");
         }
     }

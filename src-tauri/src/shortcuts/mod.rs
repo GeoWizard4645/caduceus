@@ -12,7 +12,10 @@
 
 pub mod browser;
 pub mod exec;
+<<<<<<< HEAD
 pub mod icons;
+=======
+>>>>>>> d825e2ab66b2027e92a91e65ee60d0c173887fbc
 
 use serde::{Deserialize, Serialize};
 
@@ -47,9 +50,15 @@ pub enum ShortcutKind {
 pub struct Shortcut {
     pub id: String,
     pub label: String,
+<<<<<<< HEAD
     /// Display icon: `brand:<id>` (bundled SVG), `image:<file>` (uploaded PNG in
     /// app config), or a plain emoji / short symbol. Unknown values fall back
     /// to the first character of `label`.
+=======
+    /// An emoji, or `lucide:<name>` for one of the bundled inline icons.
+    /// Anything the frontend does not recognise falls back to the first
+    /// character of `label`.
+>>>>>>> d825e2ab66b2027e92a91e65ee60d0c173887fbc
     pub icon: String,
     pub kind: ShortcutKind,
     pub target: String,
@@ -105,7 +114,11 @@ pub fn default_shortcuts() -> Vec<Shortcut> {
         Shortcut {
             id: "sc-gemini".into(),
             label: "Gemini".into(),
+<<<<<<< HEAD
             icon: "brand:gemini".into(),
+=======
+            icon: "✧".into(),
+>>>>>>> d825e2ab66b2027e92a91e65ee60d0c173887fbc
             kind: ShortcutKind::OpenUrl,
             target: "https://gemini.google.com/app".into(),
             show_in_staff: true,
@@ -117,7 +130,11 @@ pub fn default_shortcuts() -> Vec<Shortcut> {
         Shortcut {
             id: "sc-gmail".into(),
             label: "Gmail".into(),
+<<<<<<< HEAD
             icon: "brand:gmail".into(),
+=======
+            icon: "✉".into(),
+>>>>>>> d825e2ab66b2027e92a91e65ee60d0c173887fbc
             kind: ShortcutKind::OpenUrl,
             target: "https://mail.google.com".into(),
             show_in_staff: true,
@@ -129,7 +146,11 @@ pub fn default_shortcuts() -> Vec<Shortcut> {
         Shortcut {
             id: "sc-chrome".into(),
             label: "Chrome".into(),
+<<<<<<< HEAD
             icon: "brand:chrome".into(),
+=======
+            icon: "◎".into(),
+>>>>>>> d825e2ab66b2027e92a91e65ee60d0c173887fbc
             kind: ShortcutKind::OpenApp,
             target: default_chrome_target().into(),
             show_in_staff: true,
@@ -141,6 +162,7 @@ pub fn default_shortcuts() -> Vec<Shortcut> {
         Shortcut {
             id: "sc-claude".into(),
             label: "Claude".into(),
+<<<<<<< HEAD
             icon: "brand:claude".into(),
             kind: ShortcutKind::OpenApp,
             target: default_claude_target().into(),
@@ -148,12 +170,25 @@ pub fn default_shortcuts() -> Vec<Shortcut> {
             order_index: 3,
             keywords: vec!["anthropic".into(), "ai".into(), "chat".into()],
             description: "Open the Claude desktop app".into(),
+=======
+            icon: "✳".into(),
+            kind: ShortcutKind::OpenUrl,
+            target: "https://claude.ai".into(),
+            show_in_staff: true,
+            order_index: 3,
+            keywords: vec!["anthropic".into(), "ai".into(), "chat".into()],
+            description: "Open Claude in your browser".into(),
+>>>>>>> d825e2ab66b2027e92a91e65ee60d0c173887fbc
             ..Default::default()
         },
         Shortcut {
             id: "sc-clipboard".into(),
             label: "Clipboard".into(),
+<<<<<<< HEAD
             icon: "brand:clipboard".into(),
+=======
+            icon: "❐".into(),
+>>>>>>> d825e2ab66b2027e92a91e65ee60d0c173887fbc
             kind: ShortcutKind::ClipboardView,
             target: String::new(),
             show_in_staff: true,
@@ -165,6 +200,7 @@ pub fn default_shortcuts() -> Vec<Shortcut> {
     ]
 }
 
+<<<<<<< HEAD
 fn default_claude_target() -> &'static str {
     #[cfg(target_os = "macos")]
     {
@@ -180,6 +216,8 @@ fn default_claude_target() -> &'static str {
     }
 }
 
+=======
+>>>>>>> d825e2ab66b2027e92a91e65ee60d0c173887fbc
 fn default_chrome_target() -> &'static str {
     #[cfg(target_os = "macos")]
     {

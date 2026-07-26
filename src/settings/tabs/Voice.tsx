@@ -56,7 +56,11 @@ export function VoiceTab({ draft, info }: { draft: Draft; info: RuntimeInfo | nu
         <div className="mt-4 grid grid-cols-2 gap-5">
           <Field
             label="Push-to-talk key"
+<<<<<<< HEAD
             hint="Hold to record, release to transcribe. Uses Apple's on-device speech recognition (same family as macOS Dictation). Grant Microphone and Speech Recognition when prompted."
+=======
+            hint="Hold to record, release to transcribe. A bare Fn key cannot be captured — macOS handles it in firmware and it never reaches an app — so F13–F20 make the best single-key bindings if your keyboard has them."
+>>>>>>> d825e2ab66b2027e92a91e65ee60d0c173887fbc
           >
             <HotkeyInput
               value={voice.pushToTalkHotkey}

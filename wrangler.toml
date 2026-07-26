@@ -1,0 +1,25 @@
+# Cloudflare Worker that serves the Caduceus marketing site (website/).
+#
+# One Worker, two addresses:
+#   https://caduceus.vivaanshahani.com/   -> custom domain, serves assets directly
+#   https://vivaanshahani.com/caduceus/   -> zone route, worker/index.js strips the prefix
+#
+# Deploy:  npx wrangler deploy
+
+name = "caduceus"
+main = "worker/index.js"
+compatibility_date = "2026-06-01"
+
+[assets]
+directory = "./website"
+binding = "ASSETS"
+
+# Requests that match a file in website/ are served straight from the edge.
+# Anything else (i.e. the /caduceus/* prefix) falls through to the Worker.
+[[routes]]
+pattern = "caduceus.vivaanshahani.com"
+custom_domain = true
+
+[[routes]]
+pattern = "vivaanshahani.com/caduceus*"
+zone_name = "vivaanshahani.com"

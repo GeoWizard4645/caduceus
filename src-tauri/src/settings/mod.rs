@@ -149,6 +149,7 @@ fn migrate(s: &mut Settings) {
     s.appearance.staff_idle_opacity = s.appearance.staff_idle_opacity.clamp(0.15, 1.0);
     s.voice.max_recording_secs = s.voice.max_recording_secs.clamp(3, 600);
 
+<<<<<<< HEAD
     // Claude should open the desktop app, not the website.
     for shortcut in &mut s.shortcuts {
         if shortcut.id == "sc-claude"
@@ -199,6 +200,11 @@ fn default_claude_desktop_target() -> &'static str {
     }
 }
 
+=======
+    s.version = Settings::CURRENT_VERSION;
+}
+
+>>>>>>> d825e2ab66b2027e92a91e65ee60d0c173887fbc
 fn backup_corrupt_settings<R: Runtime>(app: &AppHandle<R>, raw: &serde_json::Value) {
     let Ok(dir) = app.path().app_config_dir() else {
         return;

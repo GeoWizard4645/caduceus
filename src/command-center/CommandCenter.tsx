@@ -27,7 +27,10 @@ import type {
 } from "@/shared/types";
 import { EVENTS } from "@/shared/types";
 import { Kbd, Spinner, cx } from "@/shared/ui";
+<<<<<<< HEAD
 import { ShortcutIcon } from "@/shared/ShortcutIcon";
+=======
+>>>>>>> d825e2ab66b2027e92a91e65ee60d0c173887fbc
 
 import { AgentPanel } from "./AgentPanel";
 import { ClipboardView } from "./ClipboardView";
@@ -476,11 +479,19 @@ function ResultRow({
       <span
         aria-hidden="true"
         className={cx(
+<<<<<<< HEAD
           "flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-md border text-[13px] leading-none",
           active ? "border-accent/40 bg-accent/15 text-accent" : "border-line bg-raised text-ink-mute",
         )}
       >
         <ShortcutIcon icon={item.icon} label={item.title} className="h-5 w-5" />
+=======
+          "flex h-7 w-7 shrink-0 items-center justify-center rounded-md border text-[13px] leading-none",
+          active ? "border-accent/40 bg-accent/15 text-accent" : "border-line bg-raised text-ink-mute",
+        )}
+      >
+        {item.icon}
+>>>>>>> d825e2ab66b2027e92a91e65ee60d0c173887fbc
       </span>
 
       <div className="min-w-0 flex-1">
