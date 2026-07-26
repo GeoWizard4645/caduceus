@@ -11,6 +11,21 @@
 <meta property="og:type" content="website">
 
 <link rel="icon" href="caduceus-mark.png">
+<script>
+(function () {
+  var k = "caduceus-site-theme";
+  try {
+    var t = localStorage.getItem(k);
+    if (t !== "light" && t !== "dark") {
+      t = window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+    }
+    document.documentElement.setAttribute("data-theme", t);
+  } catch {
+    document.documentElement.setAttribute("data-theme", "dark");
+  }
+})();
+</script>
+<link rel="stylesheet" href="theme.css">
 
 <style>
   /* ---------------------------------------------------------------------
@@ -18,26 +33,9 @@
      file plus a PNG, so it drops onto any static host.
      --------------------------------------------------------------------- */
   :root {
-    --base: #0a0b10;
-    --surface: #12131b;
-    --raised: #1a1c26;
-    --line: #2c2f3e;
-    --ink: #edeef6;
-    --ink-soft: #bec1d1;
-    --ink-mute: #8a8ea2;
-    --ink-faint: #606478;
-    --accent: #7c7cff;
-    --gold: #e8c468;
-    --teal: #4fe3d0;
     --radius: 14px;
     --page: 940px;
   }
-
-  /* Dark only, deliberately. This page is a product shot for an app that is
-     itself dark, and the light palette made the staff mark and the terminal
-     block read as a different product. `color-scheme` stops the browser from
-     painting form controls and scrollbars light underneath it. */
-  :root { color-scheme: dark; }
 
   *, *::before, *::after { box-sizing: border-box; }
 
@@ -72,7 +70,7 @@
     width: 720px;
     height: 720px;
     transform: translateX(-50%);
-    background: radial-gradient(circle, rgb(124 124 255 / 0.18) 0%, transparent 62%);
+    background: radial-gradient(circle, var(--hero-glow) 0%, transparent 62%);
     pointer-events: none;
   }
 
@@ -387,43 +385,6 @@
     border-bottom-color: var(--accent);
   }
 
-  .portfolio-back {
-    position: fixed;
-    top: 16px;
-    right: 16px;
-    z-index: 20;
-    display: inline-flex;
-    align-items: center;
-    gap: 7px;
-    padding: 8px 14px 8px 12px;
-    font-size: 0.82rem;
-    font-weight: 500;
-    color: var(--ink-soft);
-    text-decoration: none;
-    border: 1px solid var(--line);
-    border-radius: 999px;
-    background: rgb(18 19 27 / 0.92);
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
-    box-shadow: 0 8px 24px rgb(0 0 0 / 0.35);
-    transition: border-color 0.15s, color 0.15s, background 0.15s;
-  }
-
-  .portfolio-back:hover {
-    color: var(--ink);
-    border-color: var(--accent);
-  }
-
-  .portfolio-back .arrow {
-    font-size: 1rem;
-    line-height: 1;
-    opacity: 0.85;
-  }
-
-  @media (max-width: 480px) {
-    .portfolio-back { top: 12px; right: 12px; padding: 7px 11px 7px 10px; font-size: 0.78rem; }
-  }
-
   .feat-list { list-style: none; padding: 0; margin: 0; }
   .feat-list > li { margin-bottom: 28px; }
   .feat-list h3 { margin: 0 0 8px; font-size: 1.05rem; }
@@ -439,6 +400,11 @@
 
 <body>
 
+<button type="button" class="theme-toggle" id="theme-toggle" aria-label="Switch to light mode">
+  <span class="icon-dark" aria-hidden="true">☾</span>
+  <span class="icon-light" aria-hidden="true">☀</span>
+</button>
+
 <a class="portfolio-back" href="https://vivaanshahani.com/" rel="noopener">
   <span class="arrow" aria-hidden="true">←</span>
   vivaanshahani.com
@@ -447,8 +413,8 @@
 <header>
   <div class="wrap">
     <nav class="site-nav" aria-label="Site">
-      <a href="index.html" aria-current="page">Overview</a>
-      <a href="features.html">All features</a>
+      <a href="https://caduceus.vivaanshahani.com/" aria-current="page">Overview</a>
+      <a href="https://caduceus.vivaanshahani.com/features">All features</a>
     </nav>
     <img class="mark" src="caduceus-mark.png" alt="The Caduceus mark: a pixel-art winged staff with two coiled snakes">
     <h1>Caduceus</h1>
@@ -657,8 +623,8 @@
     { id: "hermes", kind: "component", name: "Hermes Agent", detail: "the agent runtime behind /c", on: true },
     { id: "ollama", kind: "component", name: "Ollama", detail: "runs the models locally", on: true },
     { id: "qwen3.5:4b", kind: "model", role: "ai", name: "qwen3.5:4b", detail: "answers / in the Command Center", on: true },
-    { id: "qwen-vl-64k", kind: "model", role: "computerUse", name: "qwen-vl-64k", detail: "vision model, drives /c", on: true },
-    { id: "gemma4-64k", kind: "model", name: "gemma4-64k", detail: "optional extra, long context", on: false },
+    { id: "qwen2.5vl:7b", kind: "model", role: "computerUse", name: "qwen2.5vl:7b", detail: "vision model, drives /c", on: true },
+    { id: "gemma3:4b", kind: "model", name: "gemma3:4b", detail: "optional extra (~131k context)", on: false },
   ];
 
   const optsList = document.getElementById("opts");
@@ -759,6 +725,7 @@
     });
   }
 </script>
+<script src="theme.js"></script>
 
 </body>
 </html>

@@ -6,19 +6,25 @@
 <title>Caduceus — every feature</title>
 <meta name="description" content="Complete list of what Caduceus can do: staff, palette, clipboard, voice, capture, AI, and settings.">
 <link rel="icon" href="caduceus-mark.png">
+<script>
+(function () {
+  var k = "caduceus-site-theme";
+  try {
+    var t = localStorage.getItem(k);
+    if (t !== "light" && t !== "dark") {
+      t = window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+    }
+    document.documentElement.setAttribute("data-theme", t);
+  } catch {
+    document.documentElement.setAttribute("data-theme", "dark");
+  }
+})();
+</script>
+<link rel="stylesheet" href="theme.css">
 <style>
   :root {
-    --base: #0a0b10;
-    --surface: #12131b;
-    --line: #2c2f3e;
-    --ink: #edeef6;
-    --ink-soft: #bec1d1;
-    --ink-mute: #8a8ea2;
-    --ink-faint: #606478;
-    --accent: #7c7cff;
     --radius: 14px;
     --page: 940px;
-    color-scheme: dark;
   }
   *, *::before, *::after { box-sizing: border-box; }
   body {
@@ -69,46 +75,14 @@
     color: var(--ink-faint);
   }
   footer a { color: var(--ink-mute); text-decoration: none; }
-
-  .portfolio-back {
-    position: fixed;
-    top: 16px;
-    right: 16px;
-    z-index: 20;
-    display: inline-flex;
-    align-items: center;
-    gap: 7px;
-    padding: 8px 14px 8px 12px;
-    font-size: 0.82rem;
-    font-weight: 500;
-    color: var(--ink-soft);
-    text-decoration: none;
-    border: 1px solid var(--line);
-    border-radius: 999px;
-    background: rgb(18 19 27 / 0.92);
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
-    box-shadow: 0 8px 24px rgb(0 0 0 / 0.35);
-    transition: border-color 0.15s, color 0.15s;
-  }
-
-  .portfolio-back:hover {
-    color: var(--ink);
-    border-color: var(--accent);
-  }
-
-  .portfolio-back .arrow {
-    font-size: 1rem;
-    line-height: 1;
-    opacity: 0.85;
-  }
-
-  @media (max-width: 480px) {
-    .portfolio-back { top: 12px; right: 12px; padding: 7px 11px 7px 10px; font-size: 0.78rem; }
-  }
 </style>
 </head>
 <body>
+
+<button type="button" class="theme-toggle" id="theme-toggle" aria-label="Switch to light mode">
+  <span class="icon-dark" aria-hidden="true">☾</span>
+  <span class="icon-light" aria-hidden="true">☀</span>
+</button>
 
 <a class="portfolio-back" href="https://vivaanshahani.com/" rel="noopener">
   <span class="arrow" aria-hidden="true">←</span>
@@ -117,8 +91,8 @@
 
 <div class="wrap">
   <nav class="site-nav" aria-label="Site">
-    <a href="index.html">Overview</a>
-    <a href="features.html" aria-current="page">All features</a>
+    <a href="https://caduceus.vivaanshahani.com/">Overview</a>
+    <a href="https://caduceus.vivaanshahani.com/features" aria-current="page">All features</a>
   </nav>
 
   <header>
@@ -343,9 +317,10 @@
   </section>
 
   <footer>
-    <p><a href="index.html">← Overview</a> · <a href="https://github.com/GeoWizard4645/caduceus">Source on GitHub</a></p>
+    <p><a href="https://caduceus.vivaanshahani.com/">← Overview</a> · <a href="https://github.com/GeoWizard4645/caduceus">Source on GitHub</a></p>
   </footer>
 </div>
 
+<script src="theme.js"></script>
 </body>
 </html>

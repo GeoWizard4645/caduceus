@@ -10,8 +10,8 @@
 # The configured-package flow adds optional pieces on top:
 #
 #   ... | bash -s -- --with=caduceus,hermes,ollama \
-#                    --pull=qwen3.5:4b,qwen-vl-64k \
-#                    --ai=qwen3.5:4b --computer-use=qwen-vl-64k
+#                    --pull=qwen3.5:4b,qwen2.5vl:7b \
+#                    --ai=qwen3.5:4b --computer-use=qwen2.5vl:7b
 #
 #   --with=a,b,c        components to install: caduceus, hermes, ollama
 #   --pull=x,y          Ollama models to pull (implies ollama)

@@ -1,9 +1,17 @@
 // Serves website/ at both caduceus.vivaanshahani.com and vivaanshahani.com/caduceus.
 //
 // Static assets are matched first by the runtime; this script only runs for
-// requests that didn't match a file, which is exactly the /caduceus/* prefix.
+// requests that didn't match a file, which is exactly the /caduceus/* prefix
+// and pretty paths like /features.
 
 const PREFIX = "/caduceus";
+
+function rewritePath(pathname) {
+  if (pathname === "/features" || pathname === "/features/") {
+    return "/features.html";
+  }
+  return pathname;
+}
 
 export default {
   async fetch(request, env) {
@@ -17,7 +25,13 @@ export default {
     }
 
     if (url.pathname.startsWith(`${PREFIX}/`)) {
-      url.pathname = url.pathname.slice(PREFIX.length);
+      url.pathname = rewritePath(url.pathname.slice(PREFIX.length));
+      return env.ASSETS.fetch(new Request(url, request));
+    }
+
+    const rewritten = rewritePath(url.pathname);
+    if (rewritten !== url.pathname) {
+      url.pathname = rewritten;
       return env.ASSETS.fetch(new Request(url, request));
     }
 

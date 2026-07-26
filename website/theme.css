@@ -1,0 +1,122 @@
+/* Shared light/dark tokens for caduceus.vivaanshahani.com */
+
+html[data-theme="dark"],
+html:not([data-theme]) {
+  --base: #0a0b10;
+  --surface: #12131b;
+  --raised: #1a1c26;
+  --line: #2c2f3e;
+  --ink: #edeef6;
+  --ink-soft: #bec1d1;
+  --ink-mute: #8a8ea2;
+  --ink-faint: #606478;
+  --accent: #7c7cff;
+  --gold: #e8c468;
+  --teal: #4fe3d0;
+  --chrome-bg: rgb(18 19 27 / 0.92);
+  --chrome-shadow: 0 8px 24px rgb(0 0 0 / 0.35);
+  --hero-glow: rgb(124 124 255 / 0.18);
+  color-scheme: dark;
+}
+
+html[data-theme="light"] {
+  --base: #f4f5fa;
+  --surface: #ffffff;
+  --raised: #eef0f7;
+  --line: #d4d8e8;
+  --ink: #12131b;
+  --ink-soft: #3d4050;
+  --ink-mute: #5c6072;
+  --ink-faint: #888ca0;
+  --accent: #5a5ae6;
+  --gold: #b8860b;
+  --teal: #0d9488;
+  --chrome-bg: rgb(255 255 255 / 0.92);
+  --chrome-shadow: 0 8px 24px rgb(18 19 27 / 0.08);
+  --hero-glow: rgb(90 90 230 / 0.12);
+  color-scheme: light;
+}
+
+.theme-toggle,
+.portfolio-back {
+  position: fixed;
+  top: 16px;
+  z-index: 20;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--chrome-bg);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  box-shadow: var(--chrome-shadow);
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+
+.theme-toggle {
+  left: 16px;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  font-size: 1.05rem;
+  line-height: 1;
+  color: var(--ink-soft);
+  cursor: pointer;
+}
+
+.theme-toggle:hover {
+  color: var(--ink);
+  border-color: var(--accent);
+}
+
+.theme-toggle .icon-light,
+.theme-toggle .icon-dark {
+  pointer-events: none;
+}
+
+html[data-theme="dark"] .theme-toggle .icon-light,
+html:not([data-theme]) .theme-toggle .icon-light {
+  display: none;
+}
+
+html[data-theme="light"] .theme-toggle .icon-dark {
+  display: none;
+}
+
+.portfolio-back {
+  right: 16px;
+  gap: 7px;
+  padding: 8px 14px 8px 12px;
+  font-size: 0.82rem;
+  font-weight: 500;
+  color: var(--ink-soft);
+  text-decoration: none;
+}
+
+.portfolio-back:hover {
+  color: var(--ink);
+  border-color: var(--accent);
+}
+
+.portfolio-back .arrow {
+  font-size: 1rem;
+  line-height: 1;
+  opacity: 0.85;
+}
+
+@media (max-width: 480px) {
+  .theme-toggle {
+    left: 12px;
+    width: 36px;
+    height: 36px;
+    font-size: 0.95rem;
+  }
+
+  .portfolio-back {
+    top: 12px;
+    right: 12px;
+    padding: 7px 11px 7px 10px;
+    font-size: 0.78rem;
+  }
+}
