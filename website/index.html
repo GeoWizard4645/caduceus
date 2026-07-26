@@ -120,30 +120,48 @@
 
   /* --- install -------------------------------------------------------- */
 
-  /* The three options sit side by side and break out of the 940px .wrap, so
-     option 2's checkbox list is not crushed into a third of a narrow page. */
+  /* Three install paths stacked so option 2's checklist is never crushed. */
   .install {
-    position: relative;
     margin-top: 40px;
-    left: 50%;
-    transform: translateX(-50%);
-    width: min(1320px, calc(100vw - 48px));
+    max-width: 660px;
+    margin-left: auto;
+    margin-right: auto;
+    text-align: left;
   }
 
   .install-choices {
-    margin: 0 auto 28px;
-    max-width: 660px;
+    margin: 0 0 28px;
     font-size: 0.92rem;
     color: var(--ink-mute);
-    text-wrap: balance;
+    text-wrap: pretty;
   }
 
   .install-grid {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 0;
     align-items: stretch;
     text-align: left;
+  }
+
+  .install-or {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin: 18px 0;
+    font-size: 0.82rem;
+    letter-spacing: 0.06em;
+    text-transform: lowercase;
+    color: var(--ink-faint);
+    font-style: italic;
+  }
+
+  .install-or::before,
+  .install-or::after {
+    content: "";
+    flex: 1;
+    height: 1px;
+    background: var(--line);
   }
 
   .install-step {
@@ -230,14 +248,10 @@
     flex: 1;
     min-width: 0;
     overflow-x: auto;
-    white-space: nowrap;
+    white-space: pre-wrap;
+    word-break: break-word;
     font: 0.86rem/1.5 ui-monospace, "SF Mono", Menlo, monospace;
     color: var(--ink-soft);
-  }
-
-  @media (max-width: 1080px) {
-    .install-grid { grid-template-columns: 1fr; }
-    .install { width: min(660px, calc(100vw - 48px)); }
   }
 
   @media (max-width: 620px) {
@@ -248,8 +262,7 @@
   .cmd code .prompt { color: var(--ink-faint); user-select: none; }
 
   .cmd-meta {
-    max-width: 660px;
-    margin: 8px auto 0;
+    margin: 8px 0 0;
     font-size: 0.78rem;
     line-height: 1.45;
     color: var(--ink-faint);
@@ -592,6 +605,8 @@
         </p>
       </div>
 
+      <p class="install-or" aria-hidden="true">or</p>
+
       <div class="install-block">
         <p class="install-step">Option 2 — Full local stack</p>
         <p class="install-best">
@@ -630,6 +645,8 @@
           </p>
         </div>
       </div>
+
+      <p class="install-or" aria-hidden="true">or</p>
 
       <div class="install-block manual">
         <p class="install-step">Option 3 — Download the .dmg</p>
