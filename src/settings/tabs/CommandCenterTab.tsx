@@ -10,6 +10,7 @@ import {
   Toggle,
 } from "@/shared/ui";
 
+import { BrowserPicker } from "../BrowserPicker";
 import type { Draft } from "../useDraft";
 
 const ACTION_LABELS: Record<PrefixAction, string> = {
@@ -44,12 +45,6 @@ export function CommandCenterTab({ draft, info }: { draft: Draft; info: RuntimeI
       if (rule) change(rule);
     });
 
-  const profiles = info?.chromeInstalls.flatMap((install) =>
-    install.profiles.map((profile) => ({
-      value: profile.directory,
-      label: `${install.displayName} — ${profile.name}`,
-    })),
-  );
 
   return (
     <>
@@ -98,7 +93,7 @@ export function CommandCenterTab({ draft, info }: { draft: Draft; info: RuntimeI
                   description: "",
                   action: "open_url_template",
                   target: "",
-                  chromeProfileDirectory: null,
+                  browser: null,
                   showHint: true,
                 });
               })
@@ -211,46 +206,19 @@ export function CommandCenterTab({ draft, info }: { draft: Draft; info: RuntimeI
         )}
       </Section>
 
-      <Section title="Browser">
-        <div className="space-y-1">
-          <Toggle
-            label="Open links in Chrome rather than the default browser"
-            hint="Needed if you want links to land in a specific Chrome profile."
-            checked={cc.preferChrome}
-            onChange={(checked) => draft.update((d) => (d.commandCenter.preferChrome = checked))}
+      <Section
+        title="Browser"
+        description="Where links open — the plain web search, prefixes, and any shortcut that does not name its own."
+      >
+        <div className="grid grid-cols-2 gap-5">
+          <BrowserPicker
+            value={cc.browser}
+            onChange={(next) =>
+              draft.update((d) => (d.commandCenter.browser = next ?? { browserId: "", profile: null }))
+            }
+            browsers={info?.browsers ?? []}
           />
         </div>
-
-        {cc.preferChrome && (
-          <div className="mt-4">
-            <Field
-              label="Default Chrome profile"
-              hint={
-                profiles && profiles.length
-                  ? "Used for links that do not name their own profile."
-                  : "No profiles detected. Type a directory name such as “Default” or “Profile 1”."
-              }
-            >
-              {profiles && profiles.length > 0 ? (
-                <Select
-                  value={cc.defaultChromeProfile ?? ""}
-                  onChange={(v) =>
-                    draft.update((d) => (d.commandCenter.defaultChromeProfile = v || null))
-                  }
-                  options={[{ value: "", label: "Whichever profile is open" }, ...profiles]}
-                />
-              ) : (
-                <TextInput
-                  value={cc.defaultChromeProfile ?? ""}
-                  placeholder="Default"
-                  onChange={(v) =>
-                    draft.update((d) => (d.commandCenter.defaultChromeProfile = v.trim() || null))
-                  }
-                />
-              )}
-            </Field>
-          </div>
-        )}
       </Section>
 
       <Section title="Behaviour">

@@ -23,8 +23,10 @@ pub mod agent;
 pub mod apps;
 pub mod autostart;
 pub mod calc;
+pub mod capture;
 pub mod clipboard;
 pub mod commands;
+pub mod fn_keys;
 pub mod hotkeys;
 pub mod palette;
 pub mod settings;
@@ -73,9 +75,10 @@ pub fn run() {
             commands::set_stt_api_key,
             // shortcuts
             commands::run_shortcut,
-            commands::list_chrome_profiles,
+            commands::list_browsers,
             commands::test_command,
             commands::open_external_url,
+            commands::open_system_settings,
             // command center + windows
             commands::parse_input,
             commands::dispatch_input,
@@ -116,6 +119,10 @@ pub fn run() {
             commands::voice_stop,
             commands::voice_cancel,
             commands::voice_is_recording,
+            commands::capture_screenshot,
+            commands::capture_record_start,
+            commands::capture_record_stop,
+            commands::capture_recording_state,
             // misc
             commands::quit_app,
         ])
@@ -171,6 +178,7 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     app.manage(agent::AgentRuntime::new());
     app.manage(apps::AppIndex::new());
     app.manage(voice::VoiceRuntime::new());
+    app.manage(capture::CaptureRuntime::new());
 
     // --- windows ----------------------------------------------------------
     if let Some(staff) = window::staff(&handle) {

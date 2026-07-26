@@ -152,12 +152,8 @@ pub async fn dispatch<R: tauri::Runtime>(
     match action {
         PrefixAction::WebSearch => {
             let url = search_url(&parsed.remainder, &snapshot.command_center);
-            let outcome = shortcuts::exec::open_url(
-                &url,
-                snapshot.command_center.default_chrome_profile.as_deref(),
-                snapshot.command_center.prefer_chrome,
-            )
-            .await;
+            let outcome =
+                shortcuts::exec::open_url(&url, &snapshot.command_center.browser).await;
             DispatchOutcome::simple(outcome.ok, action, outcome.message, close && outcome.ok)
         }
 
@@ -221,14 +217,11 @@ pub async fn dispatch<R: tauri::Runtime>(
                 &rule.target,
                 &shortcuts::percent_encode(&parsed.remainder),
             );
-            let outcome = shortcuts::exec::open_url(
-                &url,
-                rule.chrome_profile_directory
-                    .as_deref()
-                    .or(snapshot.command_center.default_chrome_profile.as_deref()),
-                snapshot.command_center.prefer_chrome,
-            )
-            .await;
+            let choice = rule
+                .browser
+                .as_ref()
+                .unwrap_or(&snapshot.command_center.browser);
+            let outcome = shortcuts::exec::open_url(&url, choice).await;
             DispatchOutcome::simple(outcome.ok, action, outcome.message, close && outcome.ok)
         }
 

@@ -12,13 +12,14 @@
 //! * API keys go **into** the keychain through these commands and never come
 //!   back out.
 
-use tauri::{AppHandle, Manager, Runtime};
+use tauri::{AppHandle, Emitter, Manager, Runtime};
 
 use crate::agent::{self, AgentRuntime};
 use crate::clipboard::{self, ClipboardEntry, ClipboardStore, TransitionReport};
 use crate::palette::{self, DispatchOutcome};
 use crate::settings::{self, secrets, BackendConfig, Settings, SettingsManager};
-use crate::shortcuts::{self, ChromeInstall, ExecOutcome};
+use crate::shortcuts::{self, BrowserInstall, ExecOutcome};
+use crate::capture;
 use crate::voice;
 use crate::window;
 
@@ -121,7 +122,7 @@ pub struct RuntimeInfo {
     /// False on systems with no usable secret storage (headless Linux).
     pub keychain_available: bool,
     pub stt_backends: Vec<voice::SttAvailability>,
-    pub chrome_installs: Vec<ChromeInstall>,
+    pub browsers: Vec<BrowserInstall>,
     pub clipboard_entries: i64,
     pub clipboard_bytes: i64,
     /// Which backends currently have a key in the keychain, by backend id.
@@ -146,7 +147,7 @@ pub async fn get_runtime_info<R: Runtime>(
         arch: std::env::consts::ARCH.into(),
         keychain_available: secrets::keychain_available(),
         stt_backends: voice::stt::all_availability(&cfg.voice),
-        chrome_installs: shortcuts::detect_chrome_profiles(),
+        browsers: shortcuts::detect_browsers(),
         clipboard_entries: store.as_ref().and_then(|s| s.count().ok()).unwrap_or(0),
         clipboard_bytes: store.as_ref().and_then(|s| s.total_bytes().ok()).unwrap_or(0),
         backends_with_keys: cfg
@@ -226,15 +227,14 @@ pub async fn run_shortcut(
     Ok(shortcuts::execute_shortcut(
         shortcut,
         query.as_deref().unwrap_or_default(),
-        cfg.command_center.prefer_chrome,
-        cfg.command_center.default_chrome_profile.as_deref(),
+        &cfg.command_center.browser,
     )
     .await)
 }
 
 #[tauri::command]
-pub fn list_chrome_profiles() -> Vec<ChromeInstall> {
-    shortcuts::detect_chrome_profiles()
+pub fn list_browsers() -> Vec<BrowserInstall> {
+    shortcuts::detect_browsers()
 }
 
 /// Run a shell command and return its output, for the Settings "Test" button.
@@ -252,12 +252,14 @@ pub async fn open_external_url(
     url: String,
 ) -> Res<ExecOutcome> {
     let cfg = settings.get();
-    Ok(shortcuts::exec::open_url(
-        &url,
-        cfg.command_center.default_chrome_profile.as_deref(),
-        cfg.command_center.prefer_chrome,
-    )
-    .await)
+    Ok(shortcuts::exec::open_url(&url, &cfg.command_center.browser).await)
+}
+
+/// Send the user to a named System Settings pane. See
+/// [`shortcuts::exec::open_settings_pane`] for why `pane` is a key and not a URL.
+#[tauri::command]
+pub async fn open_system_settings(pane: String) -> ExecOutcome {
+    shortcuts::exec::open_settings_pane(&pane).await
 }
 
 // ---------------------------------------------------------------------------
@@ -554,11 +556,17 @@ pub fn agent_backend_templates() -> Vec<BackendConfig> {
 
 /// Start recording from a UI button rather than the hotkey.
 #[tauri::command]
-pub fn voice_start(
+pub fn voice_start<R: Runtime>(
+    app: AppHandle<R>,
     runtime: tauri::State<'_, voice::VoiceRuntime>,
     settings: tauri::State<'_, SettingsManager>,
 ) -> Res<()> {
-    runtime.start(&settings)
+    let emit = app.clone();
+    runtime
+        .start(&settings, move |text| {
+            let _ = emit.emit(voice::VOICE_PARTIAL_EVENT, text);
+        })
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -566,11 +574,19 @@ pub async fn voice_stop(
     runtime: tauri::State<'_, voice::VoiceRuntime>,
     settings: tauri::State<'_, SettingsManager>,
 ) -> Res<Option<voice::RoutedText>> {
-    let Some(result) = runtime.stop() else {
+    let Some(outcome) = runtime.stop() else {
         return Ok(None);
     };
-    let wav = result?;
-    voice::transcribe_and_route(wav, &settings).await.map(Some)
+    match outcome {
+        voice::StopOutcome::Batch(Ok(wav)) => {
+            voice::transcribe_and_route(wav, &settings).await.map(Some)
+        }
+        voice::StopOutcome::Batch(Err(e)) => Err(e),
+        voice::StopOutcome::Live(Ok((text, _))) => {
+            Ok(Some(voice::route_transcript(&text, &settings)))
+        }
+        voice::StopOutcome::Live(Err(e)) => Err(e),
+    }
 }
 
 #[tauri::command]
@@ -581,6 +597,34 @@ pub fn voice_cancel(runtime: tauri::State<'_, voice::VoiceRuntime>) {
 #[tauri::command]
 pub fn voice_is_recording(runtime: tauri::State<'_, voice::VoiceRuntime>) -> bool {
     runtime.is_recording()
+}
+
+// ---------------------------------------------------------------------------
+// Screen capture
+// ---------------------------------------------------------------------------
+
+#[tauri::command]
+pub fn capture_screenshot(save_to_downloads: Option<bool>) -> Res<capture::ScreenshotResult> {
+    capture::screenshot_full(save_to_downloads.unwrap_or(true))
+}
+
+#[tauri::command]
+pub fn capture_record_start<R: Runtime>(
+    app: AppHandle<R>,
+    mic: Option<bool>,
+    system_audio: Option<bool>,
+) -> Res<capture::RecordingState> {
+    capture::start_recording(&app, mic.unwrap_or(true), system_audio.unwrap_or(false))
+}
+
+#[tauri::command]
+pub fn capture_record_stop<R: Runtime>(app: AppHandle<R>) -> Res<capture::RecordingState> {
+    capture::stop_recording(&app)
+}
+
+#[tauri::command]
+pub fn capture_recording_state<R: Runtime>(app: AppHandle<R>) -> capture::RecordingState {
+    capture::recording_state(&app)
 }
 
 // ---------------------------------------------------------------------------

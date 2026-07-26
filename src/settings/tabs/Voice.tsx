@@ -44,7 +44,7 @@ export function VoiceTab({ draft, info }: { draft: Draft; info: RuntimeInfo | nu
     <>
       <Section
         title="Push to talk"
-        description="Hold the key, speak, release. Caduceus transcribes what you said and decides where it goes."
+        description="Hold the key, speak, release. On macOS, Apple's speech engine shows a live transcript in the Command Center while you hold the key."
       >
         <Toggle
           label="Enable voice input"

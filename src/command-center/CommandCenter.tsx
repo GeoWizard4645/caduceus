@@ -94,6 +94,11 @@ export function CommandCenter() {
   // --- voice --------------------------------------------------------------
   useTauriEvent<VoiceState>(EVENTS.voiceState, setVoice);
 
+  useTauriEvent<string>(EVENTS.voicePartial, (text) => {
+    setInput(text);
+    inputRef.current?.focus();
+  });
+
   useTauriEvent<VoiceOutcome>(EVENTS.voiceResult, (outcome) => {
     if (!outcome.ok) {
       notify(outcome.error ?? "Transcription failed", "error");
@@ -275,12 +280,17 @@ export function CommandCenter() {
 
   if (!settings) return null;
 
+  // Names the four things the box actually does, because none of them are
+  // discoverable by looking at it. The AI prefix is read from settings rather
+  // than hardcoded to "/" — it is rebindable, and a placeholder that advertises
+  // a prefix the user has renamed is worse than no placeholder.
+  const aiPrefix =
+    settings.commandCenter.prefixes.find((p) => p.action === "primary_ai")?.prefix ?? "/";
   const placeholder =
     mode === "clipboard"
       ? "Search your clipboard history…"
-      : `Search ${hostOf(settings.commandCenter.searchUrlTemplate)}, or type ${
-          settings.commandCenter.prefixes[0]?.prefix ?? "/"
-        } for AI`;
+      : `Search apps, search ${hostOf(settings.commandCenter.searchUrlTemplate)}, ` +
+        `type ${aiPrefix} for AI or your own shortcuts, or do maths — 2+2`;
 
   const grouped = groupResults(results);
 
@@ -315,7 +325,7 @@ export function CommandCenter() {
               <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-accent opacity-60" />
               <span className="relative inline-flex h-2 w-2 rounded-full bg-accent" />
             </span>
-            {voice === "recording" ? "Listening…" : "Transcribing…"}
+            {voice === "recording" ? (input.trim() ? "Dictating…" : "Listening…") : "Finishing…"}
           </span>
         )}
 
@@ -333,6 +343,14 @@ export function CommandCenter() {
           </button>
         )}
       </div>
+
+      {voice === "recording" && input.trim() && (
+        <div className="shrink-0 px-5 pb-2">
+          <p className="rounded-lg border border-accent/25 bg-accent/8 px-3 py-2 text-[15px] leading-snug text-ink">
+            {input}
+          </p>
+        </div>
+      )}
 
       {/* Prefix badge: shows which route Enter will take, before you commit. */}
       {parsed?.rule && mode === "default" && (

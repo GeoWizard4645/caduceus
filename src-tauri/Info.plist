@@ -15,6 +15,9 @@
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>Caduceus uses speech recognition to turn your push-to-talk recording into text.</string>
 
+	<key>NSScreenCaptureUsageDescription</key>
+	<string>Caduceus captures the screen when you take a screenshot or start a screen recording.</string>
+
 	<!-- Shown when a shortcut of kind `run_applescript` is executed. -->
 	<key>NSAppleEventsUsageDescription</key>
 	<string>Caduceus runs the AppleScript shortcuts you have configured yourself.</string>

@@ -84,24 +84,87 @@ pub struct GeneralSettings {
     /// Poll rate of the global cursor tracker that drives staff hover/collapse.
     /// Lower is more responsive, higher is cheaper. 16–100ms is sane.
     pub cursor_poll_ms: u64,
+    /// Per-key actions for `F1`–`F12` (and `F13`–`F20` when present). macOS
+    /// users often remap hardware keys to standard function keys in System
+    /// Settings so Caduceus can intercept them globally.
+    pub function_keys: Vec<FunctionKeyBinding>,
 }
 
 impl Default for GeneralSettings {
     fn default() -> Self {
         Self {
             toggle_orb_hotkey: "F12".into(),
-            // Alt+Space avoids clashing with Spotlight (Cmd+Space) and most
-            // Windows/Linux launchers.
-            command_center_hotkey: "Alt+Space".into(),
+            // Control+Space is free on a stock macOS install (Spotlight holds
+            // Cmd+Space) and on Windows/Linux, where Alt+Space opens the window
+            // menu in several desktop environments.
+            command_center_hotkey: "Control+Space".into(),
             staff_visible: true,
             staff_edge: StaffEdge::Right,
             staff_position: None,
             hover_expand_delay_ms: 0,
-            collapse_idle_ms: 500,
+            collapse_idle_ms: 50,
             launch_at_login: false,
             cursor_poll_ms: 33,
+            function_keys: default_function_key_bindings(),
         }
     }
+}
+
+/// Keys exposed in Settings → General → Function keys.
+pub const FUNCTION_KEY_LABELS: &[&str] = &[
+    "F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8", "F9", "F10", "F11", "F12", "F13", "F14",
+    "F15", "F16", "F17", "F18", "F19", "F20",
+];
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(default, rename_all = "camelCase")]
+pub struct FunctionKeyBinding {
+    pub key: String,
+    pub action: FunctionKeyAction,
+    /// When `action` is [`FunctionKeyAction::RunShortcut`], which shortcut to run.
+    pub shortcut_id: String,
+}
+
+impl Default for FunctionKeyBinding {
+    fn default() -> Self {
+        Self {
+            key: String::new(),
+            action: FunctionKeyAction::None,
+            shortcut_id: String::new(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum FunctionKeyAction {
+    #[default]
+    None,
+    ToggleStaff,
+    CommandCenter,
+    /// Same hold-to-record behaviour as Voice → push-to-talk.
+    PushToTalk,
+    /// Open the Command Center and start Caduceus dictation (one press).
+    StartDictation,
+    /// Open Voice Memos and start a new recording (macOS only).
+    VoiceMemo,
+    Screenshot,
+    RunShortcut,
+}
+
+pub fn default_function_key_bindings() -> Vec<FunctionKeyBinding> {
+    FUNCTION_KEY_LABELS
+        .iter()
+        .map(|label| FunctionKeyBinding {
+            key: (*label).into(),
+            action: if *label == "F3" {
+                FunctionKeyAction::VoiceMemo
+            } else {
+                FunctionKeyAction::None
+            },
+            shortcut_id: String::new(),
+        })
+        .collect()
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -132,12 +195,9 @@ pub struct CommandCenterSettings {
     /// Ordered prefix rules. The *longest* matching prefix wins, so `/c` beats
     /// `/` regardless of list order.
     pub prefixes: Vec<PrefixRule>,
-    /// Optional Chrome profile directory used when opening URLs that don't
-    /// specify their own (e.g. the plain web-search path).
-    pub default_chrome_profile: Option<String>,
-    /// Force every `open_url` through Chrome so profile selection works.
-    /// When false, URLs go to the OS default browser.
-    pub prefer_chrome: bool,
+    /// Browser and profile used for URLs that don't specify their own (e.g. the
+    /// plain web-search path). Defaults to the OS default browser.
+    pub browser: crate::shortcuts::BrowserChoice,
     /// How many recent commands to keep for the history view.
     pub history_limit: usize,
     /// Close the Command Center as soon as an action is dispatched.
@@ -151,8 +211,7 @@ impl Default for CommandCenterSettings {
         Self {
             search_url_template: "https://www.google.com/search?q={query}".into(),
             prefixes: default_prefixes(),
-            default_chrome_profile: None,
-            prefer_chrome: false,
+            browser: crate::shortcuts::BrowserChoice::default(),
             history_limit: 100,
             close_on_action: true,
             max_results_per_source: 8,
@@ -177,7 +236,9 @@ pub struct PrefixRule {
     /// Meaning depends on `action`: a URL template for `OpenUrlTemplate`,
     /// a shell command for `RunCommand`, ignored for the built-in routes.
     pub target: String,
-    pub chrome_profile_directory: Option<String>,
+    /// Open this rule's URL in a specific browser/profile instead of the
+    /// Command Center default. Only meaningful for `OpenUrlTemplate`.
+    pub browser: Option<crate::shortcuts::BrowserChoice>,
     /// Show this rule as a hint row when the palette is empty.
     pub show_hint: bool,
 }
@@ -191,7 +252,7 @@ impl Default for PrefixRule {
             description: String::new(),
             action: PrefixAction::WebSearch,
             target: String::new(),
-            chrome_profile_directory: None,
+            browser: None,
             show_hint: true,
         }
     }

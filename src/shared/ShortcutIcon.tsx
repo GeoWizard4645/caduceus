@@ -2,17 +2,13 @@ import { convertFileSrc } from "@tauri-apps/api/core";
 import { useEffect, useState } from "react";
 
 import * as api from "./api";
+import { GLYPHS, glyphFor } from "./glyphs";
 import { cx } from "./ui";
 
-const BRAND_PREFIX = "brand:";
 const IMAGE_PREFIX = "image:";
 
-function brandSrc(icon: string): string {
-  return `/shortcut-icons/${icon.slice(BRAND_PREFIX.length)}.svg`;
-}
-
 function isEmojiLike(icon: string): boolean {
-  if (!icon || icon.startsWith(BRAND_PREFIX) || icon.startsWith(IMAGE_PREFIX)) return false;
+  if (!icon || icon.startsWith(IMAGE_PREFIX) || glyphFor(icon)) return false;
   return [...icon].length <= 2;
 }
 
@@ -44,15 +40,22 @@ export function ShortcutIcon({ icon, label, className, imgClassName }: ShortcutI
     };
   }, [icon]);
 
-  if (icon.startsWith(BRAND_PREFIX)) {
+  const glyph = glyphFor(icon);
+  if (glyph) {
     return (
-      <span className={cx("inline-flex shrink-0 items-center justify-center overflow-hidden", className)}>
-        <img
-          src={brandSrc(icon)}
-          alt=""
-          className={cx("h-full w-full object-contain", imgClassName)}
-          draggable={false}
-        />
+      <span className={cx("inline-flex shrink-0 items-center justify-center", className)}>
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth={1.75}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          className="h-full w-full"
+          aria-hidden="true"
+        >
+          <path d={GLYPHS[glyph]} />
+        </svg>
       </span>
     );
   }

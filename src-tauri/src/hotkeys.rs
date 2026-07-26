@@ -23,7 +23,7 @@ use std::str::FromStr;
 use tauri::{AppHandle, Manager, Runtime};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
 
-use crate::settings::SettingsManager;
+use crate::settings::{FunctionKeyAction, SettingsManager};
 use crate::{voice, window};
 
 /// Register every configured hotkey, replacing anything previously registered.
@@ -38,37 +38,78 @@ pub fn register_all<R: Runtime>(app: &AppHandle<R>, settings: &SettingsManager) 
     }
 
     let cfg = settings.get();
-    for (label, accelerator) in [
-        ("Toggle staff", cfg.general.toggle_orb_hotkey.as_str()),
-        ("Command Center", cfg.general.command_center_hotkey.as_str()),
-        (
-            "Push to talk",
-            if cfg.voice.enabled {
-                cfg.voice.push_to_talk_hotkey.as_str()
-            } else {
-                ""
-            },
-        ),
-    ] {
-        let accelerator = accelerator.trim();
-        if accelerator.is_empty() {
+    let reserved: Vec<&str> = [
+        cfg.general.toggle_orb_hotkey.as_str(),
+        cfg.general.command_center_hotkey.as_str(),
+        if cfg.voice.enabled {
+            cfg.voice.push_to_talk_hotkey.as_str()
+        } else {
+            ""
+        },
+    ]
+    .into_iter()
+    .map(|s| s.trim())
+    .filter(|s| !s.is_empty())
+    .collect();
+
+    let mut register_one =
+        |problems: &mut Vec<String>, label: &str, accelerator: &str| {
+            let accelerator = accelerator.trim();
+            if accelerator.is_empty() {
+                return;
+            }
+
+            match Shortcut::from_str(accelerator) {
+                Ok(shortcut) => {
+                    if let Err(e) = app.global_shortcut().register(shortcut) {
+                        problems.push(format!(
+                            "\u{201c}{accelerator}\u{201d} could not be registered for {label} \
+                             \u{2014} another app is probably using it. ({e})"
+                        ));
+                    }
+                }
+                Err(e) => problems.push(format!(
+                    "\u{201c}{accelerator}\u{201d} is not a valid shortcut for {label}: {e}"
+                )),
+            }
+        };
+
+    register_one(&mut problems, "Toggle staff", cfg.general.toggle_orb_hotkey.as_str());
+    register_one(
+        &mut problems,
+        "Command Center",
+        cfg.general.command_center_hotkey.as_str(),
+    );
+    register_one(
+        &mut problems,
+        "Push to talk",
+        if cfg.voice.enabled {
+            cfg.voice.push_to_talk_hotkey.as_str()
+        } else {
+            ""
+        },
+    );
+
+    for binding in &cfg.general.function_keys {
+        if binding.action == FunctionKeyAction::None {
             continue;
         }
-
-        match Shortcut::from_str(accelerator) {
-            Ok(shortcut) => {
-                if let Err(e) = app.global_shortcut().register(shortcut) {
-                    // Almost always "another app already owns this combination".
-                    problems.push(format!(
-                        "\u{201c}{accelerator}\u{201d} could not be registered for {label} \
-                         \u{2014} another app is probably using it. ({e})"
-                    ));
-                }
-            }
-            Err(e) => problems.push(format!(
-                "\u{201c}{accelerator}\u{201d} is not a valid shortcut for {label}: {e}"
-            )),
+        if binding.action == FunctionKeyAction::PushToTalk && !cfg.voice.enabled {
+            continue;
         }
+        let key = binding.key.trim();
+        if key.is_empty() {
+            continue;
+        }
+        if reserved.iter().any(|r| r.eq_ignore_ascii_case(key)) {
+            problems.push(format!(
+                "\u{201c}{key}\u{201d} is already used by another Caduceus hotkey — \
+                 change that binding or pick a different function key."
+            ));
+            continue;
+        }
+        let label = format!("Function key {key}");
+        register_one(&mut problems, &label, key);
     }
 
     for p in &problems {
@@ -113,27 +154,53 @@ pub fn handle<R: Runtime>(app: &AppHandle<R>, shortcut: &Shortcut, event_state: 
         }
     }
 
+    // Function-key bindings take precedence over the dedicated PTT hotkey when
+    // they share the same accelerator (registration should prevent that).
+    if let Some(binding) = cfg
+        .general
+        .function_keys
+        .iter()
+        .find(|b| b.action != FunctionKeyAction::None && matches(&b.key))
+    {
+        if binding.action == FunctionKeyAction::PushToTalk && !cfg.voice.enabled {
+            return;
+        }
+        match event_state {
+            ShortcutState::Pressed => crate::fn_keys::dispatch_press(
+                app,
+                &settings,
+                binding.action,
+                &binding.shortcut_id,
+            ),
+            ShortcutState::Released => {
+                crate::fn_keys::dispatch_release(app, &settings, binding.action)
+            }
+        }
+        return;
+    }
+
     // --- push-to-talk (hold) ------------------------------------------------
     if cfg.voice.enabled && matches(&cfg.voice.push_to_talk_hotkey) {
         match event_state {
-            ShortcutState::Pressed => start_recording(app, &settings),
-            ShortcutState::Released => stop_and_transcribe(app, &settings),
+            ShortcutState::Pressed => start_push_to_talk(app, &settings),
+            ShortcutState::Released => stop_push_to_talk(app, &settings),
         }
+        return;
     }
 }
 
-fn start_recording<R: Runtime>(app: &AppHandle<R>, settings: &SettingsManager) {
+/// Start push-to-talk / dictation capture (shared by the PTT hotkey and function keys).
+pub fn start_push_to_talk<R: Runtime>(app: &AppHandle<R>, settings: &SettingsManager) {
     use tauri::Emitter;
 
     let Some(runtime) = app.try_state::<voice::VoiceRuntime>() else {
         return;
     };
-    // Repeat key-down events while the key is held are ignored by
-    // `VoiceRuntime::start`.
-    match runtime.start(settings) {
+    let app_partial = app.clone();
+    match runtime.start(settings, move |text| {
+        let _ = app_partial.emit(voice::VOICE_PARTIAL_EVENT, text);
+    }) {
         Ok(()) => {
-            // Show the palette so there is somewhere for the transcript to land
-            // and something on screen confirming the mic is open.
             let _ = window::open_command_center(app, Default::default());
             let _ = app.emit(voice::VOICE_STATE_EVENT, voice::VoiceState::Recording);
         }
@@ -144,13 +211,13 @@ fn start_recording<R: Runtime>(app: &AppHandle<R>, settings: &SettingsManager) {
     }
 }
 
-fn stop_and_transcribe<R: Runtime>(app: &AppHandle<R>, settings: &SettingsManager) {
+pub fn stop_push_to_talk<R: Runtime>(app: &AppHandle<R>, settings: &SettingsManager) {
     use tauri::Emitter;
 
     let Some(runtime) = app.try_state::<voice::VoiceRuntime>() else {
         return;
     };
-    let Some(result) = runtime.stop() else {
+    let Some(outcome) = runtime.stop() else {
         return;
     };
 
@@ -159,16 +226,23 @@ fn stop_and_transcribe<R: Runtime>(app: &AppHandle<R>, settings: &SettingsManage
     tauri::async_runtime::spawn(async move {
         let _ = app.emit(voice::VOICE_STATE_EVENT, voice::VoiceState::Transcribing);
 
-        let outcome = match result {
-            Err(e) => VoiceOutcome::error(e),
-            Ok(wav) => match voice::transcribe_and_route(wav, &settings).await {
-                Ok(routed) => VoiceOutcome::ok(routed, settings.with(|s| s.voice.auto_submit)),
-                Err(e) => VoiceOutcome::error(e),
-            },
+        let result = match outcome {
+            voice::StopOutcome::Batch(Ok(wav)) => {
+                match voice::transcribe_and_route(wav, &settings).await {
+                    Ok(routed) => VoiceOutcome::ok(routed, settings.with(|s| s.voice.auto_submit)),
+                    Err(e) => VoiceOutcome::error(e),
+                }
+            }
+            voice::StopOutcome::Batch(Err(e)) => VoiceOutcome::error(e),
+            voice::StopOutcome::Live(Ok((text, _))) => {
+                let routed = voice::route_transcript(&text, &settings);
+                VoiceOutcome::ok(routed, settings.with(|s| s.voice.auto_submit))
+            }
+            voice::StopOutcome::Live(Err(e)) => VoiceOutcome::error(e),
         };
 
         let _ = app.emit(voice::VOICE_STATE_EVENT, voice::VoiceState::Idle);
-        let _ = app.emit(voice::VOICE_RESULT_EVENT, outcome);
+        let _ = app.emit(voice::VOICE_RESULT_EVENT, result);
     });
 }
 

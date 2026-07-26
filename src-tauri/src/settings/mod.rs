@@ -139,7 +139,10 @@ fn migrate(s: &mut Settings) {
     }
 
     // Clamp anything a hand-edited file could put out of range.
-    s.general.collapse_idle_ms = s.general.collapse_idle_ms.clamp(500, 60_000);
+    // Floor of 0 ("fold back the moment the pointer leaves"), not 500: the
+    // default is 50ms, and a floor above the default would silently rewrite it
+    // on every load.
+    s.general.collapse_idle_ms = s.general.collapse_idle_ms.min(60_000);
     s.general.cursor_poll_ms = s.general.cursor_poll_ms.clamp(8, 500);
     s.clipboard.poll_interval_ms = s.clipboard.poll_interval_ms.clamp(100, 10_000);
     s.clipboard.max_items = s.clipboard.max_items.clamp(10, 100_000);
@@ -159,20 +162,36 @@ fn migrate(s: &mut Settings) {
             shortcut.target = default_claude_desktop_target().into();
             shortcut.description = "Open the Claude desktop app".into();
             if shortcut.icon == "✳" || shortcut.icon.is_empty() {
-                shortcut.icon = "brand:claude".into();
+                shortcut.icon = "glyph:chat".into();
             }
         }
+
+        // `brand:*` was a set of hand-redrawn third-party logos, replaced by the
+        // neutral glyph family. Rewritten wherever it appears — not just on the
+        // default shortcuts — because a user could have picked one for their own.
+        if let Some(brand) = shortcut.icon.strip_prefix("brand:") {
+            shortcut.icon = match brand {
+                "chrome" => "glyph:globe",
+                "gmail" => "glyph:mail",
+                "gemini" => "glyph:sparkle",
+                "claude" => "glyph:chat",
+                "clipboard" => "glyph:clipboard",
+                _ => "glyph:star",
+            }
+            .into();
+        }
+
         if shortcut.id.starts_with("sc-") && shortcut.icon.chars().count() <= 2 {
-            // Upgrade legacy emoji defaults to bundled brand marks where we know them.
-            let brand = match shortcut.id.as_str() {
-                "sc-gemini" => Some("brand:gemini"),
-                "sc-gmail" => Some("brand:gmail"),
-                "sc-chrome" => Some("brand:chrome"),
-                "sc-claude" => Some("brand:claude"),
-                "sc-clipboard" => Some("brand:clipboard"),
+            // Upgrade the older emoji defaults to the glyph family.
+            let glyph = match shortcut.id.as_str() {
+                "sc-gemini" => Some("glyph:sparkle"),
+                "sc-gmail" => Some("glyph:mail"),
+                "sc-chrome" => Some("glyph:globe"),
+                "sc-claude" => Some("glyph:chat"),
+                "sc-clipboard" => Some("glyph:clipboard"),
                 _ => None,
             };
-            if let Some(token) = brand {
+            if let Some(token) = glyph {
                 shortcut.icon = token.into();
             }
         }
@@ -185,7 +204,35 @@ fn migrate(s: &mut Settings) {
         s.voice.push_to_talk_hotkey = "Alt+Shift+V".into();
     }
 
+    if s.general.function_keys.is_empty() {
+        s.general.function_keys = crate::settings::default_function_key_bindings();
+    } else {
+        merge_function_key_bindings(&mut s.general.function_keys);
+    }
+
     s.version = Settings::CURRENT_VERSION;
+}
+
+/// Ensure every `F1`–`F20` row exists so the Settings UI stays stable across upgrades.
+fn merge_function_key_bindings(bindings: &mut Vec<FunctionKeyBinding>) {
+    for label in crate::settings::FUNCTION_KEY_LABELS {
+        if !bindings.iter().any(|b| b.key.eq_ignore_ascii_case(label)) {
+            bindings.push(FunctionKeyBinding {
+                key: (*label).into(),
+                action: FunctionKeyAction::None,
+                shortcut_id: String::new(),
+            });
+        }
+    }
+    bindings.sort_by(|a, b| {
+        fn order(key: &str) -> usize {
+            crate::settings::FUNCTION_KEY_LABELS
+                .iter()
+                .position(|k| k.eq_ignore_ascii_case(key))
+                .unwrap_or(999)
+        }
+        order(&a.key).cmp(&order(&b.key))
+    });
 }
 
 fn default_claude_desktop_target() -> &'static str {

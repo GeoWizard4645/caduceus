@@ -2,6 +2,7 @@ import { useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 
 import * as api from "@/shared/api";
+import { GLYPH_NAMES, GLYPH_PREFIX } from "@/shared/glyphs";
 import { ShortcutIcon } from "@/shared/ShortcutIcon";
 import type { RuntimeInfo, Shortcut, ShortcutKind } from "@/shared/types";
 import { STAFF_POPOUT_LIMIT } from "@/shared/types";
@@ -18,6 +19,7 @@ import {
   cx,
 } from "@/shared/ui";
 
+import { BrowserPicker } from "../BrowserPicker";
 import type { Draft } from "../useDraft";
 
 const KIND_LABELS: Record<ShortcutKind, string> = {
@@ -76,7 +78,7 @@ export function ShortcutsTab({ draft, info }: { draft: Draft; info: RuntimeInfo 
         kind: "open_url",
         target: "",
         args: [],
-        chromeProfileDirectory: null,
+        browser: null,
         showInStaff: false,
         orderIndex: d.shortcuts.length,
         keywords: [],
@@ -160,12 +162,6 @@ function ShortcutRow({
   const needsTarget = shortcut.kind !== "clipboard_view";
   const incomplete = needsTarget && !shortcut.target.trim();
 
-  const profiles = info?.chromeInstalls.flatMap((install) =>
-    install.profiles.map((profile) => ({
-      value: profile.directory,
-      label: `${install.displayName} — ${profile.name}${profile.email ? ` (${profile.email})` : ""}`,
-    })),
-  );
 
   return (
     <div
@@ -226,13 +222,13 @@ function ShortcutRow({
 
           <Field
             label="Icon"
-            hint="Pick a bundled brand mark, upload your own image, or type an emoji."
+            hint="Pick a glyph, upload your own image, or type any emoji. Glyphs follow your accent colour; uploads and emoji are drawn as-is."
           >
             <div className="row">
               <TextInput
                 value={shortcut.icon}
                 onChange={(v) => onChange((s) => (s.icon = v))}
-                placeholder="brand:gemini or ✦"
+                placeholder="glyph:sparkle or ✦"
               />
               <Button
                 size="sm"
@@ -260,17 +256,27 @@ function ShortcutRow({
               </Button>
             </div>
             <div className="mt-2 flex flex-wrap gap-1.5">
-              {(["gemini", "gmail", "chrome", "claude", "clipboard"] as const).map((id) => (
-                <button
-                  key={id}
-                  type="button"
-                  title={`Use brand:${id}`}
-                  onClick={() => onChange((s) => (s.icon = `brand:${id}`))}
-                  className="flex h-8 w-8 items-center justify-center rounded-md border border-line bg-raised transition-colors hover:border-accent/40"
-                >
-                  <ShortcutIcon icon={`brand:${id}`} label={id} className="h-5 w-5" />
-                </button>
-              ))}
+              {GLYPH_NAMES.map((name) => {
+                const token = `${GLYPH_PREFIX}${name}`;
+                const active = shortcut.icon === token;
+                return (
+                  <button
+                    key={name}
+                    type="button"
+                    title={name}
+                    aria-pressed={active}
+                    onClick={() => onChange((s) => (s.icon = token))}
+                    className={cx(
+                      "flex h-8 w-8 items-center justify-center rounded-md border transition-colors",
+                      active
+                        ? "border-accent/60 bg-accent/12 text-accent"
+                        : "border-line bg-raised text-ink-mute hover:border-accent/40 hover:text-ink",
+                    )}
+                  >
+                    <ShortcutIcon icon={token} label={name} className="h-[18px] w-[18px]" />
+                  </button>
+                );
+              })}
             </div>
           </Field>
 
@@ -321,33 +327,13 @@ function ShortcutRow({
           )}
 
           {shortcut.kind === "open_url" && (
-            <Field
-              label="Chrome profile"
-              hint={
-                profiles && profiles.length > 0
-                  ? "Opens this link in a specific Chrome profile."
-                  : "No Chrome profiles detected — type a directory name such as “Profile 1” if you know it."
-              }
-              wide
-            >
-              {profiles && profiles.length > 0 ? (
-                <Select
-                  value={shortcut.chromeProfileDirectory ?? ""}
-                  onChange={(v) =>
-                    onChange((s) => (s.chromeProfileDirectory = v === "" ? null : v))
-                  }
-                  options={[{ value: "", label: "Default browser (no specific profile)" }, ...profiles]}
-                />
-              ) : (
-                <TextInput
-                  value={shortcut.chromeProfileDirectory ?? ""}
-                  placeholder="Profile 1"
-                  onChange={(v) =>
-                    onChange((s) => (s.chromeProfileDirectory = v.trim() === "" ? null : v))
-                  }
-                />
-              )}
-            </Field>
+            <BrowserPicker
+              value={shortcut.browser}
+              onChange={(next) => onChange((sc) => (sc.browser = next))}
+              browsers={info?.browsers ?? []}
+              label="Open in"
+              inheritLabel="Use the Command Center default"
+            />
           )}
 
           <Field

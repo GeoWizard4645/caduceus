@@ -452,10 +452,108 @@ export const calculatorProvider: ResultProvider = {
  * cosmetic — rows are ranked by score — but it keeps related sources together
  * when several tie.
  */
+/** Screenshots and screen recordings. */
+export const captureProvider: ResultProvider = {
+  id: "capture",
+  title: "Capture",
+  search({ query, actions }) {
+    const q = query.trim().toLowerCase();
+    const wantsCapture =
+      q.length === 0 ||
+      /screenshot|screen shot|screen record|recording|capture/.test(q);
+    if (!wantsCapture) return [];
+
+    const items: ResultItem[] = [
+      {
+        id: "capture-screenshot",
+        title: "Screenshot the display",
+        subtitle: "Copies to the clipboard and saves a PNG to Downloads",
+        icon: "📷",
+        group: "Capture",
+        score: q.includes("screenshot") ? 900 : 400,
+        run: async () => {
+          try {
+            const result = await api.captureScreenshot(true);
+            actions.notify(result.message);
+          } catch (e) {
+            actions.notify(api.errorMessage(e), "error");
+          }
+        },
+      },
+      {
+        id: "capture-record-mic",
+        title: "Start screen recording (mic on)",
+        subtitle: "Screen + microphone → Downloads as .mov",
+        icon: "⏺",
+        group: "Capture",
+        score: /record|video/.test(q) ? 850 : 350,
+        run: async () => {
+          try {
+            const state = await api.captureRecordStart(true, false);
+            actions.notify(state.message);
+          } catch (e) {
+            actions.notify(api.errorMessage(e), "error");
+          }
+        },
+      },
+      {
+        id: "capture-record-system",
+        title: "Start screen recording (system audio)",
+        subtitle: "Screen + system sound (macOS 13+); mic off",
+        icon: "🔊",
+        group: "Capture",
+        score: /system|audio/.test(q) ? 880 : 300,
+        run: async () => {
+          try {
+            const state = await api.captureRecordStart(false, true);
+            actions.notify(state.message);
+          } catch (e) {
+            actions.notify(api.errorMessage(e), "error");
+          }
+        },
+      },
+      {
+        id: "capture-record-both",
+        title: "Start screen recording (mic + system audio)",
+        subtitle: "Opens Screenshot.app — use Options for audio sources",
+        icon: "🎬",
+        group: "Capture",
+        score: 320,
+        run: async () => {
+          try {
+            const state = await api.captureRecordStart(true, true);
+            actions.notify(state.message);
+          } catch (e) {
+            actions.notify(api.errorMessage(e), "error");
+          }
+        },
+      },
+      {
+        id: "capture-record-stop",
+        title: "Stop screen recording",
+        subtitle: "Use the menu bar control in Screenshot / macOS",
+        icon: "⏹",
+        group: "Capture",
+        score: q.includes("stop") ? 950 : 280,
+        run: async () => {
+          try {
+            const state = await api.captureRecordStop();
+            actions.notify(state.message);
+          } catch (e) {
+            actions.notify(api.errorMessage(e), "error");
+          }
+        },
+      },
+    ];
+    return items;
+  },
+};
+
 export const defaultProviders: ResultProvider[] = [
   calculatorProvider,
   shortcutProvider,
   appLauncherProvider,
+  captureProvider,
   searchFallbackProvider,
   clipboardProvider,
   prefixHintProvider,

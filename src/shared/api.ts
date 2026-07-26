@@ -14,7 +14,7 @@ import type {
   HermesStatus,
   InstalledApp,
   BackendConfig,
-  ChromeInstall,
+  BrowserInstall,
   ClipboardEntry,
   ClipboardStats,
   DispatchOutcome,
@@ -57,11 +57,26 @@ export const setSttApiKey = (key: string) => invoke<boolean>("set_stt_api_key", 
 export const runShortcut = (id: string, query?: string) =>
   invoke<ExecOutcome>("run_shortcut", { id, query: query ?? null });
 
-export const listChromeProfiles = () => invoke<ChromeInstall[]>("list_chrome_profiles");
+export const listBrowsers = () => invoke<BrowserInstall[]>("list_browsers");
 
 export const testCommand = (command: string) => invoke<ExecOutcome>("test_command", { command });
 
 export const openExternalUrl = (url: string) => invoke<ExecOutcome>("open_external_url", { url });
+
+/**
+ * The System Settings panes the Learn tab can send you to.
+ *
+ * A closed set, not a URL: `open_external_url` refuses non-http schemes on
+ * purpose, so these are named on the Rust side instead of opened by string.
+ */
+export type SystemSettingsPane =
+  | "keyboard-shortcuts"
+  | "microphone"
+  | "accessibility"
+  | "login-items";
+
+export const openSystemSettings = (pane: SystemSettingsPane) =>
+  invoke<ExecOutcome>("open_system_settings", { pane });
 
 // --- command center --------------------------------------------------------
 
@@ -91,6 +106,30 @@ export const resolveShortcutIcon = (icon: string) =>
 
 export const importShortcutIcon = (shortcutId: string, sourcePath: string) =>
   invoke<string>("import_shortcut_icon", { shortcutId, sourcePath });
+
+// --- capture ---------------------------------------------------------------
+
+export interface ScreenshotResult {
+  ok: boolean;
+  path: string | null;
+  message: string;
+}
+
+export interface RecordingState {
+  active: boolean;
+  path: string | null;
+  message: string;
+}
+
+export const captureScreenshot = (saveToDownloads = true) =>
+  invoke<ScreenshotResult>("capture_screenshot", { saveToDownloads });
+
+export const captureRecordStart = (mic = true, systemAudio = false) =>
+  invoke<RecordingState>("capture_record_start", { mic, systemAudio });
+
+export const captureRecordStop = () => invoke<RecordingState>("capture_record_stop");
+
+export const captureRecordingState = () => invoke<RecordingState>("capture_recording_state");
 
 // --- clipboard -------------------------------------------------------------
 

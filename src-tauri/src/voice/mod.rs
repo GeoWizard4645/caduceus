@@ -1,25 +1,15 @@
 //! Push-to-talk voice input.
 //!
-//! ```text
-//!   hotkey down ──▶ record (cpal) ──▶ hotkey up ──▶ WAV ──▶ SttBackend ──▶ text
-//!                                                                          │
-//!                                              keyword router ◀────────────┘
-//!                                                     │
-//!                          web search / AI chat / computer use / just insert
-//! ```
-//!
-//! # An explicit scope decision
-//!
-//! There is **no always-on wake-word listening**. Caduceus only opens the
-//! microphone while you are physically holding a key, and closes it the moment
-//! you let go. A background listener would mean a process with permanent
-//! microphone access on a tool that also has screen capture and input
-//! simulation — too much to ask of someone installing a utility from GitHub.
-//! "Hey Caduceus" is not a v1 feature and is not a small change.
+//! On macOS with the system STT backend, recording uses Apple's Speech framework
+//! with **live partial transcripts** (`caduceus-stt-live`). Other platforms and
+//! HTTP backends still use cpal batch capture.
 
 pub mod recorder;
 pub mod router;
 pub mod stt;
+
+#[cfg(target_os = "macos")]
+pub mod live_macos;
 
 pub use router::{route, RoutedText};
 pub use stt::{SttAvailability, SttBackend, SttError};
@@ -27,12 +17,10 @@ pub use stt::{SttAvailability, SttBackend, SttError};
 use parking_lot::Mutex;
 use std::sync::Arc;
 
-use crate::settings::SettingsManager;
+use crate::settings::{SettingsManager, SttBackendKind};
 
-/// Events emitted while push-to-talk is running, so the Command Center can show
-/// a live "listening…" state.
 pub const VOICE_STATE_EVENT: &str = "caduceus://voice-state";
-/// Emitted with the routed transcript once transcription finishes.
+pub const VOICE_PARTIAL_EVENT: &str = "caduceus://voice-partial";
 pub const VOICE_RESULT_EVENT: &str = "caduceus://voice-result";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
@@ -43,10 +31,15 @@ pub enum VoiceState {
     Transcribing,
 }
 
-/// Holds the in-flight recording between hotkey press and release.
+enum ActiveRecording {
+    Batch(recorder::Recording),
+    #[cfg(target_os = "macos")]
+    Live(live_macos::LiveSession),
+}
+
 #[derive(Clone, Default)]
 pub struct VoiceRuntime {
-    active: Arc<Mutex<Option<recorder::Recording>>>,
+    active: Arc<Mutex<Option<ActiveRecording>>>,
 }
 
 impl VoiceRuntime {
@@ -58,35 +51,65 @@ impl VoiceRuntime {
         self.active.lock().is_some()
     }
 
-    /// Begin recording. Idempotent: a repeat key-down (which some keyboards
-    /// send while held) does not restart the recording.
-    pub fn start(&self, settings: &SettingsManager) -> Result<(), String> {
+    pub fn start<F>(&self, settings: &SettingsManager, on_partial: F) -> Result<(), String>
+    where
+        F: Fn(String) + Send + Sync + 'static,
+    {
         let mut slot = self.active.lock();
         if slot.is_some() {
             return Ok(());
         }
+
+        let use_live = settings.with(|s| {
+            s.voice.stt_backend == SttBackendKind::SystemNative && cfg!(target_os = "macos")
+        });
+
+        #[cfg(target_os = "macos")]
+        if use_live {
+            let language = settings.with(|s| s.voice.stt_language.clone());
+            let session = live_macos::LiveSession::start(&language, move |text| on_partial(text))
+            .map_err(|e: String| e)?;
+            *slot = Some(ActiveRecording::Live(session));
+            return Ok(());
+        }
+
         let max_secs = settings.with(|s| s.voice.max_recording_secs);
         let recording = recorder::start(max_secs).map_err(|e| e.to_string())?;
-        *slot = Some(recording);
+        *slot = Some(ActiveRecording::Batch(recording));
         Ok(())
     }
 
-    /// Stop recording and return the WAV bytes, or `None` if nothing was
-    /// running.
-    pub fn stop(&self) -> Option<Result<Vec<u8>, String>> {
-        let recording = self.active.lock().take()?;
-        Some(recording.finish().map_err(|e| e.to_string()))
+    pub fn stop(&self) -> Option<StopOutcome> {
+        let active = self.active.lock().take()?;
+        Some(match active {
+            ActiveRecording::Batch(recording) => StopOutcome::Batch(
+                recording.finish().map_err(|e| e.to_string()),
+            ),
+            #[cfg(target_os = "macos")]
+            ActiveRecording::Live(live) => StopOutcome::Live(live.stop()),
+        })
     }
 
-    /// Discard an in-flight recording without transcribing it.
     pub fn cancel(&self) {
-        if let Some(recording) = self.active.lock().take() {
-            let _ = recording.finish();
+        if let Some(active) = self.active.lock().take() {
+            match active {
+                ActiveRecording::Batch(recording) => {
+                    let _ = recording.finish();
+                }
+                #[cfg(target_os = "macos")]
+                ActiveRecording::Live(live) => {
+                    let _ = live.stop();
+                }
+            }
         }
     }
 }
 
-/// Transcribe and route in one step. Returns the routed text ready to act on.
+pub enum StopOutcome {
+    Batch(Result<Vec<u8>, String>),
+    Live(Result<(String, Vec<u8>), String>),
+}
+
 pub async fn transcribe_and_route(
     wav: Vec<u8>,
     settings: &SettingsManager,
@@ -98,4 +121,9 @@ pub async fn transcribe_and_route(
         .await
         .map_err(|e| e.to_string())?;
     Ok(route(&transcript, &voice))
+}
+
+pub fn route_transcript(transcript: &str, settings: &SettingsManager) -> RoutedText {
+    let voice = settings.with(|s| s.voice.clone());
+    route(transcript, &voice)
 }

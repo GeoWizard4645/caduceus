@@ -18,6 +18,7 @@ import { AiTab } from "./tabs/Ai";
 import { ClipboardTab } from "./tabs/Clipboard";
 import { CommandCenterTab } from "./tabs/CommandCenterTab";
 import { GeneralTab } from "./tabs/General";
+import { LearnTab, type TutorialId } from "./tabs/Learn";
 import { ShortcutsTab } from "./tabs/Shortcuts";
 import { VoiceTab } from "./tabs/Voice";
 import { useDraft } from "./useDraft";
@@ -30,6 +31,7 @@ const TABS = [
   { id: "ai", label: "AI", icon: "✳" },
   { id: "clipboard", label: "Clipboard", icon: "❐" },
   { id: "appearance", label: "Appearance", icon: "◑" },
+  { id: "learn", label: "Learn", icon: "◆" },
 ] as const;
 
 type TabId = (typeof TABS)[number]["id"];
@@ -38,6 +40,20 @@ export function Settings() {
   const draft = useDraft();
   const [tab, setTab] = useState<TabId>("general");
   const [hotkeyProblems, setHotkeyProblems] = useState<string[]>([]);
+  // Which tutorial to open when another tab links into Learn. Cleared on the
+  // way out so returning to Learn by hand does not re-open it.
+  const [learnFocus, setLearnFocus] = useState<TutorialId | null>(null);
+
+  const openTutorial = (topic: TutorialId) => {
+    setLearnFocus(topic);
+    setTab("learn");
+  };
+
+  const goToTab = (next: string) => {
+    if (!TABS.some((t) => t.id === next)) return;
+    setLearnFocus(null);
+    setTab(next as TabId);
+  };
 
   const info = useAsync(() => api.getRuntimeInfo(), []);
 
@@ -82,7 +98,7 @@ export function Settings() {
             <button
               key={item.id}
               type="button"
-              onClick={() => setTab(item.id)}
+              onClick={() => goToTab(item.id)}
               className={cx(
                 "flex w-full items-center gap-2.5 rounded-lg px-2.5 py-[7px] text-left text-[13px] transition-colors duration-100",
                 tab === item.id
@@ -121,13 +137,16 @@ export function Settings() {
             </div>
           )}
 
-          {tab === "general" && <GeneralTab {...shared} />}
+          {tab === "general" && <GeneralTab {...shared} onOpenTutorial={openTutorial} />}
           {tab === "shortcuts" && <ShortcutsTab {...shared} />}
           {tab === "command-center" && <CommandCenterTab {...shared} />}
           {tab === "voice" && <VoiceTab {...shared} />}
           {tab === "ai" && <AiTab {...shared} onReloadInfo={info.reload} />}
           {tab === "clipboard" && <ClipboardTab {...shared} onReloadInfo={info.reload} />}
           {tab === "appearance" && <AppearanceTab draft={draft} />}
+          {tab === "learn" && (
+            <LearnTab draft={draft} focus={learnFocus} onNavigate={goToTab} />
+          )}
         </div>
       </main>
     </div>

@@ -1,10 +1,19 @@
 import * as api from "@/shared/api";
-import type { RuntimeInfo } from "@/shared/types";
+import type { FunctionKeyBinding, RuntimeInfo } from "@/shared/types";
 import { Button, Callout, Field, HotkeyInput, NumberInput, Section, Select, Toggle } from "@/shared/ui";
 
+import type { TutorialId } from "./Learn";
 import type { Draft } from "../useDraft";
 
-export function GeneralTab({ draft, info }: { draft: Draft; info: RuntimeInfo | null }) {
+export function GeneralTab({
+  draft,
+  info,
+  onOpenTutorial,
+}: {
+  draft: Draft;
+  info: RuntimeInfo | null;
+  onOpenTutorial: (topic: TutorialId) => void;
+}) {
   const settings = draft.settings;
   if (!settings) return null;
   const { general } = settings;
@@ -28,13 +37,100 @@ export function GeneralTab({ draft, info }: { draft: Draft; info: RuntimeInfo | 
 
           <Field
             label="Open the Command Center"
-            hint="Avoid ⌘Space on macOS — Spotlight owns it and will win."
+            hint={
+              <>
+                Want ⌘Space to open this instead of Spotlight?{" "}
+                {/* Field wraps its hint in the <label>, so a bare click here
+                    would also toggle the hotkey capture below. */}
+                <button
+                  type="button"
+                  className="text-accent underline underline-offset-2"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    onOpenTutorial("spotlight");
+                  }}
+                >
+                  Read this tutorial
+                </button>
+                .
+              </>
+            }
           >
             <HotkeyInput
               value={general.commandCenterHotkey}
               onChange={(value) => draft.update((d) => (d.general.commandCenterHotkey = value))}
             />
           </Field>
+        </div>
+      </Section>
+
+      <Section
+        title="Function keys"
+        description={
+          <>
+            Assign actions to <kbd className="rounded border border-line px-1 font-mono text-2xs">F1</kbd>
+            –<kbd className="rounded border border-line px-1 font-mono text-2xs">F20</kbd> while
+            Caduceus is running. On Mac, set{" "}
+            <span className="text-ink-soft">Keyboard → Keyboard Shortcuts → Function Keys</span> to
+            use F-keys as standard function keys (not brightness/volume) if you want them globally.
+          </>
+        }
+      >
+        <div className="space-y-2">
+          {general.functionKeys.map((row, index) => {
+            const actionOptions: { value: FunctionKeyBinding["action"]; label: string }[] = [
+              { value: "none", label: "Off" },
+              { value: "voice_memo", label: "Voice Memos — new recording (macOS)" },
+              { value: "start_dictation", label: "Caduceus dictation — start recording" },
+              { value: "push_to_talk", label: "Caduceus dictation — hold to talk" },
+              { value: "command_center", label: "Open Command Center" },
+              { value: "toggle_staff", label: "Show / hide staff" },
+              { value: "screenshot", label: "Screenshot to clipboard" },
+              { value: "run_shortcut", label: "Run shortcut…" },
+            ];
+
+            return (
+              <div
+                key={row.key}
+                className="grid grid-cols-[3.5rem_1fr_minmax(0,14rem)] items-center gap-3"
+              >
+                <span className="font-mono text-[13px] text-ink-soft">{row.key}</span>
+                <Select
+                  value={row.action}
+                  onChange={(value) => {
+                    draft.update((d) => {
+                      const binding = d.general.functionKeys[index];
+                      if (!binding) return;
+                      binding.action = value as FunctionKeyBinding["action"];
+                      if (value !== "run_shortcut") binding.shortcutId = "";
+                    });
+                  }}
+                  options={actionOptions}
+                />
+                {row.action === "run_shortcut" ? (
+                  <Select
+                    value={row.shortcutId || ""}
+                    onChange={(value) =>
+                      draft.update((d) => {
+                        const binding = d.general.functionKeys[index];
+                        if (binding) binding.shortcutId = value;
+                      })
+                    }
+                    options={[
+                      { value: "", label: "Choose shortcut…" },
+                      ...settings.shortcuts.map((s) => ({
+                        value: s.id,
+                        label: s.label,
+                      })),
+                    ]}
+                  />
+                ) : (
+                  <span className="text-2xs text-ink-faint" />
+                )}
+              </div>
+            );
+          })}
         </div>
       </Section>
 
@@ -99,9 +195,9 @@ export function GeneralTab({ draft, info }: { draft: Draft; info: RuntimeInfo | 
           >
             <NumberInput
               value={general.collapseIdleMs}
-              min={500}
+              min={0}
               max={10000}
-              step={250}
+              step={50}
               suffix="ms"
               onChange={(value) => draft.update((d) => (d.general.collapseIdleMs = value))}
             />

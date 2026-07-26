@@ -1,0 +1,351 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Caduceus — every feature</title>
+<meta name="description" content="Complete list of what Caduceus can do: staff, palette, clipboard, voice, capture, AI, and settings.">
+<link rel="icon" href="caduceus-mark.png">
+<style>
+  :root {
+    --base: #0a0b10;
+    --surface: #12131b;
+    --line: #2c2f3e;
+    --ink: #edeef6;
+    --ink-soft: #bec1d1;
+    --ink-mute: #8a8ea2;
+    --ink-faint: #606478;
+    --accent: #7c7cff;
+    --radius: 14px;
+    --page: 940px;
+    color-scheme: dark;
+  }
+  *, *::before, *::after { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--base);
+    color: var(--ink);
+    font: 16px/1.65 -apple-system, BlinkMacSystemFont, "Inter", system-ui, sans-serif;
+  }
+  a { color: var(--accent); }
+  .wrap { max-width: var(--page); margin: 0 auto; padding: 0 24px; }
+  .site-nav {
+    display: flex;
+    justify-content: center;
+    gap: 20px;
+    padding: 28px 0 8px;
+    font-size: 0.9rem;
+  }
+  .site-nav a {
+    color: var(--ink-mute);
+    text-decoration: none;
+    border-bottom: 1px solid transparent;
+  }
+  .site-nav a:hover, .site-nav a[aria-current="page"] {
+    color: var(--ink);
+    border-bottom-color: var(--accent);
+  }
+  header { text-align: center; padding: 24px 0 40px; }
+  h1 { margin: 0 0 8px; font-size: 2rem; letter-spacing: -0.02em; }
+  .sub { margin: 0 auto; max-width: 42ch; color: var(--ink-mute); }
+  section { padding: 40px 0; border-top: 1px solid var(--line); }
+  h2 { margin: 0 0 20px; font-size: 1.25rem; }
+  .feat-list { list-style: none; padding: 0; margin: 0; }
+  .feat-list > li {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 18px 20px;
+    margin-bottom: 14px;
+  }
+  .feat-list h3 { margin: 0 0 10px; font-size: 1rem; color: var(--ink-soft); }
+  .feat-list ul { margin: 0; padding-left: 1.15rem; color: var(--ink-mute); font-size: 0.92rem; }
+  .feat-list li { margin: 5px 0; }
+  footer {
+    border-top: 1px solid var(--line);
+    padding: 32px 0 48px;
+    text-align: center;
+    font-size: 0.85rem;
+    color: var(--ink-faint);
+  }
+  footer a { color: var(--ink-mute); text-decoration: none; }
+
+  .portfolio-back {
+    position: fixed;
+    top: 16px;
+    right: 16px;
+    z-index: 20;
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 8px 14px 8px 12px;
+    font-size: 0.82rem;
+    font-weight: 500;
+    color: var(--ink-soft);
+    text-decoration: none;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: rgb(18 19 27 / 0.92);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    box-shadow: 0 8px 24px rgb(0 0 0 / 0.35);
+    transition: border-color 0.15s, color 0.15s;
+  }
+
+  .portfolio-back:hover {
+    color: var(--ink);
+    border-color: var(--accent);
+  }
+
+  .portfolio-back .arrow {
+    font-size: 1rem;
+    line-height: 1;
+    opacity: 0.85;
+  }
+
+  @media (max-width: 480px) {
+    .portfolio-back { top: 12px; right: 12px; padding: 7px 11px 7px 10px; font-size: 0.78rem; }
+  }
+</style>
+</head>
+<body>
+
+<a class="portfolio-back" href="https://vivaanshahani.com/" rel="noopener">
+  <span class="arrow" aria-hidden="true">←</span>
+  vivaanshahani.com
+</a>
+
+<div class="wrap">
+  <nav class="site-nav" aria-label="Site">
+    <a href="index.html">Overview</a>
+    <a href="features.html" aria-current="page">All features</a>
+  </nav>
+
+  <header>
+    <h1>Everything Caduceus does</h1>
+    <p class="sub">A complete checklist of built-in behaviour. All of the offline features work without Hermes, an API key, or an account.</p>
+  </header>
+
+  <section>
+    <h2>Menu bar &amp; windows</h2>
+    <ul class="feat-list">
+      <li>
+        <h3>Menu bar presence</h3>
+        <ul>
+          <li>Lives in the menu bar (no Dock icon)</li>
+          <li>Show or hide the floating staff from the tray</li>
+          <li>Quit, open Settings, open Command Center from the tray</li>
+          <li>Optional launch at login</li>
+        </ul>
+      </li>
+      <li>
+        <h3>Settings window</h3>
+        <ul>
+          <li>General, Appearance, Shortcuts, Command Center, Clipboard, Voice, AI, Learn tabs</li>
+          <li>Live preview of staff size, colours, and idle opacity</li>
+          <li>Validate and rebind global hotkeys without restart</li>
+          <li>Reset to factory defaults</li>
+        </ul>
+      </li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>The floating staff</h2>
+    <ul class="feat-list">
+      <li>
+        <h3>Interaction</h3>
+        <ul>
+          <li>Always-on-top pixel caduceus on a click-through window</li>
+          <li>Hover to fan out up to six shortcut icons (configurable order)</li>
+          <li>Click the staff to open the Command Center</li>
+          <li>Right-click for Settings</li>
+          <li>Drag to reposition; position persists across restarts</li>
+          <li>Dock to left or right edge by default; custom drag position overrides</li>
+          <li><kbd>F12</kbd> toggle show / hide</li>
+          <li>Adaptive cursor polling (saves CPU when the pointer is far away)</li>
+          <li>Configurable expand delay and auto-collapse timing</li>
+        </ul>
+      </li>
+      <li>
+        <h3>Shortcut icons on the staff</h3>
+        <ul>
+          <li>User-defined shortcuts (URLs, apps, shell, AppleScript, clipboard view)</li>
+          <li>Brand icons or uploaded PNG/JPEG/WebP/GIF per shortcut</li>
+          <li>Instant collapse with in-place fade after a shortcut click</li>
+        </ul>
+      </li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Command Center (palette)</h2>
+    <ul class="feat-list">
+      <li>
+        <h3>Opening &amp; navigation</h3>
+        <ul>
+          <li><kbd>Alt+Space</kbd> from anywhere (rebindable)</li>
+          <li>Keyboard: arrows, Enter to run, Esc to close</li>
+          <li>Click-away dismisses (like Spotlight)</li>
+          <li>Prefix badge shows which route Enter will take</li>
+        </ul>
+      </li>
+      <li>
+        <h3>Built-in result sources</h3>
+        <ul>
+          <li>Calculator — arithmetic, precedence, %, functions, constants; Enter copies</li>
+          <li>App launcher — fuzzy search over every installed application</li>
+          <li>Shortcuts — your configured actions from Settings</li>
+          <li>Capture — screenshot display; open Screenshot.app to record screen</li>
+          <li>Web search fallback when nothing else matches (engine URL is configurable)</li>
+          <li>Clipboard history rows when enabled</li>
+          <li>Prefix hints when the input is empty</li>
+        </ul>
+      </li>
+      <li>
+        <h3>Prefix routing (examples)</h3>
+        <ul>
+          <li>Plain text → web search URL template</li>
+          <li><code>/</code> → primary AI (Hermes) chat in-window</li>
+          <li><code>/c</code> → computer-use agent session (Hermes)</li>
+          <li><code>/v</code> → clipboard search mode</li>
+          <li>Custom prefix rules: URL templates, commands, AppleScript, etc.</li>
+        </ul>
+      </li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Clipboard history</h2>
+    <ul class="feat-list">
+      <li>
+        <h3>Capture &amp; storage</h3>
+        <ul>
+          <li>Watches the system clipboard (text, images, file paths)</li>
+          <li>Skips concealed copies (password managers)</li>
+          <li>Per-app exclusion list</li>
+          <li>SQLite history with configurable max items and poll interval</li>
+          <li>Optional ChaCha20-Poly1305 encryption at rest (key in Keychain)</li>
+        </ul>
+      </li>
+      <li>
+        <h3>Using history</h3>
+        <ul>
+          <li>Search, pin, delete, clear (optionally keep pinned)</li>
+          <li>Copy any entry back to the clipboard</li>
+          <li>Image thumbnails and preview</li>
+          <li>Dedicated clipboard mode in the Command Center</li>
+        </ul>
+      </li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Voice &amp; dictation</h2>
+    <ul class="feat-list">
+      <li>
+        <h3>Push-to-talk</h3>
+        <ul>
+          <li><kbd>Alt+Shift+V</kbd> hold to talk, release to finish (rebindable)</li>
+          <li>No wake word — microphone only while the key is held</li>
+          <li>Opens Command Center automatically while listening</li>
+          <li><strong>Live transcript</strong> updates in the palette as you speak (macOS system recogniser)</li>
+          <li>On-device Apple Speech when using the System backend</li>
+          <li>Optional HTTP Whisper-compatible endpoint instead</li>
+          <li>Keyword routing after transcription (search, AI, computer use, clipboard, insert-only)</li>
+          <li>Optional auto-submit vs. wait for Enter</li>
+          <li>Maximum recording length safety cap</li>
+        </ul>
+      </li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Screenshots &amp; screen recording</h2>
+    <ul class="feat-list">
+      <li>
+        <h3>From the Command Center</h3>
+        <ul>
+          <li>Type “screenshot” or “capture” — full display to clipboard + Downloads PNG</li>
+          <li>Record options open Apple’s Screenshot app (same flow as macOS)</li>
+          <li>Choose mic on/off and system audio via Screenshot toolbar / Options</li>
+          <li>Requires Screen Recording permission for captures</li>
+        </ul>
+      </li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Shortcuts &amp; automation</h2>
+    <ul class="feat-list">
+      <li>
+        <h3>Shortcut kinds</h3>
+        <ul>
+          <li>Open URL (with <code>{query}</code> substitution and optional Chrome profile)</li>
+          <li>Launch app (bundle id or path)</li>
+          <li>Run shell command (quoted <code>{query}</code>, <code>$CADUCEUS_QUERY</code> env)</li>
+          <li>Run AppleScript (macOS)</li>
+          <li>Open clipboard history view</li>
+        </ul>
+      </li>
+      <li>
+        <h3>Defaults include</h3>
+        <ul>
+          <li>Gemini, Gmail, Chrome, Claude Desktop, Clipboard — all editable</li>
+        </ul>
+      </li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>AI &amp; agents (optional Hermes)</h2>
+    <ul class="feat-list">
+      <li>
+        <h3>Hermes Agent integration</h3>
+        <ul>
+          <li>Primary chat via Hermes CLI</li>
+          <li>Computer-use tasks with on-screen agent panel</li>
+          <li>Install / status checks and setup commands in Settings</li>
+          <li>OpenAI-compatible backend for local models or proxy</li>
+        </ul>
+      </li>
+      <li>
+        <h3>What Caduceus does not do itself</h3>
+        <ul>
+          <li>No bundled LLM — Hermes (or your HTTP backend) provides models</li>
+          <li>Computer-use screen control is delegated to Hermes, not an in-app loop</li>
+        </ul>
+      </li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Appearance &amp; privacy</h2>
+    <ul class="feat-list">
+      <li>
+        <h3>Look &amp; feel</h3>
+        <ul>
+          <li>Accent colour, light/dark/system theme</li>
+          <li>Staff size, pop-out radius, icon size, idle opacity, pulse animation</li>
+          <li>Glass-style windows with vibrancy on macOS</li>
+        </ul>
+      </li>
+      <li>
+        <h3>Permissions (macOS)</h3>
+        <ul>
+          <li>Microphone — push-to-talk only</li>
+          <li>Speech Recognition — on-device transcription</li>
+          <li>Screen Recording — screenshots and Screenshot.app recording</li>
+          <li>Apple Events — only for user-defined AppleScript shortcuts</li>
+        </ul>
+      </li>
+    </ul>
+  </section>
+
+  <footer>
+    <p><a href="index.html">← Overview</a> · <a href="https://github.com/GeoWizard4645/caduceus">Source on GitHub</a></p>
+  </footer>
+</div>
+
+</body>
+</html>

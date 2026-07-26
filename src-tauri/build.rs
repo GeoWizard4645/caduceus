@@ -2,16 +2,10 @@ use std::path::Path;
 use std::process::Command;
 
 fn main() {
-    build_macos_stt_helper();
+    build_macos_helpers();
     tauri_build::build()
 }
 
-/// Write a file only when its contents would actually change.
-///
-/// Rewriting an identical file still bumps its mtime, which any file watcher
-/// treats as a change. During `tauri dev` that is enough to trigger a rebuild,
-/// which re-runs this script — an infinite loop. (`src-tauri/.taurignore` also
-/// excludes `bin/`; this is the belt to that pair of braces.)
 fn write_if_changed(path: &Path, contents: &[u8]) {
     if std::fs::read(path).is_ok_and(|existing| existing == contents) {
         return;
@@ -21,43 +15,46 @@ fn write_if_changed(path: &Path, contents: &[u8]) {
     }
 }
 
-/// Compile the macOS speech-to-text helper, if we can.
-///
-/// This is deliberately **best-effort**: a missing or broken `swiftc` must not
-/// fail the build, because the helper is optional — Caduceus falls back to an HTTP
-/// speech-to-text endpoint, and everything except the "System" STT backend works
-/// without it. The `bin/` directory always ends up with at least one file so the
-/// bundler's resource glob never resolves to nothing.
-fn build_macos_stt_helper() {
+fn build_macos_helpers() {
     let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR");
     let bin_dir = Path::new(&manifest_dir).join("bin");
     let _ = std::fs::create_dir_all(&bin_dir);
 
-    // Keeps the resource glob non-empty on every platform, and explains itself
-    // to anyone who finds it in the bundle.
     write_if_changed(
         &bin_dir.join("README.txt"),
         b"Helper executables bundled with Caduceus.\n\n\
-         caduceus-stt  macOS only. Transcribes a WAV file using Apple's Speech\n\
-         framework. Built from macos/CaduceusSTT.swift by build.rs. If it is\n\
-         missing, Caduceus's \"System\" speech-to-text backend reports that it is\n\
-         unavailable and you can use an HTTP endpoint instead.\n",
+         caduceus-stt       Transcribe a WAV (batch).\n\
+         caduceus-stt-live  Live mic + partial transcripts.\n\
+         caduceus-record    Screen recording (ReplayKit).\n",
     );
 
     if std::env::var("CARGO_CFG_TARGET_OS").as_deref() != Ok("macos") {
         return;
     }
 
-    let source = Path::new(&manifest_dir).join("macos/CaduceusSTT.swift");
-    println!("cargo:rerun-if-changed=macos/CaduceusSTT.swift");
+    compile_swift(
+        &bin_dir,
+        "macos/CaduceusSTT.swift",
+        "caduceus-stt",
+        "speech-to-text helper",
+    );
+    compile_swift(
+        &bin_dir,
+        "macos/CaduceusSTTLive.swift",
+        "caduceus-stt-live",
+        "live speech helper",
+    );
+}
+
+fn compile_swift(bin_dir: &Path, source_rel: &str, output_name: &str, label: &str) {
+    let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR");
+    let source = Path::new(&manifest_dir).join(source_rel);
+    println!("cargo:rerun-if-changed={source_rel}");
     if !source.exists() {
         return;
     }
 
-    let output = bin_dir.join("caduceus-stt");
-
-    // Skip the compile when the binary is already newer than its source, for
-    // the same watcher reason as `write_if_changed` above.
+    let output = bin_dir.join(output_name);
     let up_to_date = match (std::fs::metadata(&output), std::fs::metadata(&source)) {
         (Ok(out), Ok(src)) => match (out.modified(), src.modified()) {
             (Ok(out_time), Ok(src_time)) => out_time >= src_time,
@@ -77,20 +74,16 @@ fn build_macos_stt_helper() {
         .output()
     {
         Ok(out) if out.status.success() => {
-            println!("cargo:warning=built the macOS speech-to-text helper (bin/caduceus-stt)");
+            println!("cargo:warning=built macOS {label} ({output_name})");
         }
         Ok(out) => {
             println!(
-                "cargo:warning=could not compile the macOS speech-to-text helper; \
-                 the \"System\" voice backend will be unavailable. swiftc said: {}",
+                "cargo:warning=could not compile {label}; swiftc said: {}",
                 String::from_utf8_lossy(&out.stderr).trim()
             );
         }
         Err(e) => {
-            println!(
-                "cargo:warning=swiftc is not available ({e}); the \"System\" voice backend \
-                 will be unavailable. Install the Xcode Command Line Tools to enable it."
-            );
+            println!("cargo:warning=swiftc unavailable ({e}); {label} will be missing");
         }
     }
 }

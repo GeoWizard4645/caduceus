@@ -16,7 +16,7 @@ pub mod icons;
 
 use serde::{Deserialize, Serialize};
 
-pub use browser::{detect_chrome_profiles, ChromeInstall, ChromeProfile};
+pub use browser::{detect_browsers, BrowserChoice, BrowserInstall, BrowserProfile};
 pub use exec::{execute_shortcut, ExecOutcome};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -47,7 +47,8 @@ pub enum ShortcutKind {
 pub struct Shortcut {
     pub id: String,
     pub label: String,
-    /// Display icon: `brand:<id>` (bundled SVG), `image:<file>` (uploaded PNG in
+    /// Display icon: `glyph:<name>` (built-in stroke glyph, tinted by the
+    /// theme — see `src/shared/glyphs.ts`), `image:<file>` (uploaded PNG in
     /// app config), or a plain emoji / short symbol. Unknown values fall back
     /// to the first character of `label`.
     pub icon: String,
@@ -55,9 +56,9 @@ pub struct Shortcut {
     pub target: String,
     /// Extra arguments for `OpenApp` / `RunCommand`.
     pub args: Vec<String>,
-    /// Chrome `--profile-directory` value, e.g. `Default` or `Profile 1`.
-    /// Only meaningful for `OpenUrl`.
-    pub chrome_profile_directory: Option<String>,
+    /// Open this shortcut's URL in a specific browser/profile instead of the
+    /// Command Center default. Only meaningful for `OpenUrl`.
+    pub browser: Option<BrowserChoice>,
     /// Whether this appears in the staff's radial pop-out. The staff renders at
     /// most [`STAFF_POPOUT_LIMIT`] of these, ordered by `order_index`; the data
     /// model itself imposes no cap.
@@ -80,7 +81,7 @@ impl Default for Shortcut {
             kind: ShortcutKind::OpenUrl,
             target: String::new(),
             args: Vec::new(),
-            chrome_profile_directory: None,
+            browser: None,
             show_in_staff: false,
             order_index: 0,
             keywords: Vec::new(),
@@ -105,7 +106,7 @@ pub fn default_shortcuts() -> Vec<Shortcut> {
         Shortcut {
             id: "sc-gemini".into(),
             label: "Gemini".into(),
-            icon: "brand:gemini".into(),
+            icon: "glyph:sparkle".into(),
             kind: ShortcutKind::OpenUrl,
             target: "https://gemini.google.com/app".into(),
             show_in_staff: true,
@@ -117,7 +118,7 @@ pub fn default_shortcuts() -> Vec<Shortcut> {
         Shortcut {
             id: "sc-gmail".into(),
             label: "Gmail".into(),
-            icon: "brand:gmail".into(),
+            icon: "glyph:mail".into(),
             kind: ShortcutKind::OpenUrl,
             target: "https://mail.google.com".into(),
             show_in_staff: true,
@@ -129,7 +130,7 @@ pub fn default_shortcuts() -> Vec<Shortcut> {
         Shortcut {
             id: "sc-chrome".into(),
             label: "Chrome".into(),
-            icon: "brand:chrome".into(),
+            icon: "glyph:globe".into(),
             kind: ShortcutKind::OpenApp,
             target: default_chrome_target().into(),
             show_in_staff: true,
@@ -141,7 +142,7 @@ pub fn default_shortcuts() -> Vec<Shortcut> {
         Shortcut {
             id: "sc-claude".into(),
             label: "Claude".into(),
-            icon: "brand:claude".into(),
+            icon: "glyph:chat".into(),
             kind: ShortcutKind::OpenApp,
             target: default_claude_target().into(),
             show_in_staff: true,
@@ -153,7 +154,7 @@ pub fn default_shortcuts() -> Vec<Shortcut> {
         Shortcut {
             id: "sc-clipboard".into(),
             label: "Clipboard".into(),
-            icon: "brand:clipboard".into(),
+            icon: "glyph:clipboard".into(),
             kind: ShortcutKind::ClipboardView,
             target: String::new(),
             show_in_staff: true,

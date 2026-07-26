@@ -5,12 +5,12 @@
 //! string to execute. That is why `capabilities/default.json` does not enable
 //! the shell plugin.
 
-use std::path::PathBuf;
 use std::process::Stdio;
 
 use serde::Serialize;
 use tokio::process::Command;
 
+use super::browser::{self, BrowserChoice};
 use super::{percent_encode, substitute_query, Shortcut, ShortcutKind};
 
 /// What happened when a shortcut ran. Returned to the frontend so it can show a
@@ -55,13 +55,12 @@ impl ExecOutcome {
 /// Center (e.g. typing `gmail unread` after selecting the Gmail shortcut). It is
 /// substituted for `{query}` in the target.
 ///
-/// `prefer_chrome` and `default_profile` come from Command Center settings and
-/// only affect `OpenUrl`.
+/// `default_browser` comes from Command Center settings and only affects
+/// `OpenUrl`; a shortcut with its own `browser` overrides it.
 pub async fn execute_shortcut(
     shortcut: &Shortcut,
     query: &str,
-    prefer_chrome: bool,
-    default_profile: Option<&str>,
+    default_browser: &BrowserChoice,
 ) -> ExecOutcome {
     match shortcut.kind {
         ShortcutKind::ClipboardView => ExecOutcome {
@@ -81,11 +80,8 @@ pub async fn execute_shortcut(
             // URL targets get the query percent-encoded so it survives being
             // dropped into a query string.
             let url = substitute_query(&shortcut.target, &percent_encode(query));
-            let profile = shortcut
-                .chrome_profile_directory
-                .as_deref()
-                .or(default_profile);
-            open_url(&url, profile, prefer_chrome).await
+            let choice = shortcut.browser.as_ref().unwrap_or(default_browser);
+            open_url(&url, choice).await
         }
 
         ShortcutKind::OpenApp => {
@@ -134,38 +130,53 @@ pub async fn execute_shortcut(
 // URLs
 // ---------------------------------------------------------------------------
 
-/// Open a URL, optionally forcing it into a specific Chrome profile.
+/// Open a URL in the chosen browser and profile.
 ///
-/// When no profile is requested we hand the URL to the OS, which respects the
-/// user's default-browser choice. When a profile *is* requested we must invoke
-/// the Chromium binary directly: macOS `open -b … --args` silently drops the
-/// arguments if the browser is already running, which would send every link to
-/// whichever profile happened to be open.
-pub async fn open_url(url: &str, chrome_profile: Option<&str>, prefer_chrome: bool) -> ExecOutcome {
+/// A Chromium profile has to be launched via the *binary*, not the bundle id:
+/// macOS `open -b … --args` silently drops the arguments when the browser is
+/// already running, which would send every link to whichever profile happened
+/// to be open. Non-Chromium browsers have no such flag, so they go through the
+/// opener with their bundle id and the profile field is ignored.
+pub async fn open_url(url: &str, choice: &BrowserChoice) -> ExecOutcome {
     if !is_safe_url(url) {
         return ExecOutcome::err(format!(
             "Refusing to open \u{201c}{url}\u{201d}: only http and https URLs are allowed."
         ));
     }
 
-    let wants_chrome = prefer_chrome || chrome_profile.is_some();
-
-    if wants_chrome {
-        if let Some(bin) = find_chromium_binary() {
-            let mut cmd = Command::new(&bin);
-            if let Some(profile) = chrome_profile.filter(|p| !p.is_empty()) {
-                cmd.arg(format!("--profile-directory={profile}"));
-            }
-            cmd.arg(url);
-            detach(&mut cmd);
-            match cmd.spawn() {
-                Ok(_) => return ExecOutcome::ok(format!("Opened {url}")),
-                Err(e) => {
-                    log::warn!("chromium launch failed ({e}); falling back to the default browser");
+    // Every failure below falls through to the OS default browser rather than
+    // surfacing an error. A browser that was uninstalled since it was picked in
+    // Settings should still open your link.
+    if !choice.is_system_default() {
+        match browser::resolve(&choice.browser_id) {
+            Some(browser::Launch::Binary(bin)) => {
+                let mut cmd = Command::new(&bin);
+                if let Some(profile) = choice.profile.as_deref().filter(|p| !p.is_empty()) {
+                    cmd.arg(format!("--profile-directory={profile}"));
+                }
+                cmd.arg(url);
+                detach(&mut cmd);
+                match cmd.spawn() {
+                    Ok(_) => return ExecOutcome::ok(format!("Opened {url}")),
+                    Err(e) => log::warn!(
+                        "{} launch failed ({e}); falling back to the default browser",
+                        choice.browser_id
+                    ),
                 }
             }
-        } else if chrome_profile.is_some() {
-            log::warn!("a Chrome profile was requested but no Chromium binary was found");
+            Some(browser::Launch::Target(target)) => {
+                match tauri_plugin_opener::open_url(url, Some(target)) {
+                    Ok(()) => return ExecOutcome::ok(format!("Opened {url}")),
+                    Err(e) => log::warn!(
+                        "could not open {url} in {}: {e}; falling back to the default browser",
+                        choice.browser_id
+                    ),
+                }
+            }
+            None => log::warn!(
+                "browser \u{201c}{}\u{201d} is not installed; using the default browser",
+                choice.browser_id
+            ),
         }
     }
 
@@ -185,78 +196,48 @@ fn is_safe_url(url: &str) -> bool {
     lower.starts_with("http://") || lower.starts_with("https://")
 }
 
-/// Locate a Chromium-family executable to pass `--profile-directory` to.
-fn find_chromium_binary() -> Option<PathBuf> {
-    #[cfg(target_os = "macos")]
-    {
-        const APPS: &[&str] = &[
-            "Google Chrome",
-            "Google Chrome Beta",
-            "Chromium",
-            "Brave Browser",
-            "Microsoft Edge",
-            "Vivaldi",
-        ];
-        let roots = [
-            PathBuf::from("/Applications"),
-            dirs::home_dir()?.join("Applications"),
-        ];
-        for root in roots {
-            for app in APPS {
-                let p = root.join(format!("{app}.app/Contents/MacOS/{app}"));
-                if p.is_file() {
-                    return Some(p);
-                }
-            }
+/// Open one named pane of macOS System Settings.
+///
+/// An allow-list of four panes rather than a general
+/// `x-apple.systempreferences:` opener, precisely because [`is_safe_url`]
+/// refuses custom app-handler schemes for the reason documented above. The
+/// Learn tab needs to send you to the handful of places where macOS — not
+/// Caduceus — holds the switch; naming them here keeps that door exactly four
+/// panes wide, and the frontend never gets to supply a URL.
+#[cfg(target_os = "macos")]
+pub async fn open_settings_pane(pane: &str) -> ExecOutcome {
+    let url = match pane {
+        "keyboard-shortcuts" => {
+            "x-apple.systempreferences:com.apple.Keyboard-Settings.extension?Shortcuts"
         }
-        None
-    }
+        "microphone" => {
+            "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone"
+        }
+        "accessibility" => {
+            "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"
+        }
+        "login-items" => "x-apple.systempreferences:com.apple.LoginItems-Settings.extension",
+        other => {
+            return ExecOutcome::err(format!(
+                "Unknown System Settings pane \u{201c}{other}\u{201d}."
+            ))
+        }
+    };
 
-    #[cfg(target_os = "windows")]
-    {
-        const RELATIVE: &[&str] = &[
-            r"Google\Chrome\Application\chrome.exe",
-            r"BraveSoftware\Brave-Browser\Application\brave.exe",
-            r"Microsoft\Edge\Application\msedge.exe",
-        ];
-        let roots = [
-            std::env::var_os("PROGRAMFILES").map(PathBuf::from),
-            std::env::var_os("PROGRAMFILES(X86)").map(PathBuf::from),
-            std::env::var_os("LOCALAPPDATA").map(PathBuf::from),
-        ];
-        for root in roots.into_iter().flatten() {
-            for rel in RELATIVE {
-                let p = root.join(rel);
-                if p.is_file() {
-                    return Some(p);
-                }
-            }
-        }
-        None
-    }
-
-    #[cfg(all(unix, not(target_os = "macos")))]
-    {
-        const BINS: &[&str] = &[
-            "google-chrome",
-            "google-chrome-stable",
-            "chromium",
-            "chromium-browser",
-            "brave-browser",
-            "microsoft-edge",
-        ];
-        let path = std::env::var_os("PATH")?;
-        for dir in std::env::split_paths(&path) {
-            for bin in BINS {
-                let p = dir.join(bin);
-                if p.is_file() {
-                    return Some(p);
-                }
-            }
-        }
-        None
+    let mut cmd = Command::new("open");
+    cmd.arg(url);
+    detach(&mut cmd);
+    match cmd.spawn() {
+        Ok(_) => ExecOutcome::ok("Opened System Settings"),
+        Err(e) => ExecOutcome::err(format!("Could not open System Settings: {e}")),
     }
 }
+
+#[cfg(not(target_os = "macos"))]
+pub async fn open_settings_pane(_pane: &str) -> ExecOutcome {
+    ExecOutcome::err("System Settings panes exist only on macOS.")
+}
+
 
 // ---------------------------------------------------------------------------
 // Applications

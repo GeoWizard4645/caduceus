@@ -12,6 +12,17 @@
 // Shortcuts
 // ---------------------------------------------------------------------------
 
+/**
+ * Which browser a URL opens in.
+ *
+ * An empty `browserId` means the OS default browser. `profile` is a Chromium
+ * `--profile-directory` value and is ignored by browsers without one.
+ */
+export interface BrowserChoice {
+  browserId: string;
+  profile: string | null;
+}
+
 export type ShortcutKind =
   | "open_url"
   | "open_app"
@@ -27,7 +38,8 @@ export interface Shortcut {
   kind: ShortcutKind;
   target: string;
   args: string[];
-  chromeProfileDirectory: string | null;
+  /** Per-shortcut browser override; null uses the Command Center default. */
+  browser: BrowserChoice | null;
   showInStaff: boolean;
   orderIndex: number;
   keywords: string[];
@@ -59,6 +71,23 @@ export interface GeneralSettings {
   collapseIdleMs: number;
   launchAtLogin: boolean;
   cursorPollMs: number;
+  functionKeys: FunctionKeyBinding[];
+}
+
+export type FunctionKeyAction =
+  | "none"
+  | "toggle_staff"
+  | "command_center"
+  | "push_to_talk"
+  | "start_dictation"
+  | "voice_memo"
+  | "screenshot"
+  | "run_shortcut";
+
+export interface FunctionKeyBinding {
+  key: string;
+  action: FunctionKeyAction;
+  shortcutId: string;
 }
 
 export type PrefixAction =
@@ -77,15 +106,15 @@ export interface PrefixRule {
   description: string;
   action: PrefixAction;
   target: string;
-  chromeProfileDirectory: string | null;
+  /** Per-prefix browser override; null uses the Command Center default. */
+  browser: BrowserChoice | null;
   showHint: boolean;
 }
 
 export interface CommandCenterSettings {
   searchUrlTemplate: string;
   prefixes: PrefixRule[];
-  defaultChromeProfile: string | null;
-  preferChrome: boolean;
+  browser: BrowserChoice;
   historyLimit: number;
   closeOnAction: boolean;
   maxResultsPerSource: number;
@@ -195,17 +224,19 @@ export interface SttAvailability {
   detail: string;
 }
 
-export interface ChromeProfile {
+export interface BrowserProfile {
   directory: string;
   name: string;
   email: string | null;
 }
 
-export interface ChromeInstall {
+export interface BrowserInstall {
   id: string;
   displayName: string;
   launchTarget: string;
-  profiles: ChromeProfile[];
+  /** Whether `--profile-directory` is supported; false for Safari/Firefox. */
+  chromium: boolean;
+  profiles: BrowserProfile[];
 }
 
 export interface RuntimeInfo {
@@ -214,7 +245,7 @@ export interface RuntimeInfo {
   arch: string;
   keychainAvailable: boolean;
   sttBackends: SttAvailability[];
-  chromeInstalls: ChromeInstall[];
+  browsers: BrowserInstall[];
   clipboardEntries: number;
   clipboardBytes: number;
   backendsWithKeys: string[];
@@ -400,6 +431,7 @@ export const EVENTS = {
   commandCenterOpen: "caduceus://command-center-open",
   settingsTab: "caduceus://settings-tab",
   voiceState: "caduceus://voice-state",
+  voicePartial: "caduceus://voice-partial",
   voiceResult: "caduceus://voice-result",
   hotkeyProblems: "caduceus://hotkey-problems",
 } as const;
