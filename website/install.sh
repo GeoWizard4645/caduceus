@@ -57,6 +57,21 @@ say()  { echo "${bold}==>${reset} $*"; }
 warn() { echo "${red}==>${reset} $*" >&2; }
 die()  { warn "$*"; exit 1; }
 
+# Set by the download path and read by the EXIT trap. Leaving a disk image
+# mounted is worse than failing, so cleanup runs however the script ends —
+# including the die() paths between attach and detach.
+tmp_dir=""
+mount_point=""
+
+cleanup() {
+  if [ -n "$mount_point" ] && [ -d "$mount_point" ]; then
+    hdiutil detach "$mount_point" -quiet >/dev/null 2>&1 || true
+  fi
+  [ -z "$tmp_dir" ] || rm -rf "$tmp_dir"
+  # Never let cleanup itself decide the script's exit status.
+  return 0
+}
+
 # --- arguments --------------------------------------------------------------
 
 with=""
@@ -248,18 +263,36 @@ download_caduceus() {
   esac
 
   say "Looking up the latest release…"
-  local api="https://api.github.com/repos/${REPO}/releases/latest"
   local body dmgs dmg_url
 
-  # One API call, reused: rate limits on unauthenticated requests are tight
-  # enough that a retry loop here would be the thing that breaks the install.
-  body=$(curl -fsSL "$api" 2>/dev/null) || die "Could not reach the GitHub API for ${REPO}.
+  # /releases/latest is the stable channel: GitHub deliberately omits
+  # prereleases from it. While Caduceus is in beta that endpoint is empty, so
+  # fall back to the releases list, which is newest-first and does include
+  # them. Once a stable release exists it wins, and the fallback goes quiet —
+  # which is the ordering we want, not an accident of the beta.
+  body=$(curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest" 2>/dev/null) || body=""
+
+  # `|| true` matters: under `set -e` with pipefail, a grep that matches nothing
+  # fails the pipeline and takes the whole script down with it, silently.
+  dmgs=$(echo "$body" \
+    | grep -o '"browser_download_url": *"[^"]*\.dmg"' \
+    | cut -d'"' -f4 || true)
+
+  if [ -z "$dmgs" ]; then
+    say "No stable release yet — checking pre-releases…"
+    # Only the newest entry: without a JSON parser, assets from several releases
+    # would otherwise blur into one list and we could mix versions. Drafts are
+    # invisible to an unauthenticated caller, so the first entry is the newest
+    # thing a user can actually download.
+    body=$(curl -fsSL "https://api.github.com/repos/${REPO}/releases?per_page=1" 2>/dev/null) \
+      || die "Could not reach the GitHub API for ${REPO}.
 If you are offline or rate-limited, try again shortly — or compile it yourself:
   curl -fsSL https://vivaanshahani.com/caduceus/install.sh | bash -s -- --from-source"
 
-  dmgs=$(echo "$body" \
-    | grep -o '"browser_download_url": *"[^"]*\.dmg"' \
-    | cut -d'"' -f4)
+    dmgs=$(echo "$body" \
+      | grep -o '"browser_download_url": *"[^"]*\.dmg"' \
+      | cut -d'"' -f4 || true)
+  fi
 
   [ -n "$dmgs" ] && dmg_url=$(find_dmg "$dmgs" "$arch") || dmg_url=""
 
@@ -267,19 +300,15 @@ If you are offline or rate-limited, try again shortly — or compile it yourself
 Compile it yourself instead — same command, one extra flag:
   curl -fsSL https://vivaanshahani.com/caduceus/install.sh | bash -s -- --from-source"
 
-  local tmp
-  tmp=$(mktemp -d)
-  # Always clean up: leaving a mounted volume behind is worse than failing.
-  mount_point="$tmp/mnt"
-  cleanup() {
-    if [ -n "${mount_point:-}" ] && [ -d "${mount_point:-}" ]; then
-      hdiutil detach "$mount_point" -quiet >/dev/null 2>&1 || true
-    fi
-    rm -rf "$tmp"
-  }
+  # Deliberately not `local`: the EXIT trap fires after this function has
+  # returned, so a local here is out of scope by the time cleanup runs — which
+  # under `set -u` means the script dies with "unbound variable" *after*
+  # printing Done, and exits non-zero on a install that worked.
+  tmp_dir=$(mktemp -d)
+  mount_point="$tmp_dir/mnt"
   trap cleanup EXIT
 
-  local dmg="$tmp/caduceus.dmg"
+  local dmg="$tmp_dir/caduceus.dmg"
   say "Downloading $(basename "$dmg_url")…"
   curl -fSL --progress-bar "$dmg_url" -o "$dmg"
 
