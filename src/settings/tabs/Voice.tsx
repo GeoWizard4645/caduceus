@@ -43,20 +43,20 @@ export function VoiceTab({ draft, info }: { draft: Draft; info: RuntimeInfo | nu
   return (
     <>
       <Section
-        title="Push to talk"
-        description="Hold the key, speak, release. On macOS, Apple's speech engine shows a live transcript in the Command Center while you hold the key."
+        title="Dictation"
+        description="Live transcription through macOS: AVAudioEngine captures your voice locally; Apple's Speech framework turns it into text in the Command Center. ScreenCaptureKit is used for system audio when you record the screen — not during ordinary dictation."
       >
         <Toggle
           label="Enable voice input"
-          hint="On by default. Transcription uses Apple's on-device recogniser, and the microphone only opens while you hold the key."
+          hint="On by default. No dictation button — press F1 or double-click the staff to start and stop. macOS Microphone permission is requested the first time you dictate."
           checked={voice.enabled}
           onChange={(checked) => draft.update((d) => (d.voice.enabled = checked))}
         />
 
         <div className="mt-4 grid grid-cols-2 gap-5">
           <Field
-            label="Push-to-talk key"
-            hint="Hold to record, release to transcribe. Uses Apple's on-device speech recognition (same family as macOS Dictation). Grant Microphone and Speech Recognition when prompted."
+            label="Push-to-talk key (hold)"
+            hint="Optional: hold this key instead of tap-to-toggle. Same AVAudioEngine + Speech stack as F1."
           >
             <HotkeyInput
               value={voice.pushToTalkHotkey}
@@ -82,6 +82,17 @@ export function VoiceTab({ draft, info }: { draft: Draft; info: RuntimeInfo | nu
             checked={voice.autoSubmit}
             onChange={(checked) => draft.update((d) => (d.voice.autoSubmit = checked))}
           />
+        </div>
+
+        <div className="mt-4">
+          <Callout tone="info" title="Starting dictation">
+            <p className="text-[13px] leading-relaxed text-ink-mute">
+              Press <strong className="font-medium text-ink-soft">F1</strong> or{" "}
+              <strong className="font-medium text-ink-soft">double-click the staff</strong> to toggle
+              recording (tap again to stop). Or hold your push-to-talk key. Grant Microphone and Speech
+              Recognition in System Settings if macOS prompts you.
+            </p>
+          </Callout>
         </div>
 
         <div className="mt-4">

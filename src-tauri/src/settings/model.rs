@@ -144,7 +144,7 @@ pub enum FunctionKeyAction {
     CommandCenter,
     /// Same hold-to-record behaviour as Voice → push-to-talk.
     PushToTalk,
-    /// Open the Command Center and start Caduceus dictation (one press).
+    /// Tap again (or press F1) to stop. Uses AVAudioEngine + on-device Speech on macOS.
     StartDictation,
     /// Open Voice Memos and start a new recording (macOS only).
     VoiceMemo,
@@ -157,7 +157,9 @@ pub fn default_function_key_bindings() -> Vec<FunctionKeyBinding> {
         .iter()
         .map(|label| FunctionKeyBinding {
             key: (*label).into(),
-            action: if *label == "F3" {
+            action: if *label == "F1" {
+                FunctionKeyAction::StartDictation
+            } else if *label == "F3" {
                 FunctionKeyAction::VoiceMemo
             } else {
                 FunctionKeyAction::None
@@ -653,13 +655,13 @@ impl Default for ClipboardSettings {
 // Appearance
 // ---------------------------------------------------------------------------
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(default, rename_all = "camelCase")]
 pub struct AppearanceSettings {
     pub theme: Theme,
     /// Accent colour as `#rrggbb`. Drives `--c-accent` in the frontend.
     pub accent: String,
-    /// Height of the caduceus mark in logical pixels (36–120).
+    /// Height of the caduceus mark in logical pixels (28–160).
     ///
     /// This is a *height*, not a diameter: the mark is tall and narrow, so it
     /// needs noticeably more of it than a circle would to carry the same
@@ -676,6 +678,8 @@ pub struct AppearanceSettings {
     pub reduce_transparency: bool,
     /// Draw the slow "breathing" animation on the idle staff.
     pub staff_idle_animation: bool,
+    /// Built-in caduceus pixel mark when empty; `image:staff-mark.png` after upload.
+    pub staff_mark_icon: String,
 }
 
 impl Default for AppearanceSettings {
@@ -689,6 +693,7 @@ impl Default for AppearanceSettings {
             staff_idle_opacity: 0.9,
             reduce_transparency: false,
             staff_idle_animation: true,
+            staff_mark_icon: String::new(),
         }
     }
 }

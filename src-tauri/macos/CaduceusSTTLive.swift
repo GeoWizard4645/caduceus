@@ -1,5 +1,6 @@
-// Live push-to-talk using the same stack macOS Dictation uses: AVAudioEngine
-// feeds Apple's Speech framework with partial results on stdout.
+// Live dictation: AVAudioEngine captures the microphone locally; Speech delivers
+// partial/final text on stdout. (ScreenCaptureKit is used for screen recordings
+// with system audio — see capture/mod.rs — not for this path.)
 //
 // Protocol (stdout, tab-separated):
 //   ready

@@ -146,7 +146,7 @@ fn migrate(s: &mut Settings) {
     s.general.cursor_poll_ms = s.general.cursor_poll_ms.clamp(8, 500);
     s.clipboard.poll_interval_ms = s.clipboard.poll_interval_ms.clamp(100, 10_000);
     s.clipboard.max_items = s.clipboard.max_items.clamp(10, 100_000);
-    s.appearance.staff_size = s.appearance.staff_size.clamp(36, 120);
+    s.appearance.staff_size = s.appearance.staff_size.clamp(28, 160);
     s.appearance.popout_radius = s.appearance.popout_radius.clamp(56, 132);
     s.appearance.popout_icon_size = s.appearance.popout_icon_size.clamp(24, 52);
     s.appearance.staff_idle_opacity = s.appearance.staff_idle_opacity.clamp(0.15, 1.0);
@@ -154,6 +154,13 @@ fn migrate(s: &mut Settings) {
 
     // Claude should open the desktop app, not the website.
     for shortcut in &mut s.shortcuts {
+        if shortcut.id == "sc-dictation"
+            || shortcut.label.eq_ignore_ascii_case("dictation")
+            || shortcut.label.eq_ignore_ascii_case("dictation app")
+        {
+            shortcut.hidden = true;
+            shortcut.show_in_staff = false;
+        }
         if shortcut.id == "sc-claude"
             && (shortcut.target == "https://claude.ai"
                 || shortcut.target.starts_with("https://claude.ai/"))

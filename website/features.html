@@ -12,7 +12,7 @@
   try {
     var t = localStorage.getItem(k);
     if (t !== "light" && t !== "dark") {
-      t = window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+      t = "dark";
     }
     document.documentElement.setAttribute("data-theme", t);
   } catch {
@@ -80,8 +80,8 @@
 <body>
 
 <button type="button" class="theme-toggle" id="theme-toggle" aria-label="Switch to light mode">
-  <span class="icon-dark" aria-hidden="true">☾</span>
-  <span class="icon-light" aria-hidden="true">☀</span>
+  <span class="theme-seg theme-seg-sun" aria-hidden="true">☀</span>
+  <span class="theme-seg theme-seg-moon" aria-hidden="true">☾</span>
 </button>
 
 <a class="portfolio-back" href="https://vivaanshahani.com/" rel="noopener">
@@ -107,6 +107,7 @@
         <h3>Menu bar presence</h3>
         <ul>
           <li>Lives in the menu bar (no Dock icon)</li>
+          <li>Open from Spotlight or Applications like any app — search <strong>Caduceus</strong></li>
           <li>Show or hide the floating staff from the tray</li>
           <li>Quit, open Settings, open Command Center from the tray</li>
           <li>Optional launch at login</li>
@@ -116,7 +117,7 @@
         <h3>Settings window</h3>
         <ul>
           <li>General, Appearance, Shortcuts, Command Center, Clipboard, Voice, AI, Learn tabs</li>
-          <li>Live preview of staff size, colours, and idle opacity</li>
+          <li>Live preview of staff size, custom mark, colours, and idle opacity</li>
           <li>Validate and rebind global hotkeys without restart</li>
           <li>Reset to factory defaults</li>
         </ul>
@@ -131,6 +132,8 @@
         <h3>Interaction</h3>
         <ul>
           <li>Always-on-top pixel caduceus on a click-through window</li>
+          <li>Stays visible over other apps’ full-screen mode (MacParakeet-style)</li>
+          <li>Resizable staff (28–160 px) and optional custom pixel-art upload</li>
           <li>Hover to fan out up to six shortcut icons (configurable order)</li>
           <li>Click the staff to open the Command Center</li>
           <li>Right-click for Settings</li>
@@ -218,14 +221,14 @@
     <h2>Voice &amp; dictation</h2>
     <ul class="feat-list">
       <li>
-        <h3>Push-to-talk</h3>
+        <h3>Dictation</h3>
         <ul>
-          <li><kbd>Alt+Shift+V</kbd> hold to talk, release to finish (rebindable)</li>
-          <li>No wake word — microphone only while the key is held</li>
-          <li>Opens Command Center automatically while listening</li>
-          <li><strong>Live transcript</strong> updates in the palette as you speak (macOS system recogniser)</li>
-          <li>On-device Apple Speech when using the System backend</li>
-          <li>Optional HTTP Whisper-compatible endpoint instead</li>
+          <li><kbd>F1</kbd> or <strong>double-click the staff</strong> — tap again to stop (no dictation button in the UI)</li>
+          <li><kbd>Alt+Shift+V</kbd> hold-to-talk alternative (rebindable)</li>
+          <li>Microphone via <strong>AVAudioEngine</strong> at the macOS audio layer; standard Microphone privacy prompt on first use</li>
+          <li>On-device <strong>Speech Recognition</strong> for live text in the Command Center</li>
+          <li><strong>ScreenCaptureKit</strong> for system audio on screen recordings (palette capture), not during dictation</li>
+          <li>No wake word — mic is only active while you are dictating</li>
           <li>Keyword routing after transcription (search, AI, computer use, clipboard, insert-only)</li>
           <li>Optional auto-submit vs. wait for Enter</li>
           <li>Maximum recording length safety cap</li>

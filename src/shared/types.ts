@@ -200,6 +200,7 @@ export interface AppearanceSettings {
   staffIdleOpacity: number;
   reduceTransparency: boolean;
   staffIdleAnimation: boolean;
+  staffMarkIcon: string;
 }
 
 export interface Settings {

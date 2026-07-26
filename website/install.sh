@@ -11,12 +11,17 @@
 #
 #   ... | bash -s -- --with=caduceus,hermes,ollama \
 #                    --pull=qwen3.5:4b,qwen2.5vl:7b \
-#                    --ai=qwen3.5:4b --computer-use=qwen2.5vl:7b
+#                    --ai=qwen3.5:4b --hermes-model=qwen2.5vl:7b
 #
-#   --with=a,b,c        components to install: caduceus, hermes, ollama
-#   --pull=x,y          Ollama models to pull (implies ollama)
-#   --ai=MODEL          wire MODEL to the `/` prefix
-#   --computer-use=MODEL  wire MODEL to the `/c` prefix
+#   --with=a,b,c          components: deps, caduceus, hermes, ollama
+#                         "deps" = Xcode Command Line Tools + python3, and is
+#                         added automatically whenever hermes or ollama is asked
+#                         for, since neither works without them
+#   --pull=x,y            Ollama models to pull (implies ollama)
+#   --ai=MODEL            wire MODEL to Caduceus `/` via localhost:11434/v1
+#   --hermes-model=MODEL  point Hermes at MODEL on Ollama, enable computer_use,
+#                         set Caduceus `/c` to Hermes (implies hermes)
+#   --computer-use=MODEL  legacy: wire MODEL to `/c` as a vision backend (no Hermes)
 #
 # Everything it does is visible below — read it before running it, as you should
 # with any script piped into a shell.
@@ -45,17 +50,22 @@ with=""
 pull=""
 ai_model=""
 cu_model=""
+hermes_model=""
 
 for arg in "$@"; do
   case "$arg" in
-    --with=*)         with="${arg#*=}" ;;
-    --pull=*)         pull="${arg#*=}" ;;
-    --ai=*)           ai_model="${arg#*=}" ;;
-    --computer-use=*) cu_model="${arg#*=}" ;;
-    -h|--help)        sed -n '3,22p' "$0" 2>/dev/null || true; exit 0 ;;
+    --with=*)           with="${arg#*=}" ;;
+    --pull=*)           pull="${arg#*=}" ;;
+    --ai=*)             ai_model="${arg#*=}" ;;
+    --computer-use=*)   cu_model="${arg#*=}" ;;
+    --hermes-model=*)   hermes_model="${arg#*=}" ;;
+    -h|--help)          sed -n '3,27p' "$0" 2>/dev/null || true; exit 0 ;;
     *) die "Unknown option: $arg" ;;
   esac
 done
+
+# Hermes-backed screen control needs the agent installed.
+[ -z "$hermes_model" ] || case ",$with," in *,hermes,*) ;; *) with="$with,hermes" ;; esac
 
 # No --with at all means the plain one-liner, whose contract is "install the app".
 [ -n "$with" ] || with="caduceus"
@@ -65,6 +75,13 @@ done
 
 wants() { case ",$with," in *",$1,"*) return 0 ;; *) return 1 ;; esac; }
 
+# Ollama and Hermes both need a working toolchain, and wiring Caduceus's config
+# needs python3. Implied rather than optional: a run that installs either one
+# without them fails partway through, which is worse than taking a minute here.
+if wants ollama || wants hermes; then
+  case ",$with," in *,deps,*) ;; *) with="deps,$with" ;; esac
+fi
+
 # --- preflight --------------------------------------------------------------
 
 [ "$(uname -s)" = "Darwin" ] || die "Caduceus is macOS-only. This looks like $(uname -s)."
@@ -73,6 +90,43 @@ major=$(sw_vers -productVersion | cut -d. -f1)
 [ "$major" -ge 11 ] || die "Caduceus needs macOS 11 or newer (found $(sw_vers -productVersion))."
 
 command -v curl >/dev/null || die "curl is required."
+
+# --- required tools ---------------------------------------------------------
+#
+# The Xcode Command Line Tools are the one package that covers everything the
+# rest of this script leans on: python3 (used to write Caduceus's settings),
+# git, and a compiler for anything Hermes builds from source. Installing them
+# is a GUI flow Apple owns — `xcode-select --install` opens a window and returns
+# immediately — so this polls rather than assuming it finished.
+
+install_deps() {
+  if xcode-select -p >/dev/null 2>&1; then
+    say "Xcode Command Line Tools are already installed."
+  else
+    say "Installing the Xcode Command Line Tools (~1.5 GB)…"
+    warn "Apple's installer window will open. Accept it, then leave this running."
+    xcode-select --install >/dev/null 2>&1 || true
+
+    local waited=0
+    until xcode-select -p >/dev/null 2>&1; do
+      sleep 5
+      waited=$((waited + 5))
+      if [ "$waited" -ge 1800 ]; then
+        die "Timed out waiting for the Command Line Tools.
+Finish that installer (or run: xcode-select --install), then re-run this command — it picks up where it left off."
+      fi
+    done
+    say "Command Line Tools installed."
+  fi
+
+  # Belt and braces: some machines report a valid developer dir but have no
+  # usable python3, and finding that out during configure_models is too late.
+  if ! command -v python3 >/dev/null 2>&1; then
+    die "python3 is still missing after installing the Command Line Tools.
+Install it any way you like (e.g. brew install python), then re-run this command."
+  fi
+  say "python3 is available ($(python3 --version 2>&1))."
+}
 
 # --- Caduceus ---------------------------------------------------------------
 
@@ -195,6 +249,29 @@ install_hermes() {
   fi
 }
 
+configure_hermes() {
+  [ -n "$hermes_model" ] || return 0
+  command -v hermes >/dev/null 2>&1 || {
+    warn "Hermes is not on PATH — skipping Hermes model and computer_use setup."
+    return 0
+  }
+
+  say "Pointing Hermes at Ollama (${hermes_model})…"
+  hermes config set model.provider custom 2>/dev/null || \
+    warn "Could not set Hermes provider — run \`hermes model\` manually."
+  hermes config set model.base_url "$OLLAMA_URL" 2>/dev/null || true
+  hermes config set model.default "$hermes_model" 2>/dev/null || \
+    warn "Could not set Hermes model — run \`hermes model\` manually."
+
+  say "Enabling Hermes computer_use…"
+  hermes tools enable computer_use 2>/dev/null || \
+    warn "Could not enable computer_use — run \`hermes tools enable computer_use\`."
+
+  say "Installing the Hermes screen-control driver (may prompt for permissions)…"
+  hermes computer-use install 2>/dev/null || \
+    warn "Screen driver install had issues — try \`hermes computer-use doctor\` after granting Accessibility and Screen Recording."
+}
+
 # --- wiring the models into Caduceus ----------------------------------------
 #
 # Caduceus keeps its config as one JSON blob under "settings" in
@@ -205,29 +282,35 @@ install_hermes() {
 # with sed.
 
 configure_models() {
-  [ -n "$ai_model$cu_model" ] || return 0
+  [ -n "$ai_model$cu_model$hermes_model" ] || return 0
 
   local cfg="$HOME/Library/Application Support/${BUNDLE_ID}/caduceus-settings.json"
 
+  # install_deps guarantees this whenever Ollama or Hermes is in play, so
+  # reaching here without it means someone passed --ai with neither. Fail rather
+  # than report success over a config that was never written.
   if ! command -v python3 >/dev/null 2>&1; then
-    warn "python3 not found, so the models were not wired up automatically."
-    warn "In Caduceus: Settings → AI → add an OpenAI-compatible backend at ${OLLAMA_URL}."
-    return 0
+    die "python3 is required to wire the models into Caduceus, and it is not installed.
+Re-run with --with=deps to install it, or add the backend by hand:
+Settings → AI → new OpenAI-compatible backend at ${OLLAMA_URL}."
   fi
 
-  say "Wiring the models into Caduceus…"
-  AI_MODEL="$ai_model" CU_MODEL="$cu_model" CFG="$cfg" BASE_URL="$OLLAMA_URL" python3 <<'PY'
+  say "Wiring models into Caduceus…"
+  use_hermes_cu=0
+  [ -n "$hermes_model" ] && use_hermes_cu=1
+
+  AI_MODEL="$ai_model" CU_MODEL="$cu_model" USE_HERMES_CU="$use_hermes_cu" \
+    CFG="$cfg" BASE_URL="$OLLAMA_URL" python3 <<'PY'
 import json, os, pathlib
 
 cfg = pathlib.Path(os.environ["CFG"])
 ai, cu, base = os.environ["AI_MODEL"], os.environ["CU_MODEL"], os.environ["BASE_URL"]
+use_hermes = os.environ.get("USE_HERMES_CU") == "1"
 
 cfg.parent.mkdir(parents=True, exist_ok=True)
 try:
     store = json.loads(cfg.read_text())
 except (OSError, ValueError):
-    # A fresh install has not written settings yet; the app fills in every
-    # other field from its own defaults when it first loads this.
     store = {}
 
 settings = store.setdefault("settings", {})
@@ -235,7 +318,29 @@ agents = settings.setdefault("agents", {})
 backends = agents.setdefault("backends", [])
 
 
-def upsert(backend_id, name, model, computer_use):
+def ensure_hermes():
+    for entry in backends:
+        if entry.get("id") == "hermes":
+            entry.update({
+                "displayName": "Hermes Agent",
+                "kind": "hermes",
+                "supportsComputerUse": True,
+            })
+            return
+    backends.insert(0, {
+        "id": "hermes",
+        "displayName": "Hermes Agent",
+        "kind": "hermes",
+        "baseUrl": "",
+        "model": "",
+        "hasApiKey": False,
+        "supportsComputerUse": True,
+        "maxTokens": 4096,
+        "timeoutSecs": 600,
+    })
+
+
+def upsert_ollama(backend_id, name, model, computer_use):
     for b in backends:
         if b.get("id") == backend_id:
             entry = b
@@ -248,18 +353,24 @@ def upsert(backend_id, name, model, computer_use):
         "kind": "openai_compatible",
         "baseUrl": base,
         "model": model,
-        # Ollama ignores the key entirely, but the OpenAI-compatible client
-        # still sends the header, so there is nothing to store in the keychain.
         "hasApiKey": False,
         "supportsComputerUse": computer_use,
+        "maxTokens": 4096,
+        "timeoutSecs": 600,
     })
     return backend_id
 
 
 if ai:
-    agents["primaryBackendId"] = upsert("ollama-chat", f"Ollama — {ai}", ai, False)
-if cu:
-    agents["computerUseBackendId"] = upsert("ollama-vision", f"Ollama — {cu}", cu, True)
+    agents["primaryBackendId"] = upsert_ollama("ollama-chat", f"Ollama — {ai}", ai, False)
+
+if use_hermes:
+    ensure_hermes()
+    agents["computerUseBackendId"] = "hermes"
+elif cu:
+    agents["computerUseBackendId"] = upsert_ollama(
+        "ollama-vision", f"Ollama — {cu}", cu, True
+    )
 
 cfg.write_text(json.dumps(store, indent=2))
 print(f"  wrote {cfg}")
@@ -268,10 +379,12 @@ PY
 
 # --- run --------------------------------------------------------------------
 
+wants deps     && install_deps
 wants caduceus && install_caduceus
 wants ollama   && install_ollama
 [ -z "$pull" ] || pull_models
 wants hermes   && install_hermes
+configure_hermes
 configure_models
 
 if wants caduceus; then
@@ -293,11 +406,12 @@ ${green}${bold}Done.${reset}
 
 EOF
 
-if [ -n "$ai_model" ] || [ -n "$cu_model" ]; then
+if [ -n "$ai_model" ] || [ -n "$cu_model" ] || [ -n "$hermes_model" ]; then
   cat <<EOF
 ${dim}Wired up:${reset}
-${ai_model:+  ${bold}/${reset}   $ai_model
-}${cu_model:+  ${bold}/c${reset}  $cu_model
+${ai_model:+  ${bold}/${reset}   Ollama · ${OLLAMA_URL} · ${ai_model}
+}${hermes_model:+  ${bold}/c${reset}  Hermes computer_use · Ollama · ${hermes_model}
+}${cu_model:+  ${bold}/c${reset}  Ollama vision · ${cu_model}
 }
 ${dim}Restart Caduceus if it was already running when this finished.${reset}
 

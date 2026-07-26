@@ -189,6 +189,28 @@ pub fn handle<R: Runtime>(app: &AppHandle<R>, shortcut: &Shortcut, event_state: 
     }
 }
 
+/// Tap-to-toggle dictation: F1, double-click the staff, etc. Hold-to-talk uses
+/// [`start_push_to_talk`] / [`stop_push_to_talk`] instead.
+pub fn toggle_dictation<R: Runtime>(app: &AppHandle<R>, settings: &SettingsManager) {
+    if !settings.with(|s| s.voice.enabled) {
+        use tauri::Emitter;
+        let _ = app.emit(
+            voice::VOICE_RESULT_EVENT,
+            VoiceOutcome::error("Voice is off. Turn it on in Settings → Voice."),
+        );
+        return;
+    }
+
+    let Some(runtime) = app.try_state::<voice::VoiceRuntime>() else {
+        return;
+    };
+    if runtime.is_recording() {
+        stop_push_to_talk(app, settings);
+    } else {
+        start_push_to_talk(app, settings);
+    }
+}
+
 /// Start push-to-talk / dictation capture (shared by the PTT hotkey and function keys).
 pub fn start_push_to_talk<R: Runtime>(app: &AppHandle<R>, settings: &SettingsManager) {
     use tauri::Emitter;

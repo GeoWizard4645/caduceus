@@ -17,7 +17,7 @@
   try {
     var t = localStorage.getItem(k);
     if (t !== "light" && t !== "dark") {
-      t = window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+      t = "dark";
     }
     document.documentElement.setAttribute("data-theme", t);
   } catch {
@@ -161,6 +161,17 @@
 
   .cmd code .prompt { color: var(--ink-faint); user-select: none; }
 
+  .cmd-meta {
+    max-width: 660px;
+    margin: 8px auto 0;
+    font-size: 0.78rem;
+    line-height: 1.45;
+    color: var(--ink-faint);
+    text-align: left;
+  }
+
+  .cmd-meta strong { color: var(--ink-mute); font-weight: 600; }
+
   button.copy {
     flex-shrink: 0;
     border: 1px solid var(--line);
@@ -252,7 +263,27 @@
 
   ul.opts .detail { color: var(--ink-faint); font-size: 0.82rem; }
 
+  ul.opts .info {
+    display: block;
+    margin-top: 3px;
+    color: var(--ink-faint);
+    font-size: 0.78rem;
+    line-height: 1.5;
+  }
+
   ul.opts label.locked { opacity: 0.72; cursor: default; }
+
+  ul.opts label.required .name::after {
+    content: "required";
+    margin-left: 7px;
+    padding: 1px 6px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    font-size: 0.68rem;
+    font-weight: 500;
+    color: var(--ink-faint);
+    vertical-align: 1px;
+  }
 
   .opts-note { margin: 12px 0 0; font-size: 0.8rem; color: var(--ink-faint); min-height: 1.2em; }
 
@@ -401,8 +432,8 @@
 <body>
 
 <button type="button" class="theme-toggle" id="theme-toggle" aria-label="Switch to light mode">
-  <span class="icon-dark" aria-hidden="true">☾</span>
-  <span class="icon-light" aria-hidden="true">☀</span>
+  <span class="theme-seg theme-seg-sun" aria-hidden="true">☀</span>
+  <span class="theme-seg theme-seg-moon" aria-hidden="true">☾</span>
 </button>
 
 <a class="portfolio-back" href="https://vivaanshahani.com/" rel="noopener">
@@ -434,6 +465,10 @@
         <code id="cmd"><span class="prompt">$ </span>curl -fsSL https://vivaanshahani.com/caduceus/install.sh | bash</code>
         <button class="copy" id="copy" type="button">Copy</button>
       </div>
+      <p class="cmd-meta" id="cmd-meta">
+        <strong>~5 MB</strong> download · <strong>~10 s</strong> on a fast connection ·
+        <strong>Idempotent</strong> — safe to run again; skips the app if it is already installed.
+      </p>
 
       <p class="alt">
         or <a href="https://github.com/GeoWizard4645/caduceus/releases/latest">download the .dmg</a>
@@ -453,9 +488,11 @@
         <summary>Or install the fully configured package</summary>
         <div class="bundle-body">
           <p>
-            One command that installs everything and wires the models straight into
-            Caduceus &mdash; <code>/</code> answers from the chat model, <code>/c</code>
-            drives your screen with the vision one. Untick anything you already have.
+            One <strong>idempotent</strong> command: installs Caduceus, Ollama, Hermes Agent,
+            pulls the models, points <code>/</code> at your local chat model over
+            <code>http://localhost:11434/v1</code>, and wires <code>/c</code> to Hermes
+            <code>computer_use</code> (screen driver + vision model). Untick anything you
+            already have.
           </p>
 
           <ul class="opts" id="opts"></ul>
@@ -465,6 +502,7 @@
             <button class="copy" id="bundle-copy" type="button">Copy</button>
           </div>
 
+          <p class="cmd-meta" id="bundle-meta"></p>
           <p class="opts-note" id="opts-note"></p>
         </div>
       </details>
@@ -591,6 +629,11 @@
       <code id="cmd2"><span class="prompt">$ </span>curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash &amp;&amp; hermes setup --portal</code>
       <button class="copy" id="copy2" type="button">Copy</button>
     </div>
+    <p class="cmd-meta">
+      <strong>~150 MB</strong> · <strong>~2–5 min</strong> ·
+      <strong>Idempotent</strong> — re-running skips an existing Hermes install.
+      Use only if you are <em>not</em> using the full bundle above (which configures Hermes for local Ollama automatically).
+    </p>
 
     <div class="note">
       <strong>Optional.</strong> Shortcuts, the launcher, the calculator,
@@ -617,18 +660,50 @@
   //
   // Every tag lives in this one array so correcting a model name is a one-line
   // change. `role` is what the installer wires the model into: "ai" backs the
-  // `/` prefix, "computerUse" backs `/c`.
+  // `/` prefix, "hermesModel" is the Ollama tag Hermes uses (vision for /c).
+  const DOWNLOAD_EST = {
+    // The Command Line Tools are ~1.5 GB, but nearly every machine that gets
+    // this far already has them, so counting them in the total would overstate
+    // it for almost everyone. Called out in the checkbox's own info line instead.
+    deps: { sizeMB: 0, size: "0", time: "~0–10 min" },
+    caduceus: { sizeMB: 5, size: "~5 MB", time: "~10 s" },
+    hermes: { sizeMB: 150, size: "~150 MB", time: "~2–5 min" },
+    ollama: { sizeMB: 80, size: "~80 MB", time: "~1 min" },
+    "qwen3.5:4b": { sizeMB: 3400, size: "~3.4 GB", time: "~5–20 min" },
+    "qwen2.5vl:7b": { sizeMB: 6000, size: "~6 GB", time: "~10–35 min" },
+    "gemma3:4b": { sizeMB: 3300, size: "~3.3 GB", time: "~5–20 min" },
+  };
+
   const PARTS = [
+    {
+      id: "deps",
+      kind: "dependency",
+      name: "Required tools",
+      detail: "Xcode Command Line Tools + python3",
+      info:
+        "Ollama and Hermes Agent both need these, and the installer uses python3 to write " +
+        "Caduceus's config. Skipped entirely if you already have them; a first-time Command " +
+        "Line Tools download is ~1.5 GB and opens Apple's own installer window.",
+      on: true,
+    },
     { id: "caduceus", kind: "component", name: "Caduceus", detail: "the app itself", on: true },
-    { id: "hermes", kind: "component", name: "Hermes Agent", detail: "the agent runtime behind /c", on: true },
-    { id: "ollama", kind: "component", name: "Ollama", detail: "runs the models locally", on: true },
-    { id: "qwen3.5:4b", kind: "model", role: "ai", name: "qwen3.5:4b", detail: "answers / in the Command Center", on: true },
-    { id: "qwen2.5vl:7b", kind: "model", role: "computerUse", name: "qwen2.5vl:7b", detail: "vision model, drives /c", on: true },
+    { id: "hermes", kind: "component", name: "Hermes Agent", detail: "computer_use for /c", on: true },
+    { id: "ollama", kind: "component", name: "Ollama", detail: "local OpenAI API on :11434", on: true },
+    { id: "qwen3.5:4b", kind: "model", role: "ai", name: "qwen3.5:4b", detail: "Caduceus / via localhost API", on: true },
+    {
+      id: "qwen2.5vl:7b",
+      kind: "model",
+      role: "hermesModel",
+      name: "qwen2.5vl:7b",
+      detail: "Hermes agent + screen control",
+      on: true,
+    },
     { id: "gemma3:4b", kind: "model", name: "gemma3:4b", detail: "optional extra (~131k context)", on: false },
   ];
 
   const optsList = document.getElementById("opts");
   const bundleCode = document.getElementById("bundle-cmd");
+  const bundleMeta = document.getElementById("bundle-meta");
   const optsNote = document.getElementById("opts-note");
 
   if (optsList && bundleCode) {
@@ -644,9 +719,10 @@
 
       const text = document.createElement("span");
       text.innerHTML =
-        '<span class="name"></span> <span class="detail"></span>';
+        '<span class="name"></span> <span class="detail"></span><span class="info"></span>';
       text.querySelector(".name").textContent = part.name;
       text.querySelector(".detail").textContent = "\u2014 " + part.detail;
+      if (part.info) text.querySelector(".info").textContent = part.info;
 
       label.append(box, text);
       li.append(label);
@@ -654,6 +730,30 @@
     }
 
     const boxFor = (id) => optsList.querySelector(`input[data-id="${CSS.escape(id)}"]`);
+
+    const formatTotalSize = (mb) => {
+      if (mb >= 1000) return `~${(mb / 1000).toFixed(1).replace(/\.0$/, "")} GB`;
+      return `~${Math.round(mb)} MB`;
+    };
+
+    const estimateBundle = (items) => {
+      let mb = 0;
+      let minM = 0;
+      let maxM = 0;
+      for (const item of items) {
+        const est = DOWNLOAD_EST[item.id];
+        if (!est) continue;
+        mb += est.sizeMB;
+        const band = est.time.match(/(\d+)(?:–(\d+))?/);
+        if (band) {
+          minM += Number(band[1]);
+          maxM += Number(band[2] || band[1]);
+        }
+      }
+      const time =
+        maxM > minM ? `~${minM}–${maxM} min` : minM ? `~${minM} min` : "varies";
+      return { size: formatTotalSize(mb), time };
+    };
 
     const render = () => {
       const picked = (kind) =>
@@ -663,30 +763,59 @@
       // rather than silently emitting a command that would fail at the pull.
       const models = picked("model");
       const ollamaBox = boxFor("ollama");
-      const forced = models.length > 0;
-      if (forced) ollamaBox.checked = true;
-      ollamaBox.disabled = forced;
-      optsList.querySelector('label[data-for="ollama"]').classList.toggle("locked", forced);
+      const hermesBox = boxFor("hermes");
+      const forcedOllama = models.length > 0;
+      if (forcedOllama) ollamaBox.checked = true;
+      ollamaBox.disabled = forcedOllama;
+      optsList.querySelector('label[data-for="ollama"]').classList.toggle("locked", forcedOllama);
 
-      const components = picked("component");
+      const needsHermes = models.some((p) => p.role === "hermesModel");
+      if (needsHermes) hermesBox.checked = true;
+      hermesBox.disabled = needsHermes;
+      optsList.querySelector('label[data-for="hermes"]').classList.toggle("locked", needsHermes);
+
+      // Ollama and Hermes both need the toolchain, and configure_models needs
+      // python3 to edit the settings JSON. Not optional once either is in play:
+      // ticked, locked, and badged rather than left as a trap to discover at
+      // the point the install fails.
+      const depsBox = boxFor("deps");
+      const needsDeps = ollamaBox.checked || hermesBox.checked;
+      const depsLabel = optsList.querySelector('label[data-for="deps"]');
+      if (needsDeps) depsBox.checked = true;
+      depsBox.disabled = needsDeps;
+      depsLabel.classList.toggle("locked", needsDeps);
+      depsLabel.classList.toggle("required", needsDeps);
+
+      const components = [...picked("dependency"), ...picked("component")];
       const parts = ["curl -fsSL https://vivaanshahani.com/caduceus/install.sh | bash -s --"];
       if (components.length) parts.push("--with=" + components.map((p) => p.id).join(","));
       if (models.length) parts.push("--pull=" + models.map((p) => p.id).join(","));
 
       const ai = models.find((p) => p.role === "ai");
-      const cu = models.find((p) => p.role === "computerUse");
+      const hm = models.find((p) => p.role === "hermesModel");
       if (ai) parts.push("--ai=" + ai.id);
-      if (cu) parts.push("--computer-use=" + cu.id);
+      if (hm) parts.push("--hermes-model=" + hm.id);
 
       const nothing = !components.length && !models.length;
       bundleCode.innerHTML = '<span class="prompt">$ </span>';
       bundleCode.append(nothing ? "# nothing selected" : parts.join(" "));
 
+      const selected = [...components, ...models];
+      const totals = estimateBundle(selected);
+      if (bundleMeta) {
+        bundleMeta.innerHTML = nothing
+          ? ""
+          : `<strong>${totals.size}</strong> total download (approx.) · <strong>${totals.time}</strong> · ` +
+            "<strong>Idempotent</strong> — re-running skips pieces already installed; model pulls resume.";
+      }
+
       optsNote.textContent = nothing
         ? "Tick at least one thing to get a command."
-        : forced
-          ? "Ollama is included because the selected models need it."
-          : "";
+        : needsDeps
+          ? "Required tools, Ollama and Hermes stay on because the rest of your selection needs them."
+          : forcedOllama || needsHermes
+            ? "Ollama and Hermes stay on when the selected models need them."
+            : "";
     };
 
     optsList.addEventListener("change", render);

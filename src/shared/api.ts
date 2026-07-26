@@ -104,6 +104,14 @@ export const collapseStaffPopout = () => invoke<void>("collapse_staff_popout");
 export const resolveShortcutIcon = (icon: string) =>
   invoke<string | null>("resolve_shortcut_icon", { icon });
 
+export const resolveStaffMark = (icon: string) =>
+  invoke<string | null>("resolve_staff_mark", { icon });
+
+export const importStaffMark = (sourcePath: string) =>
+  invoke<string>("import_staff_mark", { sourcePath });
+
+export const clearStaffMark = () => invoke<void>("clear_staff_mark");
+
 export const importShortcutIcon = (shortcutId: string, sourcePath: string) =>
   invoke<string>("import_shortcut_icon", { shortcutId, sourcePath });
 
@@ -198,6 +206,8 @@ export const voiceStop = () => invoke<RoutedText | null>("voice_stop");
 export const voiceCancel = () => invoke<void>("voice_cancel");
 
 export const voiceIsRecording = () => invoke<boolean>("voice_is_recording");
+
+export const toggleDictation = () => invoke<void>("toggle_dictation");
 
 // --- misc ------------------------------------------------------------------
 

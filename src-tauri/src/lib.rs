@@ -31,6 +31,7 @@ pub mod hotkeys;
 pub mod palette;
 pub mod settings;
 pub mod shortcuts;
+pub mod staff_mark;
 pub mod tray;
 pub mod voice;
 pub mod window;
@@ -90,6 +91,9 @@ pub fn run() {
             commands::collapse_staff_popout,
             commands::resolve_shortcut_icon,
             commands::import_shortcut_icon,
+            commands::import_staff_mark,
+            commands::clear_staff_mark,
+            commands::resolve_staff_mark,
             // clipboard
             commands::clipboard_list,
             commands::clipboard_copy,
@@ -119,6 +123,7 @@ pub fn run() {
             commands::voice_stop,
             commands::voice_cancel,
             commands::voice_is_recording,
+            commands::toggle_dictation,
             commands::capture_screenshot,
             commands::capture_record_start,
             commands::capture_record_stop,
@@ -182,14 +187,12 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
 
     // --- windows ----------------------------------------------------------
     if let Some(staff) = window::staff(&handle) {
-        // Start click-through; the cursor tracker turns this off when the
-        // pointer actually reaches the staff.
         let _ = staff.set_ignore_cursor_events(true);
         let _ = window::position_staff(&handle, &manager);
         if loaded.general.staff_visible {
             let _ = staff.show();
-            let _ = staff.set_always_on_top(true);
         }
+        window::configure_staff_floating(&staff);
     }
     for label in [window::COMMAND_CENTER_WINDOW, window::SETTINGS_WINDOW] {
         if let Some(w) = handle.get_webview_window(label) {

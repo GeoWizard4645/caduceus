@@ -1,6 +1,10 @@
+import { open } from "@tauri-apps/plugin-dialog";
+
+import * as api from "@/shared/api";
+import { StaffMark } from "@/shared/StaffMark";
 import { hexToRgbChannels } from "@/shared/theme";
 import type { Theme } from "@/shared/types";
-import { Field, NumberInput, Section, Select, TextInput, Toggle, cx } from "@/shared/ui";
+import { Button, Field, NumberInput, Section, Select, TextInput, Toggle, cx } from "@/shared/ui";
 
 import type { Draft } from "../useDraft";
 
@@ -105,11 +109,11 @@ export function AppearanceTab({ draft }: { draft: Draft }) {
         description="Changes apply live — drag a value and watch the staff on screen."
       >
         <div className="grid grid-cols-2 gap-5">
-          <Field label="Staff size" hint="The height of the caduceus mark.">
+          <Field label="Staff size" hint="Height of the mark on screen (28–160 px).">
             <NumberInput
               value={appearance.staffSize}
-              min={36}
-              max={120}
+              min={28}
+              max={160}
               suffix="px"
               onChange={(value) => draft.update((d) => (d.appearance.staffSize = value))}
             />
@@ -150,6 +154,55 @@ export function AppearanceTab({ draft }: { draft: Draft }) {
         </div>
 
         <div className="mt-4 border-t border-line pt-4">
+          <Field
+            label="Staff image"
+            hint="Replace the default caduceus with your own pixel art (PNG recommended). Shown with crisp pixels, not smoothing."
+          >
+            <div className="flex flex-wrap items-center gap-4">
+              <div className="flex h-20 w-20 items-center justify-center rounded-lg border border-line bg-base/60">
+                <StaffMark
+                  height={56}
+                  icon={appearance.staffMarkIcon}
+                  className="drop-shadow-sm"
+                />
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  size="sm"
+                  onClick={async () => {
+                    const path = await open({
+                      multiple: false,
+                      filters: [
+                        {
+                          name: "Images",
+                          extensions: ["png", "jpg", "jpeg", "webp", "gif"],
+                        },
+                      ],
+                    });
+                    if (!path || typeof path !== "string") return;
+                    const token = await api.importStaffMark(path);
+                    draft.update((d) => (d.appearance.staffMarkIcon = token));
+                  }}
+                >
+                  Upload image…
+                </Button>
+                {appearance.staffMarkIcon ? (
+                  <Button
+                    size="sm"
+                    onClick={async () => {
+                      await api.clearStaffMark();
+                      draft.update((d) => (d.appearance.staffMarkIcon = ""));
+                    }}
+                  >
+                    Use default mark
+                  </Button>
+                ) : null}
+              </div>
+            </div>
+          </Field>
+        </div>
+
+        <div className="mt-4 border-t border-line pt-4">
           <Toggle
             label="Animate the idle staff"
             hint="A slow breathing pulse and a rotating ring. Turn off for a completely still staff."
@@ -159,8 +212,9 @@ export function AppearanceTab({ draft }: { draft: Draft }) {
         </div>
 
         <p className="mt-4 text-2xs leading-relaxed text-ink-faint">
-          Caduceus also respects your system's “reduce motion” setting, which disables every animation
-          regardless of what is set here.
+          The staff stays above full-screen apps (like MacParakeet). Caduceus also respects your
+          system's “reduce motion” setting, which disables every animation regardless of what is set
+          here.
         </p>
       </Section>
     </>

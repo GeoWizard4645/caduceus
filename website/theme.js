@@ -1,18 +1,10 @@
 (function () {
   var KEY = "caduceus-site-theme";
 
-  function preferred() {
-    try {
-      return window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
-    } catch {
-      return "dark";
-    }
-  }
-
   function current() {
     var t = document.documentElement.getAttribute("data-theme");
     if (t === "light" || t === "dark") return t;
-    return preferred();
+    return "dark";
   }
 
   function apply(theme) {

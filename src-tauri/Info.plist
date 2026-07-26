@@ -7,6 +7,11 @@
 	<key>LSUIElement</key>
 	<true/>
 
+	<key>CFBundleDisplayName</key>
+	<string>Caduceus</string>
+	<key>CFBundleName</key>
+	<string>Caduceus</string>
+
 	<!-- Shown by macOS the first time push-to-talk records audio. -->
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Caduceus records audio only while you hold the push-to-talk key, so it can transcribe what you said into the Command Center.</string>

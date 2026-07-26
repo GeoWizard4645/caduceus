@@ -26,7 +26,10 @@ use std::sync::Arc;
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, Runtime, WebviewWindow};
 
-use crate::settings::{StaffEdge, Point, SettingsManager};
+use crate::settings::{Settings, SettingsManager, StaffEdge, Point};
+
+#[cfg(target_os = "macos")]
+mod macos;
 
 pub const STAFF_WINDOW: &str = "staff";
 pub const COMMAND_CENTER_WINDOW: &str = "command-center";
@@ -37,9 +40,33 @@ pub const STAFF_HOVER_EVENT: &str = "caduceus://staff-hover";
 /// Asks the Command Center to open in a particular mode.
 pub const COMMAND_CENTER_OPEN_EVENT: &str = "caduceus://command-center-open";
 
-/// Side length of the staff window. Fixed so the radial pop-out always has room;
-/// the *visible* staff inside it is what `appearance.staffSize` controls.
-pub const STAFF_WINDOW_SIZE: f64 = 340.0;
+/// Side length of the staff window. Grows with staff size and pop-out reach so
+/// icons are never clipped; clamped to a sane range.
+pub fn staff_window_side(settings: &Settings) -> f64 {
+    let a = &settings.appearance;
+    let mark = a.staff_size as f64;
+    let reach = a.popout_radius as f64 + a.popout_icon_size as f64 / 2.0 + 24.0;
+    (reach * 2.0).max(mark * 2.2).clamp(280.0, 480.0)
+}
+
+/// Keep the staff above other apps, including another app's full-screen space.
+pub fn configure_staff_floating<R: Runtime>(window: &WebviewWindow<R>) {
+    #[cfg(target_os = "macos")]
+    macos::configure_staff_window(window);
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = window.set_visible_on_all_workspaces(true);
+        let _ = window.set_always_on_top(true);
+    }
+}
+
+pub fn sync_staff_window<R: Runtime>(app: &AppHandle<R>, settings: &SettingsManager) -> tauri::Result<()> {
+    if let Some(window) = staff(app) {
+        configure_staff_floating(&window);
+        position_staff(app, settings)?;
+    }
+    Ok(())
+}
 
 /// Gap between the staff and the screen edge when it snaps.
 const EDGE_MARGIN: f64 = 14.0;
@@ -125,24 +152,25 @@ pub fn position_staff<R: Runtime>(app: &AppHandle<R>, settings: &SettingsManager
     };
 
     let cfg = settings.get();
+    let side = staff_window_side(&cfg);
     let saved = cfg.general.staff_position.and_then(|p| {
-        let inside = p.x >= screen_x - STAFF_WINDOW_SIZE
+        let inside = p.x >= screen_x - side
             && p.x <= screen_x + screen_w
-            && p.y >= screen_y - STAFF_WINDOW_SIZE
+            && p.y >= screen_y - side
             && p.y <= screen_y + screen_h;
         inside.then_some(p)
     });
 
     let position = saved.unwrap_or_else(|| {
-        let y = screen_y + (screen_h - STAFF_WINDOW_SIZE) / 2.0;
+        let y = screen_y + (screen_h - side) / 2.0;
         let x = match cfg.general.staff_edge {
-            StaffEdge::Right => screen_x + screen_w - STAFF_WINDOW_SIZE + EDGE_MARGIN,
+            StaffEdge::Right => screen_x + screen_w - side + EDGE_MARGIN,
             StaffEdge::Left => screen_x - EDGE_MARGIN,
         };
         Point { x, y }
     });
 
-    window.set_size(LogicalSize::new(STAFF_WINDOW_SIZE, STAFF_WINDOW_SIZE))?;
+    window.set_size(LogicalSize::new(side, side))?;
     window.set_position(LogicalPosition::new(position.x, position.y))?;
     Ok(())
 }
@@ -157,9 +185,7 @@ pub fn set_staff_visible<R: Runtime>(
         if visible {
             let _ = position_staff(app, settings);
             window.show().map_err(|e| e.to_string())?;
-            // Re-assert always-on-top: macOS drops it when a window is hidden
-            // while another app is in full screen.
-            let _ = window.set_always_on_top(true);
+            configure_staff_floating(&window);
         } else {
             window.hide().map_err(|e| e.to_string())?;
         }

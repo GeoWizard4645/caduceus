@@ -214,15 +214,15 @@ const TUTORIALS: Tutorial[] = [
     id: "voice",
     icon: "◍",
     title: "Talk instead of typing",
-    blurb: "Hold a key, say what you want, let Caduceus route it.",
+    blurb: "F1 or double-click the staff to dictate; hold a key if you prefer push-to-talk.",
     done: (s) => s.voice.enabled,
     body: ({ draft, settings, goTo }) => (
       <>
         <p>
-          Push-to-talk records while you hold the key and transcribes on release. What
-          happens to the text is up to keyword groups: say “search” and it goes to the web,
-          “clipboard” and it searches your history, anything unmatched falls through to the
-          route you pick.
+          Dictation uses AVAudioEngine and on-device Speech on macOS. Press{" "}
+          <Kbd>F1</Kbd> or double-click the staff to start and stop, or hold your
+          push-to-talk key. Keyword groups route the transcript: “search” to the web,
+          “clipboard” to history, and so on.
         </p>
 
         <Steps>
@@ -240,10 +240,9 @@ const TUTORIALS: Tutorial[] = [
             </Action>
           </li>
           <li>
-            Hold{" "}
-            <Kbd>{settings.voice.pushToTalkHotkey || "your push-to-talk key"}</Kbd> and
-            speak. macOS asks for the microphone the first time; if you said no then, the
-            permission lives here.
+            Press <Kbd>F1</Kbd> or double-click the staff and speak (tap again to stop). Or hold{" "}
+            <Kbd>{settings.voice.pushToTalkHotkey || "your push-to-talk key"}</Kbd>. macOS asks
+            for Microphone access the first time; if you declined, fix it here.
             <Action>
               <Button size="sm" onClick={() => void api.openSystemSettings("microphone")}>
                 Open Microphone privacy

@@ -21,6 +21,37 @@ export function GeneralTab({
   return (
     <>
       <Section
+        title="If Caduceus disappears"
+        description="There is no Dock icon on purpose — Caduceus is a menu-bar app. You can always get back in."
+      >
+        <ul className="list-disc space-y-2 pl-5 text-[13px] text-ink-mute">
+          <li>
+            <strong className="font-medium text-ink-soft">Spotlight</strong> — press ⌘Space (or your
+            Spotlight shortcut), type <strong className="text-ink-soft">Caduceus</strong>, and press
+            Return. Opens from <code className="text-ink-soft">/Applications/Caduceus.app</code> like
+            any other app.
+          </li>
+          <li>
+            <strong className="font-medium text-ink-soft">Applications</strong> — open{" "}
+            <em>Applications → Caduceus</em> in Finder, or search “Caduceus” in Launchpad.
+          </li>
+          <li>
+            <strong className="font-medium text-ink-soft">Command Center palette</strong> — with
+            Caduceus running, open the palette and type <strong className="text-ink-soft">caduceus</strong>{" "}
+            to focus or relaunch it.
+          </li>
+          <li>
+            <strong className="font-medium text-ink-soft">Menu bar</strong> — look for the caduceus
+            icon near the clock; click for the Command Center, right-click for Settings and Quit.
+          </li>
+        </ul>
+        <p className="mt-3 text-2xs text-ink-faint">
+          Enable <strong className="font-normal text-ink-mute">Launch Caduceus at login</strong> below
+          so a crash or force-quit is one Spotlight launch away from recovery.
+        </p>
+      </Section>
+
+      <Section
         title="Hotkeys"
         description="Global shortcuts work everywhere, including while another app is focused. Leave one blank to unbind it."
       >
@@ -82,8 +113,8 @@ export function GeneralTab({
             const actionOptions: { value: FunctionKeyBinding["action"]; label: string }[] = [
               { value: "none", label: "Off" },
               { value: "voice_memo", label: "Voice Memos — new recording (macOS)" },
-              { value: "start_dictation", label: "Caduceus dictation — start recording" },
-              { value: "push_to_talk", label: "Caduceus dictation — hold to talk" },
+              { value: "start_dictation", label: "Dictation — tap to toggle (F1 default)" },
+              { value: "push_to_talk", label: "Dictation — hold to talk" },
               { value: "command_center", label: "Open Command Center" },
               { value: "toggle_staff", label: "Show / hide staff" },
               { value: "screenshot", label: "Screenshot to clipboard" },

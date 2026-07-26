@@ -12,7 +12,7 @@ import { currentMonitor, getCurrentWindow } from "@tauri-apps/api/window";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import * as api from "@/shared/api";
-import { CaduceusMark } from "@/shared/CaduceusMark";
+import { StaffMark } from "@/shared/StaffMark";
 import { useSettings, useTauriEvent } from "@/shared/hooks";
 import { ShortcutIcon } from "@/shared/ShortcutIcon";
 import { cx } from "@/shared/ui";
@@ -84,6 +84,7 @@ export function Staff() {
   // --- drag vs click -------------------------------------------------------
   const pressOrigin = useRef<{ x: number; y: number } | null>(null);
   const dragging = useRef(false);
+  const singleClickTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const onPointerDown = (e: React.PointerEvent) => {
     if (e.button !== 0) return;
@@ -115,8 +116,27 @@ export function Staff() {
     const wasDrag = dragging.current;
     pressOrigin.current = null;
     dragging.current = false;
-    if (!wasDrag) void api.openCommandCenter();
+    if (wasDrag) return;
+
+    // Single click opens the Command Center; double-click toggles dictation (F1 does the same).
+    if (singleClickTimer.current) {
+      clearTimeout(singleClickTimer.current);
+      singleClickTimer.current = null;
+      void api.toggleDictation();
+      return;
+    }
+    singleClickTimer.current = setTimeout(() => {
+      singleClickTimer.current = null;
+      void api.openCommandCenter();
+    }, 280);
   };
+
+  useEffect(
+    () => () => {
+      if (singleClickTimer.current) clearTimeout(singleClickTimer.current);
+    },
+    [],
+  );
 
   const runShortcut = async (shortcut: Shortcut) => {
     void api.collapseStaffPopout();
@@ -258,8 +278,9 @@ export function Staff() {
             }}
           />
 
-          <CaduceusMark
+          <StaffMark
             height={staffSize}
+            icon={settings.appearance.staffMarkIcon}
             className="relative drop-shadow-[0_2px_6px_rgb(0_0_0/0.55)]"
           />
         </button>

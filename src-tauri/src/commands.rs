@@ -58,6 +58,9 @@ pub async fn update_settings<R: Runtime>(
     if previous.general.staff_visible != next.general.staff_visible {
         window::set_staff_visible(&app, &settings, next.general.staff_visible)?;
     }
+    if previous.appearance != next.appearance {
+        let _ = window::sync_staff_window(&app, &settings);
+    }
     crate::tray::refresh(&app);
 
     // Launch-at-login is an OS-level registration, not just a flag.
@@ -350,6 +353,21 @@ pub fn import_shortcut_icon<R: Runtime>(
     shortcuts::icons::import_icon(&app, &shortcut_id, std::path::Path::new(&source_path))
 }
 
+#[tauri::command]
+pub fn resolve_staff_mark<R: Runtime>(app: AppHandle<R>, icon: String) -> Res<Option<String>> {
+    Ok(crate::staff_mark::resolve_path(&app, &icon).map(|p| p.to_string_lossy().into_owned()))
+}
+
+#[tauri::command]
+pub fn import_staff_mark<R: Runtime>(app: AppHandle<R>, source_path: String) -> Res<String> {
+    crate::staff_mark::import_mark(&app, std::path::Path::new(&source_path))
+}
+
+#[tauri::command]
+pub fn clear_staff_mark<R: Runtime>(app: AppHandle<R>) -> Res<()> {
+    crate::staff_mark::clear_mark(&app)
+}
+
 // ---------------------------------------------------------------------------
 // Clipboard
 // ---------------------------------------------------------------------------
@@ -597,6 +615,15 @@ pub fn voice_cancel(runtime: tauri::State<'_, voice::VoiceRuntime>) {
 #[tauri::command]
 pub fn voice_is_recording(runtime: tauri::State<'_, voice::VoiceRuntime>) -> bool {
     runtime.is_recording()
+}
+
+#[tauri::command]
+pub fn toggle_dictation<R: Runtime>(
+    app: AppHandle<R>,
+    settings: tauri::State<'_, SettingsManager>,
+) -> Res<()> {
+    crate::hotkeys::toggle_dictation(&app, &settings);
+    Ok(())
 }
 
 // ---------------------------------------------------------------------------

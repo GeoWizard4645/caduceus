@@ -53,8 +53,11 @@ pub fn dispatch_press<R: Runtime>(
                 log::error!("function key could not open the Command Center: {e}");
             }
         }
-        FunctionKeyAction::PushToTalk | FunctionKeyAction::StartDictation => {
+        FunctionKeyAction::PushToTalk => {
             crate::hotkeys::start_push_to_talk(app, settings);
+        }
+        FunctionKeyAction::StartDictation => {
+            crate::hotkeys::toggle_dictation(app, settings);
         }
         FunctionKeyAction::VoiceMemo => {
             tauri::async_runtime::spawn(async move {
