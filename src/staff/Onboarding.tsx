@@ -128,7 +128,7 @@ export function Onboarding({
       window.removeEventListener("resize", publish);
       void api.setStaffCaptureRect(null);
     };
-  }, []);
+  }, [index]);
 
   const step = STEPS[index];
   const isLast = index === STEPS.length - 1;
@@ -163,22 +163,21 @@ export function Onboarding({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [signals.hovered, signals.expanded, signals.commandCenterOpened, signals.hotkeyUsed, index]);
 
-  // Sit above the mark with a small gap. Outer shell is pointer-events none so
-  // only the card itself captures clicks — never the staff underneath.
-  const clearance = Math.round(staffSize / 2) + 14;
+  // Park the card in the top half of the staff window so the mark at the centre
+  // stays visible and clickable. (1.0.1 centred the card on the mark and hid it.)
+  const staffClearance = Math.round(staffSize / 2) + 16;
 
   return (
     <div className="pointer-events-none absolute inset-0 z-40">
       <div
         ref={cardRef}
         className={cx(
-          "pointer-events-auto absolute left-1/2 w-[min(290px,calc(100%-16px))] -translate-x-1/2",
+          "pointer-events-auto absolute left-1/2 top-2 w-[min(290px,calc(100%-16px))] -translate-x-1/2",
           "overflow-y-auto animate-fade-rise rounded-cad px-4 py-3.5",
           "glass shadow-float",
         )}
         style={{
-          bottom: `calc(50% + ${clearance}px)`,
-          maxHeight: `calc(50% - ${clearance + 8}px)`,
+          maxHeight: `calc(50% - ${staffClearance}px)`,
         }}
       >
         <div className="row justify-between">
@@ -202,7 +201,7 @@ export function Onboarding({
               created unfocused and usually stays that way, so ArrowLeft and
               ArrowRight only reach this card once it has been clicked. The
               buttons always work. */}
-          <div className="row gap-1.5">
+          <div className="row gap-2">
             <button
               type="button"
               onClick={() => go(-1)}
@@ -210,13 +209,13 @@ export function Onboarding({
               aria-label="Previous step"
               title="Previous step (←)"
               className={cx(
-                "rounded px-1 text-2xs leading-none transition-colors",
+                "rounded-lg border px-2 py-1 text-2xs font-medium transition-colors",
                 index === 0
-                  ? "cursor-default text-overlay"
-                  : "text-ink-faint hover:bg-raised hover:text-ink",
+                  ? "cursor-default border-transparent text-overlay"
+                  : "border-line text-ink-mute hover:bg-raised hover:text-ink",
               )}
             >
-              ‹
+              Back
             </button>
 
             <div className="row gap-1">
@@ -239,13 +238,13 @@ export function Onboarding({
               aria-label="Next step"
               title="Next step (→)"
               className={cx(
-                "rounded px-1 text-2xs leading-none transition-colors",
+                "rounded-lg border px-2 py-1 text-2xs font-medium transition-colors",
                 isLast
-                  ? "cursor-default text-overlay"
-                  : "text-ink-faint hover:bg-raised hover:text-ink",
+                  ? "cursor-default border-transparent text-overlay"
+                  : "border-line text-ink-mute hover:bg-raised hover:text-ink",
               )}
             >
-              ›
+              Forward
             </button>
           </div>
 

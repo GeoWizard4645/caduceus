@@ -230,8 +230,7 @@ export function Staff() {
   // window capturing until the gesture ends. (Hover alone uses a wider radius
   // in Rust so the corner knobs stay hittable without swallowing the whole pad.)
   useEffect(() => {
-    if (!settings || settings.general.onboardingDone === false) return;
-    if (!resizing) return;
+    if (!settings || !resizing) return;
     void api.setStaffInteractive(true);
     return () => {
       void api.setStaffInteractive(false);
