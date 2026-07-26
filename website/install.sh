@@ -4,8 +4,9 @@
 #
 #   curl -fsSL https://vivaanshahani.com/caduceus/install.sh | bash
 #
-# With no flags this installs Caduceus alone: downloads the latest release DMG,
-# copies the app to /Applications, clears the quarantine flag, and launches it.
+# With no flags this installs Caduceus alone: downloads the universal .dmg from
+# the latest release, copies the app to /Applications, clears the quarantine
+# flag, and launches it. About 10 MB and ten seconds.
 #
 # The configured-package flow adds optional pieces on top:
 #
@@ -22,6 +23,12 @@
 #   --hermes-model=MODEL  point Hermes at MODEL on Ollama, enable computer_use,
 #                         set Caduceus `/c` to Hermes (implies hermes)
 #   --computer-use=MODEL  legacy: wire MODEL to `/c` as a vision backend (no Hermes)
+#   --from-source         compile Caduceus here instead of downloading it. Slow
+#                         (~700 MB of Rust/Node toolchain, a few minutes) and
+#                         needed by almost nobody — it exists for people who want
+#                         to run only code they built, and as a way out if a
+#                         release is ever missing or broken.
+#   --rebuild             with --from-source, rebuild even if already up to date
 #
 # Everything it does is visible below — read it before running it, as you should
 # with any script piped into a shell.
@@ -33,6 +40,12 @@ APP_NAME="Caduceus"
 INSTALL_DIR="/Applications"
 BUNDLE_ID="com.caduceus.desktop"
 OLLAMA_URL="http://localhost:11434/v1"
+
+# Everything this script owns lives here, so uninstalling is `rm -rf`.
+CADUCEUS_HOME="$HOME/.caduceus"
+SRC_DIR="$CADUCEUS_HOME/src"
+TOOLS_DIR="$CADUCEUS_HOME/toolchain"
+STAMP="$CADUCEUS_HOME/installed-commit"
 
 bold=$(tput bold 2>/dev/null || echo "")
 dim=$(tput dim 2>/dev/null || echo "")
@@ -51,6 +64,8 @@ pull=""
 ai_model=""
 cu_model=""
 hermes_model=""
+from_source=0
+rebuild=0
 
 for arg in "$@"; do
   case "$arg" in
@@ -59,7 +74,9 @@ for arg in "$@"; do
     --ai=*)             ai_model="${arg#*=}" ;;
     --computer-use=*)   cu_model="${arg#*=}" ;;
     --hermes-model=*)   hermes_model="${arg#*=}" ;;
-    -h|--help)          sed -n '3,27p' "$0" 2>/dev/null || true; exit 0 ;;
+    --from-source)      from_source=1 ;;
+    --rebuild)          from_source=1; rebuild=1 ;;
+    -h|--help)          sed -n '3,34p' "$0" 2>/dev/null || true; exit 0 ;;
     *) die "Unknown option: $arg" ;;
   esac
 done
@@ -76,9 +93,11 @@ done
 wants() { case ",$with," in *",$1,"*) return 0 ;; *) return 1 ;; esac; }
 
 # Ollama and Hermes both need a working toolchain, and wiring Caduceus's config
-# needs python3. Implied rather than optional: a run that installs either one
-# without them fails partway through, which is worse than taking a minute here.
-if wants ollama || wants hermes; then
+# needs python3. Compiling Caduceus additionally needs swiftc and git, which the
+# same package provides. Implied rather than optional: a run that installs any of
+# them without it fails partway through, which is worse than taking a minute
+# here. The plain download path needs none of this, which is the point of it.
+if wants ollama || wants hermes || { [ "$from_source" -eq 1 ] && wants caduceus; }; then
   case ",$with," in *,deps,*) ;; *) with="deps,$with" ;; esac
 fi
 
@@ -93,11 +112,12 @@ command -v curl >/dev/null || die "curl is required."
 
 # --- required tools ---------------------------------------------------------
 #
-# The Xcode Command Line Tools are the one package that covers everything the
-# rest of this script leans on: python3 (used to write Caduceus's settings),
-# git, and a compiler for anything Hermes builds from source. Installing them
-# is a GUI flow Apple owns — `xcode-select --install` opens a window and returns
-# immediately — so this polls rather than assuming it finished.
+# The Xcode Command Line Tools are the one package that covers most of what the
+# rest of this script leans on: python3 (used to write Caduceus's settings), git,
+# swiftc (Caduceus builds its dictation helper from Swift), and a linker for the
+# Rust build. Installing them is a GUI flow Apple owns — `xcode-select --install`
+# opens a window and returns immediately — so this polls rather than assuming it
+# finished.
 
 install_deps() {
   if xcode-select -p >/dev/null 2>&1; then
@@ -128,38 +148,124 @@ Install it any way you like (e.g. brew install python), then re-run this command
   say "python3 is available ($(python3 --version 2>&1))."
 }
 
-# --- Caduceus ---------------------------------------------------------------
+# --- build toolchain (--from-source only) -----------------------------------
+#
+# Rust and Node are needed only to compile Caduceus, which the default path does
+# not do — nothing below runs unless you passed --from-source. Neither is
+# installed system-wide or wired into your shell profile: Rust goes to the
+# standard ~/.cargo (rustup's own home, shared with any later Rust work you do),
+# Node goes under ~/.caduceus/toolchain and is put on PATH for this script alone.
+# If you already have either one, yours is used untouched.
 
-install_caduceus() {
-  # Apple Silicon and Intel get different builds.
+install_rust() {
+  if command -v cargo >/dev/null 2>&1; then
+    say "Rust is already installed ($(cargo --version 2>&1))."
+    return 0
+  fi
+  if [ -x "$HOME/.cargo/bin/cargo" ]; then
+    export PATH="$HOME/.cargo/bin:$PATH"
+    say "Using the Rust toolchain in ~/.cargo."
+    return 0
+  fi
+
+  say "Installing Rust (~500 MB, one time)…"
+  curl --proto '=https' --tlsv1.2 -fsSL https://sh.rustup.rs \
+    | sh -s -- -y --no-modify-path --profile minimal --default-toolchain stable \
+    || die "rustup failed. Install Rust from https://rustup.rs and re-run this command."
+
+  export PATH="$HOME/.cargo/bin:$PATH"
+  command -v cargo >/dev/null 2>&1 || die "Rust installed but cargo is not on PATH."
+  say "Rust installed ($(cargo --version 2>&1))."
+}
+
+install_node() {
+  if command -v npm >/dev/null 2>&1; then
+    say "Node is already installed ($(node --version 2>&1))."
+    return 0
+  fi
+  if [ -x "$TOOLS_DIR/node/bin/npm" ]; then
+    export PATH="$TOOLS_DIR/node/bin:$PATH"
+    say "Using the Node in ${TOOLS_DIR}/node."
+    return 0
+  fi
+
+  local plat
+  case "$(uname -m)" in
+    arm64)  plat="darwin-arm64" ;;
+    x86_64) plat="darwin-x64" ;;
+    *) die "Unsupported architecture: $(uname -m)" ;;
+  esac
+
+  # Ask nodejs.org which release is current LTS rather than pinning a version
+  # here that goes stale. python3 is guaranteed by install_deps.
+  say "Finding the current Node LTS…"
+  local ver
+  ver=$(curl -fsSL https://nodejs.org/dist/index.json \
+    | python3 -c 'import json,sys; print(next(r["version"] for r in json.load(sys.stdin) if r["lts"]))' \
+    2>/dev/null) || die "Could not reach nodejs.org. Install Node 20+ yourself and re-run this command."
+  [ -n "$ver" ] || die "Could not determine the current Node LTS. Install Node 20+ yourself and re-run."
+
+  say "Installing Node ${ver} into ${TOOLS_DIR}…"
+  mkdir -p "$TOOLS_DIR/node"
+  curl -fSL --progress-bar "https://nodejs.org/dist/${ver}/node-${ver}-${plat}.tar.gz" \
+    | tar -xz -C "$TOOLS_DIR/node" --strip-components=1 \
+    || die "Node download failed. Install Node 20+ from https://nodejs.org and re-run this command."
+
+  export PATH="$TOOLS_DIR/node/bin:$PATH"
+  command -v npm >/dev/null 2>&1 || die "Node installed but npm is not on PATH."
+  say "Node installed ($(node --version 2>&1))."
+}
+
+# --- Caduceus: the download path --------------------------------------------
+#
+# Releases ship one universal .dmg, so there is normally nothing to choose
+# between. The per-architecture names are still understood in case a future
+# release splits them — but an arch we cannot match is an error rather than a
+# guess, since handing an Intel Mac an arm64 build produces an app that installs
+# cleanly and then refuses to open.
+
+find_dmg() {
+  local dmgs="$1" arch="$2" pick
+
+  pick=$(echo "$dmgs" | grep -i "universal" | head -1) && [ -n "$pick" ] && { echo "$pick"; return 0; }
+  pick=$(echo "$dmgs" | grep -i "$arch" | head -1) && [ -n "$pick" ] && { echo "$pick"; return 0; }
+
+  # Nothing named for an architecture at all: a single unlabelled .dmg is the
+  # ordinary single-build release, so take it. Several is ambiguous — stop.
+  if [ "$(echo "$dmgs" | grep -c .)" = "1" ] && ! echo "$dmgs" | grep -qiE "aarch64|arm64|x64|x86_64|intel"; then
+    echo "$dmgs"
+    return 0
+  fi
+  return 1
+}
+
+download_caduceus() {
   local arch
   case "$(uname -m)" in
-    arm64) arch="aarch64" ;;
+    arm64)  arch="aarch64" ;;
     x86_64) arch="x64" ;;
     *) die "Unsupported architecture: $(uname -m)" ;;
   esac
 
   say "Looking up the latest release…"
   local api="https://api.github.com/repos/${REPO}/releases/latest"
+  local body dmgs dmg_url
 
-  # Pick the DMG matching this architecture, falling back to any DMG in the
-  # release for single-build releases.
-  local dmg_url
-  dmg_url=$(curl -fsSL "$api" \
+  # One API call, reused: rate limits on unauthenticated requests are tight
+  # enough that a retry loop here would be the thing that breaks the install.
+  body=$(curl -fsSL "$api" 2>/dev/null) || die "Could not reach the GitHub API for ${REPO}.
+If you are offline or rate-limited, try again shortly — or compile it yourself:
+  curl -fsSL https://vivaanshahani.com/caduceus/install.sh | bash -s -- --from-source"
+
+  dmgs=$(echo "$body" \
     | grep -o '"browser_download_url": *"[^"]*\.dmg"' \
-    | cut -d'"' -f4 \
-    | grep -i "$arch" \
-    | head -1 || true)
+    | cut -d'"' -f4)
 
-  if [ -z "$dmg_url" ]; then
-    dmg_url=$(curl -fsSL "$api" \
-      | grep -o '"browser_download_url": *"[^"]*\.dmg"' \
-      | cut -d'"' -f4 \
-      | head -1 || true)
-  fi
+  [ -n "$dmgs" ] && dmg_url=$(find_dmg "$dmgs" "$arch") || dmg_url=""
 
-  [ -n "$dmg_url" ] || die "No .dmg found in the latest release of ${REPO}.
-Build it yourself instead:  git clone https://github.com/${REPO} && cd caduceus && npm install && npm run bundle"
+  [ -n "$dmg_url" ] || die "No .dmg for this Mac ($(uname -m)) in the latest release of ${REPO}.
+Compile it yourself instead — same command, one extra flag:
+  curl -fsSL https://vivaanshahani.com/caduceus/install.sh | bash -s -- --from-source"
 
   local tmp
   tmp=$(mktemp -d)
@@ -184,7 +290,97 @@ Build it yourself instead:  git clone https://github.com/${REPO} && cd caduceus 
   local source_app="$mount_point/${APP_NAME}.app"
   [ -d "$source_app" ] || die "${APP_NAME}.app was not in the disk image."
 
-  local target="${INSTALL_DIR}/${APP_NAME}.app"
+  replace_installed_app "$source_app"
+
+  # Caduceus is not notarised, so macOS would otherwise refuse to open it. This
+  # is the one place the missing Developer ID costs anything, and clearing the
+  # flag is exactly what the right-click-Open dance does more slowly.
+  say "Clearing the quarantine flag…"
+  xattr -dr com.apple.quarantine "${INSTALL_DIR}/${APP_NAME}.app" 2>/dev/null || \
+    sudo xattr -dr com.apple.quarantine "${INSTALL_DIR}/${APP_NAME}.app" 2>/dev/null || \
+    warn "Could not clear quarantine. Run: xattr -dr com.apple.quarantine \"${INSTALL_DIR}/${APP_NAME}.app\""
+}
+
+# --- Caduceus: the --from-source path ---------------------------------------
+
+fetch_source() {
+  if [ -d "$SRC_DIR/.git" ]; then
+    say "Updating the source in ${SRC_DIR}…"
+    git -C "$SRC_DIR" fetch --depth 1 origin HEAD --quiet \
+      || die "Could not fetch from https://github.com/${REPO}. Check your connection and re-run."
+    # Hard reset rather than pull: this checkout is ours, and a half-applied
+    # merge here would surface as a confusing build error later.
+    git -C "$SRC_DIR" reset --hard FETCH_HEAD --quiet
+    # No -x: node_modules and the Rust target dir are ignored, and re-downloading
+    # them on every run would turn a no-op update into a ten-minute one.
+    git -C "$SRC_DIR" clean -fdq
+  else
+    say "Cloning ${REPO}…"
+    rm -rf "$SRC_DIR"
+    mkdir -p "$(dirname "$SRC_DIR")"
+    git clone --depth 1 "https://github.com/${REPO}.git" "$SRC_DIR" --quiet \
+      || die "Could not clone https://github.com/${REPO}. Check your connection and re-run."
+  fi
+}
+
+build_caduceus() {
+  say "Installing npm dependencies…"
+  # `npm ci` is the reproducible path, but it hard-fails when the lockfile drifts
+  # from package.json, which should not cost a user their install.
+  ( cd "$SRC_DIR" && { npm ci --silent 2>/dev/null || npm install --silent; } ) \
+    || die "npm install failed in ${SRC_DIR}."
+
+  say "Building ${APP_NAME} — this takes a few minutes the first time…"
+  # --bundles app: we copy the .app straight across, so there is no reason to
+  # spend time (or hdiutil) producing a disk image nobody opens.
+  ( cd "$SRC_DIR" && npm run tauri -- build --bundles app ) \
+    || die "The build failed. Run it by hand for the full output:
+  cd ${SRC_DIR} && npm run tauri -- build --bundles app"
+}
+
+build_and_install_caduceus() {
+  # Source first: it only needs git, and knowing the current commit is what
+  # tells us whether the toolchain is worth downloading at all.
+  fetch_source
+
+  local head
+  head=$(git -C "$SRC_DIR" rev-parse HEAD)
+
+  if [ "$rebuild" -eq 0 ] && [ -d "${INSTALL_DIR}/${APP_NAME}.app" ] && \
+     [ -f "$STAMP" ] && [ "$(cat "$STAMP")" = "$head" ]; then
+    say "${APP_NAME} is already at ${head:0:7} — nothing to build. (--rebuild forces it.)"
+    return 0
+  fi
+
+  install_rust
+  install_node
+  build_caduceus
+
+  local built="$SRC_DIR/src-tauri/target/release/bundle/macos/${APP_NAME}.app"
+  [ -d "$built" ] || die "The build finished but ${APP_NAME}.app was not at:
+  ${built}"
+
+  replace_installed_app "$built"
+
+  # With no Developer ID, Tauri leaves the bundle only linker-signed: the binary
+  # carries an ad-hoc signature but the bundle has no _CodeSignature, so
+  # `codesign --verify` rejects it. It runs either way; sealing it here means the
+  # installed app passes an inspection someone may reasonably run on it. Release
+  # .dmgs are sealed the same way before upload, so this is build-path only.
+  say "Sealing the ad-hoc signature…"
+  codesign --force --sign - --timestamp=none "${INSTALL_DIR}/${APP_NAME}.app" 2>/dev/null || \
+    sudo codesign --force --sign - --timestamp=none "${INSTALL_DIR}/${APP_NAME}.app" 2>/dev/null || \
+    warn "Could not re-sign the installed app. It will still run."
+
+  mkdir -p "$CADUCEUS_HOME"
+  echo "$head" > "$STAMP"
+}
+
+# --- Caduceus: shared install step -------------------------------------------
+
+replace_installed_app() {
+  local source_app="$1" target="${INSTALL_DIR}/${APP_NAME}.app"
+
   if [ -d "$target" ]; then
     say "Replacing the existing install…"
     # Quit a running copy first, or the replaced binary keeps running.
@@ -199,12 +395,14 @@ Build it yourself instead:  git clone https://github.com/${REPO} && cd caduceus 
     warn "Need permission to write to ${INSTALL_DIR}."
     sudo cp -R "$source_app" "$target"
   fi
+}
 
-  # Caduceus is not notarised yet, so macOS would otherwise refuse to open it.
-  say "Clearing the quarantine flag…"
-  xattr -dr com.apple.quarantine "$target" 2>/dev/null || \
-    sudo xattr -dr com.apple.quarantine "$target" 2>/dev/null || \
-    warn "Could not clear quarantine. Run: xattr -dr com.apple.quarantine \"$target\""
+install_caduceus() {
+  if [ "$from_source" -eq 1 ]; then
+    build_and_install_caduceus
+  else
+    download_caduceus
+  fi
 }
 
 # --- Ollama -----------------------------------------------------------------
