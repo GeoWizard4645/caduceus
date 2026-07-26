@@ -33,6 +33,7 @@ export default defineConfig({
         staff: resolve(__dirname, "index.html"),
         commandCenter: resolve(__dirname, "command-center.html"),
         settings: resolve(__dirname, "settings.html"),
+        chat: resolve(__dirname, "chat.html"),
       },
     },
   },

@@ -24,14 +24,17 @@ pub mod apps;
 pub mod autostart;
 pub mod calc;
 pub mod capture;
+pub mod chat;
 pub mod clipboard;
 pub mod commands;
 pub mod fn_keys;
 pub mod hotkeys;
+pub mod notes;
 pub mod palette;
 pub mod settings;
 pub mod shortcuts;
 pub mod sysmon;
+pub mod tools;
 pub mod staff_mark;
 pub mod tray;
 pub mod voice;
@@ -89,6 +92,25 @@ pub fn run() {
             commands::open_settings_window,
             commands::set_staff_interactive,
             commands::set_staff_capture_rect,
+            commands::chat_ask,
+            commands::chat_conversations,
+            commands::chat_messages,
+            commands::chat_new_conversation,
+            commands::chat_delete_conversation,
+            commands::chat_clear,
+            commands::open_chat_window,
+            commands::add_to_notes,
+            commands::change_case,
+            commands::case_options,
+            commands::copy_latest_download,
+            commands::open_latest_download,
+            commands::copy_finder_path,
+            commands::eject_disks,
+            commands::stay_awake,
+            commands::stay_awake_state,
+            commands::search_files,
+            commands::define_word,
+            commands::convert_image,
             commands::toggle_staff,
             commands::save_staff_position,
             commands::collapse_staff_popout,
@@ -224,6 +246,19 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
+    // --- saved conversations ----------------------------------------------
+    match chat::ChatStore::open(data_dir.join(chat::DB_FILE)) {
+        Ok(store) => {
+            // A backend error can leave a thread that was opened and never used.
+            let _ = store.prune_empty();
+            app.manage(store);
+        }
+        Err(e) => {
+            // `/` still answers without history rather than failing outright.
+            log::error!("chat history is unavailable: {e}");
+        }
+    }
+
     // --- agents and voice -------------------------------------------------
     app.manage(agent::AgentRuntime::new());
     app.manage(apps::AppIndex::new());
@@ -283,8 +318,9 @@ fn handle_window_event(window: &tauri::Window, event: &WindowEvent) {
                 api.prevent_close();
                 let _ = window.hide();
                 #[cfg(target_os = "macos")]
-                if window.label() == window::SETTINGS_WINDOW {
-                    window::on_settings_closed(window.app_handle());
+                if window.label() == window::SETTINGS_WINDOW || window.label() == window::CHAT_WINDOW
+                {
+                    window::on_dock_window_closed(window.app_handle(), window.label());
                 }
             }
         }

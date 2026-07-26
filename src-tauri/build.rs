@@ -101,6 +101,7 @@ fn compile_swift(bin_dir: &Path, source_rel: &str, output_name: &str, label: &st
     match cmd.output() {
         Ok(out) if out.status.success() => {
             println!("cargo:warning=built macOS {label} ({output_name})");
+            seal_helper_signature(&output, label);
         }
         Ok(out) => {
             println!(
@@ -111,5 +112,37 @@ fn compile_swift(bin_dir: &Path, source_rel: &str, output_name: &str, label: &st
         Err(e) => {
             println!("cargo:warning=swiftc unavailable ({e}); {label} will be missing");
         }
+    }
+}
+
+/// Re-sign a helper so its embedded Info.plist is part of the signature.
+///
+/// Linking the plist in is only half the job. `ld` leaves the binary
+/// *linker-signed*, and `codesign -dv` on that reports `Info.plist=not bound` —
+/// TCC reads usage-description strings through the code signature, so an
+/// unbound section is invisible to it. The result is the exact failure the
+/// plist was added to prevent: no prompt, no authorisation callback, and a
+/// helper that blocks on its semaphore until it times out.
+///
+/// Tauri signs `Contents/MacOS` and the bundle itself but not nested files
+/// under `Resources`, so this has to happen here. Ad-hoc is all that is
+/// available without a Developer ID, and it is enough — binding the plist is
+/// what matters, not who signed it.
+fn seal_helper_signature(output: &Path, label: &str) {
+    let signed = Command::new("codesign")
+        .args(["--force", "--sign", "-", "--identifier"])
+        .arg("com.caduceus.desktop.speech-helper")
+        .arg(output)
+        .output();
+
+    match signed {
+        Ok(out) if out.status.success() => {}
+        Ok(out) => println!(
+            "cargo:warning=could not sign {label}; microphone and speech prompts will not appear. codesign said: {}",
+            String::from_utf8_lossy(&out.stderr).trim()
+        ),
+        Err(e) => println!(
+            "cargo:warning=codesign unavailable ({e}); {label} will not be able to ask for microphone or speech permission"
+        ),
     }
 }

@@ -897,6 +897,82 @@
   </div>
 </section>
 
+<section id="free">
+  <div class="wrap">
+    <h2>Everything built in is free</h2>
+    <p class="sub">No account, no API key, no subscription — for anything that ships in the app.</p>
+
+    <p>
+      Caduceus leans on tools macOS already has: <code>sips</code> for images,
+      <code>mdfind</code> for file search, <code>caffeinate</code> to stay awake,
+      <code>diskutil</code> to eject disks, the built-in Dictionary, Apple's on-device
+      speech recogniser for dictation. Nothing here phones a paid service, and no built-in
+      feature is gated behind a plan.
+    </p>
+
+    <p>
+      Some things people ask for <strong>cannot</strong> be free, so they are deliberately
+      not built rather than half-built:
+    </p>
+
+    <table>
+      <tr>
+        <td><strong>Google Translate</strong></td>
+        <td>The Cloud Translation API bills per character. The free endpoint is undocumented and against Google's terms.</td>
+      </tr>
+      <tr>
+        <td><strong>Authy</strong></td>
+        <td>No public API, and the desktop apps were discontinued in 2024. A built-in TOTP generator you paste your own seed into is the honest version.</td>
+      </tr>
+      <tr>
+        <td><strong>Jira, Linear</strong></td>
+        <td>The APIs are free to call; the products are not, for any real team. Better as extensions.</td>
+      </tr>
+      <tr>
+        <td><strong>Bluetooth control, video download, keyboard brightness</strong></td>
+        <td>Free, but need a tool you install yourself (<code>blueutil</code>, <code>yt-dlp</code>) or a private API Apple keeps breaking.</td>
+      </tr>
+    </table>
+
+    <p>
+      The full triage — what shipped, what is queued, what costs money, and what is
+      genuinely impossible — is in
+      <a href="https://github.com/GeoWizard4645/caduceus/blob/main/FEATURES.md">FEATURES.md</a>.
+    </p>
+  </div>
+</section>
+
+<section id="extensions">
+  <div class="wrap">
+    <h2>Write your own extension</h2>
+    <p class="sub">A folder, a manifest, and a script. No build step.</p>
+
+    <p>
+      An extension adds commands to the Command Center. It declares what it is allowed to
+      touch up front, so you can read what it can do before you run it — there is no
+      ambient filesystem, no shell, and no network unless the manifest asks for it.
+    </p>
+
+    <pre>my-extension/
+  caduceus.json      # id, commands, permissions
+  main.js            # export one function per command
+  icon.png           # optional</pre>
+
+    <p>
+      Drop the folder in
+      <code>~/Library/Application&nbsp;Support/com.caduceus.desktop/extensions/</code>
+      and it shows up in the palette. No store, no signing, no review.
+    </p>
+
+    <div class="note">
+      <strong>Not shipped yet.</strong> The format is settled and written down in
+      <a href="https://github.com/GeoWizard4645/caduceus/blob/main/EXTENSIONS.md">EXTENSIONS.md</a>,
+      but the extension host does not load anything in 1.1.0. It is published now so the
+      format can be argued with before code depends on it.
+    </div>
+  </div>
+</section>
+
 <footer>
   <div class="wrap">
     <p>

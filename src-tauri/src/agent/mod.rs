@@ -198,11 +198,21 @@ pub enum BackendRole {
 
 /// One-shot chat against the primary backend.
 pub async fn chat(settings: &SettingsManager, prompt: &str) -> AgentResult<AgentResponse> {
+    chat_with_history(settings, vec![Message::user(prompt)]).await
+}
+
+/// Ask the primary backend with a conversation behind the question.
+///
+/// [`chat`] is this with a one-message history. Kept separate because the
+/// caller owns the thread: `chat::ask` loads it from disk, trims it, and
+/// persists both sides.
+pub async fn chat_with_history(
+    settings: &SettingsManager,
+    messages: Vec<Message>,
+) -> AgentResult<AgentResponse> {
     let snapshot = settings.get();
     let config = resolve_backend(&snapshot, BackendRole::Primary)?;
-    backend_for(config.kind)
-        .chat(vec![Message::user(prompt)], &config)
-        .await
+    backend_for(config.kind).chat(messages, &config).await
 }
 
 /// Start a computer-use session.

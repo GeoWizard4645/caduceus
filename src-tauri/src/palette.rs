@@ -22,6 +22,7 @@
 //! `/explain this` should obviously work without a space after the slash.
 
 use serde::Serialize;
+use tauri::Emitter;
 use tauri::Manager;
 
 use crate::settings::{CommandCenterSettings, PrefixAction, PrefixRule, Settings};
@@ -115,6 +116,9 @@ pub struct DispatchOutcome {
     pub session_id: Option<String>,
     /// Set for `ClipboardSearch`: the text to filter history by.
     pub clipboard_query: Option<String>,
+    /// Set for `PrimaryAi`: the thread the reply was saved into, so the palette
+    /// can show the conversation and hand it to the chat window.
+    pub conversation_id: Option<i64>,
     /// Whether the Command Center should close.
     pub close_window: bool,
 }
@@ -126,6 +130,7 @@ impl DispatchOutcome {
             message: message.into(),
             action,
             session_id: None,
+            conversation_id: None,
             clipboard_query: None,
             close_window: close,
         }
@@ -157,18 +162,42 @@ pub async fn dispatch<R: tauri::Runtime>(
             DispatchOutcome::simple(outcome.ok, action, outcome.message, close && outcome.ok)
         }
 
-        PrefixAction::PrimaryAi => match crate::agent::chat(settings, &parsed.remainder).await {
-            Ok(response) => DispatchOutcome {
-                ok: true,
-                message: response.text,
-                action,
-                session_id: None,
-                clipboard_query: None,
-                // Chat replies are shown *in* the palette, so it stays open.
-                close_window: false,
-            },
-            Err(e) => DispatchOutcome::simple(false, action, e.user_message(), false),
-        },
+        PrefixAction::PrimaryAi => {
+            // Routed through the chat store rather than `agent::chat` so `/` has
+            // a memory: the thread is sent with the question and both turns are
+            // saved. A one-shot call is what made follow-ups useless.
+            let Some(store) = app.try_state::<crate::chat::ChatStore>() else {
+                return DispatchOutcome::simple(
+                    false,
+                    action,
+                    "Chat history is unavailable.",
+                    false,
+                );
+            };
+            let store = store.inner().clone();
+
+            let conversation = match crate::chat::active_conversation(&store) {
+                Ok(id) => id,
+                Err(e) => return DispatchOutcome::simple(false, action, e.user_message(), false),
+            };
+
+            match crate::chat::ask(&store, settings, conversation, &parsed.remainder).await {
+                Ok(text) => {
+                    let _ = app.emit(crate::chat::CHAT_CHANGED_EVENT, conversation);
+                    DispatchOutcome {
+                        ok: true,
+                        message: text,
+                        action,
+                        session_id: None,
+                        clipboard_query: None,
+                        conversation_id: Some(conversation),
+                        // Chat replies are shown *in* the palette, so it stays open.
+                        close_window: false,
+                    }
+                }
+                Err(e) => DispatchOutcome::simple(false, action, e.user_message(), false),
+            }
+        }
 
         PrefixAction::ComputerUse => {
             let runtime = match app.try_state::<crate::agent::AgentRuntime>() {
@@ -194,6 +223,7 @@ pub async fn dispatch<R: tauri::Runtime>(
                     action,
                     session_id: Some(session_id),
                     clipboard_query: None,
+                    conversation_id: None,
                     close_window: false,
                 },
                 Err(e) => DispatchOutcome::simple(false, action, e.user_message(), false),
@@ -206,6 +236,7 @@ pub async fn dispatch<R: tauri::Runtime>(
             action,
             session_id: None,
             clipboard_query: Some(parsed.remainder.clone()),
+            conversation_id: None,
             close_window: false,
         },
 

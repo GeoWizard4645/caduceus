@@ -35,6 +35,10 @@ mod macos;
 pub const STAFF_WINDOW: &str = "staff";
 pub const COMMAND_CENTER_WINDOW: &str = "command-center";
 pub const SETTINGS_WINDOW: &str = "settings";
+pub const CHAT_WINDOW: &str = "chat";
+
+/// Asks the chat window to open a particular thread.
+pub const CHAT_OPEN_EVENT: &str = "caduceus://chat-open";
 
 /// Emitted to the staff window as the pointer moves in and out.
 pub const STAFF_HOVER_EVENT: &str = "caduceus://staff-hover";
@@ -74,6 +78,18 @@ pub fn staff_window_side(settings: &Settings) -> f64 {
 pub fn configure_staff_floating<R: Runtime>(window: &WebviewWindow<R>) {
     #[cfg(target_os = "macos")]
     macos::configure_staff_window(window);
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = window.set_visible_on_all_workspaces(true);
+        let _ = window.set_always_on_top(true);
+    }
+}
+
+/// The same, for the Command Center — the window you actually reach for while
+/// another app is full-screen.
+pub fn configure_command_center_floating<R: Runtime>(window: &WebviewWindow<R>) {
+    #[cfg(target_os = "macos")]
+    macos::configure_command_center_window(window);
     #[cfg(not(target_os = "macos"))]
     {
         let _ = window.set_visible_on_all_workspaces(true);
@@ -635,7 +651,10 @@ pub fn open_command_center<R: Runtime>(
     }
 
     window.show().map_err(|e| e.to_string())?;
-    let _ = window.set_always_on_top(true);
+    // Not just `set_always_on_top`: on macOS that alone leaves the window at
+    // floating level in whichever Space it was created in, so pressing the
+    // hotkey inside another app's full-screen Space did nothing visible.
+    configure_command_center_floating(&window);
     window.set_focus().map_err(|e| e.to_string())?;
     let source = payload.source.clone();
     window
@@ -700,11 +719,38 @@ pub fn open_settings<R: Runtime>(app: &AppHandle<R>, tab: Option<&str>) -> Resul
     Ok(())
 }
 
-/// Called when Settings closes: drop back to being a menu-bar-only app.
+/// Open the chat window, optionally on a specific thread.
+///
+/// Like Settings, this is a window you read and type in for minutes at a time,
+/// so it gets a Dock icon while it is open — an accessory app's windows are
+/// otherwise unreachable once they lose focus.
+pub fn open_chat<R: Runtime>(app: &AppHandle<R>, conversation_id: Option<i64>) -> Result<(), String> {
+    let Some(window) = app.get_webview_window(CHAT_WINDOW) else {
+        return Err("the chat window is missing".into());
+    };
+    window.show().map_err(|e| e.to_string())?;
+    window.unminimize().ok();
+    window.set_focus().map_err(|e| e.to_string())?;
+    let _ = window.emit(CHAT_OPEN_EVENT, conversation_id);
+
+    #[cfg(target_os = "macos")]
+    {
+        let _ = app.set_activation_policy(tauri::ActivationPolicy::Regular);
+    }
+    Ok(())
+}
+
+/// Called when a window that earned a Dock icon closes: drop back to being a
+/// menu-bar-only app, unless another such window is still open.
+///
+/// `closing` is excluded from the check by label — at the point the close event
+/// fires the window still reports itself visible, so counting it would keep the
+/// Dock icon forever.
 #[cfg(target_os = "macos")]
-pub fn on_settings_closed<R: Runtime>(app: &AppHandle<R>) {
-    let others_visible = [COMMAND_CENTER_WINDOW]
+pub fn on_dock_window_closed<R: Runtime>(app: &AppHandle<R>, closing: &str) {
+    let others_visible = [SETTINGS_WINDOW, CHAT_WINDOW, COMMAND_CENTER_WINDOW]
         .iter()
+        .filter(|label| **label != closing)
         .any(|label| {
             app.get_webview_window(label)
                 .and_then(|w| w.is_visible().ok())

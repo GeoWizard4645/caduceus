@@ -404,6 +404,8 @@ export interface DispatchOutcome {
   action: PrefixAction;
   sessionId: string | null;
   clipboardQuery: string | null;
+  /** Set for `primary_ai`: the thread the reply was saved into. */
+  conversationId: number | null;
   closeWindow: boolean;
 }
 
@@ -498,4 +500,33 @@ export const EVENTS = {
   voicePartial: "caduceus://voice-partial",
   voiceResult: "caduceus://voice-result",
   hotkeyProblems: "caduceus://hotkey-problems",
+  chatChanged: "caduceus://chat-changed",
+  chatOpen: "caduceus://chat-open",
 } as const;
+
+// --- chat --------------------------------------------------------------------
+
+export type ChatRole = "user" | "assistant";
+
+export interface ChatMessage {
+  id: number;
+  role: ChatRole;
+  text: string;
+  /** Unix seconds. */
+  createdAt: number;
+}
+
+export interface Conversation {
+  id: number;
+  title: string;
+  createdAt: number;
+  updatedAt: number;
+  messageCount: number;
+  /** First line of the most recent turn, for the thread list. */
+  preview: string;
+}
+
+export interface ChatReply {
+  conversationId: number;
+  text: string;
+}

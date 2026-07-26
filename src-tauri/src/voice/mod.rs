@@ -15,6 +15,7 @@ pub use router::{route, RoutedText};
 pub use stt::{SttAvailability, SttBackend, SttError};
 
 use parking_lot::Mutex;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 use crate::settings::{SettingsManager, SttBackendKind};
@@ -40,6 +41,14 @@ enum ActiveRecording {
 #[derive(Clone, Default)]
 pub struct VoiceRuntime {
     active: Arc<Mutex<Option<ActiveRecording>>>,
+    /// A start is in flight. Starting a live session is a blocking handshake
+    /// with a helper process that can legitimately take minutes on first run
+    /// while macOS shows its permission sheets.
+    starting: Arc<AtomicBool>,
+    /// Set by [`Self::cancel`] while a start is still in flight, so the session
+    /// is torn down the moment it finishes instead of becoming a recording
+    /// nobody asked for.
+    abandon: Arc<AtomicBool>,
 }
 
 impl VoiceRuntime {
@@ -48,18 +57,56 @@ impl VoiceRuntime {
     }
 
     pub fn is_recording(&self) -> bool {
-        self.active.lock().is_some()
+        self.active.lock().is_some() || self.starting.load(Ordering::SeqCst)
     }
 
+    /// Begin recording.
+    ///
+    /// The blocking part deliberately runs *outside* the mutex. Holding it
+    /// across the handshake meant `stop` and `cancel` — which both take the same
+    /// lock — blocked behind a helper that was itself waiting on a permission
+    /// prompt. The UI showed "recording" and nothing could end it: not the red
+    /// indicator, not the Command Center, not the function key.
     pub fn start<F>(&self, settings: &SettingsManager, on_partial: F) -> Result<(), String>
     where
         F: Fn(String) + Send + Sync + 'static,
     {
-        let mut slot = self.active.lock();
-        if slot.is_some() {
+        if self.active.lock().is_some() {
+            return Ok(());
+        }
+        // Claim the start. Two rapid triggers must not both spin up a helper.
+        if self.starting.swap(true, Ordering::SeqCst) {
+            return Ok(());
+        }
+        self.abandon.store(false, Ordering::SeqCst);
+
+        let outcome = self.open_session(settings, on_partial);
+        self.starting.store(false, Ordering::SeqCst);
+
+        let session = match outcome {
+            Ok(session) => session,
+            Err(e) => return Err(e),
+        };
+
+        // A cancel that arrived mid-handshake wins: the user has already asked
+        // for this to be over.
+        if self.abandon.swap(false, Ordering::SeqCst) {
+            close_session(session);
             return Ok(());
         }
 
+        *self.active.lock() = Some(session);
+        Ok(())
+    }
+
+    fn open_session<F>(
+        &self,
+        settings: &SettingsManager,
+        #[allow(unused_variables)] on_partial: F,
+    ) -> Result<ActiveRecording, String>
+    where
+        F: Fn(String) + Send + Sync + 'static,
+    {
         let use_live = settings.with(|s| {
             s.voice.stt_backend == SttBackendKind::SystemNative && cfg!(target_os = "macos")
         });
@@ -68,15 +115,13 @@ impl VoiceRuntime {
         if use_live {
             let language = settings.with(|s| s.voice.stt_language.clone());
             let session = live_macos::LiveSession::start(&language, move |text| on_partial(text))
-            .map_err(|e: String| e)?;
-            *slot = Some(ActiveRecording::Live(session));
-            return Ok(());
+                .map_err(|e: String| e)?;
+            return Ok(ActiveRecording::Live(session));
         }
 
         let max_secs = settings.with(|s| s.voice.max_recording_secs);
         let recording = recorder::start(max_secs).map_err(|e| e.to_string())?;
-        *slot = Some(ActiveRecording::Batch(recording));
-        Ok(())
+        Ok(ActiveRecording::Batch(recording))
     }
 
     pub fn stop(&self) -> Option<StopOutcome> {
@@ -91,16 +136,25 @@ impl VoiceRuntime {
     }
 
     pub fn cancel(&self) {
+        // Tell an in-flight start to throw its session away when it lands. The
+        // handshake cannot be interrupted from here, but its result can be.
+        if self.starting.load(Ordering::SeqCst) {
+            self.abandon.store(true, Ordering::SeqCst);
+        }
         if let Some(active) = self.active.lock().take() {
-            match active {
-                ActiveRecording::Batch(recording) => {
-                    let _ = recording.finish();
-                }
-                #[cfg(target_os = "macos")]
-                ActiveRecording::Live(live) => {
-                    let _ = live.stop();
-                }
-            }
+            close_session(active);
+        }
+    }
+}
+
+fn close_session(active: ActiveRecording) {
+    match active {
+        ActiveRecording::Batch(recording) => {
+            let _ = recording.finish();
+        }
+        #[cfg(target_os = "macos")]
+        ActiveRecording::Live(live) => {
+            let _ = live.stop();
         }
     }
 }

@@ -21,6 +21,9 @@ import type {
   ClipboardStats,
   DispatchOutcome,
   ExecOutcome,
+  ChatMessage,
+  ChatReply,
+  Conversation,
   ParsedInput,
   RoutedText,
   RuntimeInfo,
@@ -269,3 +272,37 @@ export function errorMessage(error: unknown): string {
   }
   return String(error);
 }
+
+// --- chat --------------------------------------------------------------------
+
+/**
+ * Ask the primary backend inside a conversation.
+ *
+ * `conversationId` of `null` continues the most recent thread, starting one if
+ * there is none — which is what a bare `/` in the palette does. The reply names
+ * the thread it landed in, so the caller can keep asking into the same one.
+ */
+export const chatAsk = (prompt: string, conversationId: number | null = null) =>
+  invoke<ChatReply>("chat_ask", { prompt, conversationId });
+
+export const chatConversations = () => invoke<Conversation[]>("chat_conversations");
+
+export const chatMessages = (conversationId: number) =>
+  invoke<ChatMessage[]>("chat_messages", { conversationId });
+
+export const chatNewConversation = () => invoke<number>("chat_new_conversation");
+
+export const chatDeleteConversation = (conversationId: number) =>
+  invoke<void>("chat_delete_conversation", { conversationId });
+
+export const chatClear = () => invoke<void>("chat_clear");
+
+/** Open the full chat window, optionally on a specific thread. */
+export const openChatWindow = (conversationId: number | null = null) =>
+  invoke<void>("open_chat_window", { conversationId });
+
+// --- notes -------------------------------------------------------------------
+
+/** Append text to Apple Notes as a new note. */
+export const addToNotes = (body: string, title: string | null = null) =>
+  invoke<ExecOutcome>("add_to_notes", { body, title });

@@ -20,6 +20,9 @@ use crate::palette::{self, DispatchOutcome};
 use crate::settings::{self, secrets, BackendConfig, Settings, SettingsManager};
 use crate::shortcuts::{self, BrowserInstall, ExecOutcome};
 use crate::capture;
+use crate::chat;
+use crate::notes;
+use crate::tools;
 use crate::voice;
 use crate::window;
 
@@ -815,4 +818,191 @@ end tell"#
         }),
         Err(e) => Err(format!("Could not open Terminal: {e}")),
     }
+}
+
+// ---------------------------------------------------------------------------
+// Chat
+// ---------------------------------------------------------------------------
+
+/// Ask the primary backend inside a conversation, persisting both turns.
+///
+/// `conversation_id` of `None` continues the most recent thread, or starts one
+/// if there is none — which is what a bare `/` in the palette does.
+#[tauri::command]
+pub async fn chat_ask<R: Runtime>(
+    app: AppHandle<R>,
+    conversation_id: Option<i64>,
+    prompt: String,
+) -> Res<chat::ChatReply> {
+    let store = app
+        .try_state::<chat::ChatStore>()
+        .ok_or("Chat history is unavailable.")?
+        .inner()
+        .clone();
+    let settings = app
+        .try_state::<SettingsManager>()
+        .ok_or("Settings are unavailable.")?
+        .inner()
+        .clone();
+
+    let id = match conversation_id {
+        Some(id) => id,
+        None => chat::active_conversation(&store).map_err(|e| e.user_message())?,
+    };
+
+    let text = chat::ask(&store, &settings, id, &prompt)
+        .await
+        .map_err(|e| e.user_message())?;
+
+    let _ = app.emit(chat::CHAT_CHANGED_EVENT, id);
+    Ok(chat::ChatReply {
+        conversation_id: id,
+        text,
+    })
+}
+
+#[tauri::command]
+pub fn chat_conversations<R: Runtime>(app: AppHandle<R>) -> Res<Vec<chat::Conversation>> {
+    let store = app
+        .try_state::<chat::ChatStore>()
+        .ok_or("Chat history is unavailable.")?;
+    store.conversations(200).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn chat_messages<R: Runtime>(
+    app: AppHandle<R>,
+    conversation_id: i64,
+) -> Res<Vec<chat::ChatMessage>> {
+    let store = app
+        .try_state::<chat::ChatStore>()
+        .ok_or("Chat history is unavailable.")?;
+    store.messages(conversation_id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn chat_new_conversation<R: Runtime>(app: AppHandle<R>) -> Res<i64> {
+    let store = app
+        .try_state::<chat::ChatStore>()
+        .ok_or("Chat history is unavailable.")?;
+    // Opening a second empty thread before using the first would leave a blank
+    // row in the list for every stray click on "New chat".
+    let _ = store.prune_empty();
+    store.create_conversation().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn chat_delete_conversation<R: Runtime>(app: AppHandle<R>, conversation_id: i64) -> Res<()> {
+    let store = app
+        .try_state::<chat::ChatStore>()
+        .ok_or("Chat history is unavailable.")?;
+    store
+        .delete_conversation(conversation_id)
+        .map_err(|e| e.to_string())?;
+    let _ = app.emit(chat::CHAT_CHANGED_EVENT, conversation_id);
+    Ok(())
+}
+
+#[tauri::command]
+pub fn chat_clear<R: Runtime>(app: AppHandle<R>) -> Res<()> {
+    let store = app
+        .try_state::<chat::ChatStore>()
+        .ok_or("Chat history is unavailable.")?;
+    store.clear().map_err(|e| e.to_string())?;
+    let _ = app.emit(chat::CHAT_CHANGED_EVENT, 0i64);
+    Ok(())
+}
+
+/// Open the full chat window, optionally on a specific thread.
+#[tauri::command]
+pub fn open_chat_window<R: Runtime>(app: AppHandle<R>, conversation_id: Option<i64>) -> Res<()> {
+    window::open_chat(&app, conversation_id)
+}
+
+// ---------------------------------------------------------------------------
+// Notes
+// ---------------------------------------------------------------------------
+
+/// Append text to Apple Notes as a new note.
+#[tauri::command]
+pub async fn add_to_notes(title: Option<String>, body: String) -> Res<ExecOutcome> {
+    if body.trim().is_empty() {
+        return Err("There is nothing to save.".into());
+    }
+    let title = title.unwrap_or_default();
+    // osascript blocks, and the first call waits on a permission sheet.
+    let made = tauri::async_runtime::spawn_blocking(move || notes::add(&title, &body))
+        .await
+        .map_err(|e| format!("Could not reach Notes: {e}"))??;
+
+    Ok(ExecOutcome {
+        ok: true,
+        message: format!("Saved “{made}” to Notes."),
+        frontend_action: None,
+        output: None,
+    })
+}
+
+// ---------------------------------------------------------------------------
+// Utilities
+// ---------------------------------------------------------------------------
+
+/// Convert text between cases. Returns the converted text for the UI to copy.
+#[tauri::command]
+pub fn change_case(text: String, case: tools::text::Case) -> String {
+    tools::text::convert(&text, case)
+}
+
+/// The cases the UI can offer, with labels, so the list lives in one place.
+#[tauri::command]
+pub fn case_options() -> Vec<(tools::text::Case, String)> {
+    tools::text::Case::all()
+        .iter()
+        .map(|c| (*c, c.label().to_string()))
+        .collect()
+}
+
+#[tauri::command]
+pub fn copy_latest_download() -> tools::ToolOutcome {
+    tools::copy_latest_download()
+}
+
+#[tauri::command]
+pub fn open_latest_download() -> tools::ToolOutcome {
+    tools::open_latest_download()
+}
+
+#[tauri::command]
+pub fn copy_finder_path() -> tools::ToolOutcome {
+    tools::copy_finder_path()
+}
+
+#[tauri::command]
+pub fn eject_disks() -> tools::ToolOutcome {
+    tools::eject_all_disks()
+}
+
+#[tauri::command]
+pub fn stay_awake(on: bool) -> tools::ToolOutcome {
+    tools::set_awake(on, std::process::id())
+}
+
+#[tauri::command]
+pub fn stay_awake_state() -> bool {
+    tools::awake_state()
+}
+
+#[tauri::command]
+pub fn search_files(query: String, limit: Option<usize>) -> Vec<tools::FileHit> {
+    tools::search_files(&query, limit.unwrap_or(40))
+}
+
+#[tauri::command]
+pub fn define_word(word: String) -> tools::ToolOutcome {
+    tools::define_word(&word)
+}
+
+#[tauri::command]
+pub fn convert_image(path: String, width: Option<u32>, format: Option<String>) -> tools::ToolOutcome {
+    tools::convert_image(&path, width, format.as_deref())
 }

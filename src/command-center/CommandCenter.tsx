@@ -20,6 +20,7 @@ import {
   type ResultItem,
 } from "@/shared/providers";
 import type {
+  ChatMessage,
   ClipboardEntry,
   CommandCenterOpenPayload,
   ParsedInput,
@@ -29,17 +30,13 @@ import type {
 import { EVENTS } from "@/shared/types";
 import { Kbd, Spinner, cx } from "@/shared/ui";
 import { ShortcutIcon } from "@/shared/ShortcutIcon";
+import { Thread } from "@/chat/Thread";
 
 import { AgentPanel } from "./AgentPanel";
 import { ClipboardView } from "./ClipboardView";
 import { SystemView } from "./SystemView";
 
 type Mode = "default" | "clipboard" | "system";
-
-interface ChatReply {
-  prompt: string;
-  text: string;
-}
 
 export function CommandCenter() {
   const { settings } = useSettings();
@@ -51,7 +48,7 @@ export function CommandCenter() {
   const [results, setResults] = useState<ResultItem[]>([]);
   const [parsed, setParsed] = useState<ParsedInput | null>(null);
   const [busy, setBusy] = useState(false);
-  const [chat, setChat] = useState<ChatReply | null>(null);
+  const [chat, setChat] = useState<{ conversationId: number } | null>(null);
   const [session, setSession] = useState<{ id: string; task: string } | null>(null);
   const [voice, setVoice] = useState<VoiceState>("idle");
   const [clipboardCount, setClipboardCount] = useState(0);
@@ -184,7 +181,9 @@ export function CommandCenter() {
         const outcome = await api.dispatchInput(text);
 
         if (outcome.action === "primary_ai") {
-          if (outcome.ok) setChat({ prompt: text, text: outcome.message });
+          if (outcome.ok && outcome.conversationId != null)
+            setChat({ conversationId: outcome.conversationId });
+          else if (!outcome.ok) notify(outcome.message, "error");
           else notify(outcome.message, "error");
         } else if (outcome.action === "computer_use") {
           if (outcome.ok && outcome.sessionId) {
@@ -396,7 +395,11 @@ export function CommandCenter() {
           onClose={() => setSession(null)}
         />
       ) : chat ? (
-        <ChatResult reply={chat} onDismiss={() => setChat(null)} onNotify={notify} />
+        <InlineChat
+          conversationId={chat.conversationId}
+          onDismiss={() => setChat(null)}
+          onNotify={notify}
+        />
       ) : mode === "system" ? (
         <SystemView query={debouncedInput} onNotify={notify} />
       ) : mode === "clipboard" ? (
@@ -550,38 +553,87 @@ function ResultRow({
   );
 }
 
-function ChatResult({
-  reply,
+/**
+ * The `/` conversation, inline in the palette.
+ *
+ * Renders the same {@link Thread} the chat window does, so a fix to one is a fix
+ * to both. The palette shows the tail of the thread; "Open in window" hands the
+ * same conversation to the full view for reading back through it.
+ */
+function InlineChat({
+  conversationId,
   onDismiss,
   onNotify,
 }: {
-  reply: ChatReply;
+  conversationId: number;
   onDismiss: () => void;
   onNotify: (message: string, tone?: "info" | "error") => void;
 }) {
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+
+  const reload = useCallback(async () => {
+    try {
+      setMessages(await api.chatMessages(conversationId));
+    } catch {
+      setMessages([]);
+    }
+  }, [conversationId]);
+
+  useEffect(() => {
+    void reload();
+  }, [reload]);
+
+  // The chat window writes to the same thread.
+  useTauriEvent<number>(EVENTS.chatChanged, (id) => {
+    if (id === conversationId) void reload();
+  });
+
+  const last = [...messages].reverse().find((m) => m.role === "assistant");
+
   return (
-    <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
-      <p className="eyebrow mb-2">Reply</p>
-      <div className="selectable whitespace-pre-wrap text-[13px] leading-relaxed text-ink-soft">
-        {reply.text}
-      </div>
-      <div className="row mt-4">
+    <div className="flex min-h-0 flex-1 flex-col">
+      <Thread className="min-h-0 flex-1" messages={messages} />
+
+      <div className="row shrink-0 gap-1 px-5 pb-3">
         <button
           type="button"
-          onClick={() => {
-            navigator.clipboard
-              .writeText(reply.text)
-              .then(() => onNotify("Copied"))
-              .catch(() => onNotify("Could not copy", "error"));
-          }}
+          onClick={() => void api.openChatWindow(conversationId)}
           className="rounded-md border border-line bg-raised px-2.5 py-1 text-2xs text-ink-soft transition-colors hover:bg-overlay hover:text-ink"
         >
-          Copy
+          Open in window
         </button>
+        {last && (
+          <>
+            <button
+              type="button"
+              onClick={() => {
+                navigator.clipboard
+                  .writeText(last.text)
+                  .then(() => onNotify("Copied"))
+                  .catch(() => onNotify("Could not copy", "error"));
+              }}
+              className="rounded-md px-2.5 py-1 text-2xs text-ink-faint transition-colors hover:text-ink"
+            >
+              Copy
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                api
+                  .addToNotes(last.text)
+                  .then((out) => onNotify(out.message))
+                  .catch((e) => onNotify(api.errorMessage(e), "error"));
+              }}
+              className="rounded-md px-2.5 py-1 text-2xs text-ink-faint transition-colors hover:text-ink"
+            >
+              Save to Notes
+            </button>
+          </>
+        )}
         <button
           type="button"
           onClick={onDismiss}
-          className="rounded-md px-2.5 py-1 text-2xs text-ink-faint transition-colors hover:text-ink"
+          className="ml-auto rounded-md px-2.5 py-1 text-2xs text-ink-faint transition-colors hover:text-ink"
         >
           Back · Esc
         </button>
