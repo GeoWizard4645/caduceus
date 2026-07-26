@@ -666,7 +666,7 @@
       <span class="badge">macOS 11+</span>
       <span class="badge">Apple Silicon &amp; Intel</span>
       <span class="badge">MIT licensed</span>
-      <span class="badge">~5 MB</span>
+      <span class="badge">~10 MB</span>
     </div>
 
     <div class="install" id="install">
@@ -691,8 +691,8 @@
           <button class="copy" id="copy" type="button">Copy</button>
         </div>
         <p class="cmd-meta" id="cmd-meta">
-          <strong>~5 MB</strong> download · <strong>~10 s</strong> on a fast connection ·
-          <strong>Idempotent</strong> — safe to run again; skips the app if it is already installed.
+          <strong>~10 MB</strong> download · <strong>~10 s</strong> on a fast connection ·
+          <strong>Idempotent</strong> — safe to run again; re-running just reinstalls the latest release.
         </p>
       </div>
 
@@ -747,11 +747,16 @@
           pipe a script into <code>bash</code>.
         </p>
         <p>
-          <a href="https://github.com/GeoWizard4645/caduceus/releases/latest">Get the latest .dmg</a>,
-          drag Caduceus to Applications, then run this once. Caduceus is not signed with an Apple
-          Developer certificate yet, so macOS quarantines it until you trust it.
+          <a href="https://github.com/GeoWizard4645/caduceus/releases/latest">Get the latest .dmg</a>
+          — one universal build, Apple Silicon and Intel. Drag Caduceus to Applications, then run
+          this once. Caduceus is not signed with an Apple Developer certificate yet, so macOS
+          quarantines it until you trust it. Options 1 and 2 run this for you.
         </p>
         <pre>xattr -dr com.apple.quarantine /Applications/Caduceus.app</pre>
+        <p class="install-follow">
+          Would rather compile it? Add <code>--from-source</code> to the command in option 1 and the
+          installer builds it on your Mac instead — it fetches Rust and Node and takes a few minutes.
+        </p>
       </div>
       </div>
     </div>
@@ -916,7 +921,9 @@
     // this far already has them, so counting them in the total would overstate
     // it for almost everyone. Called out in the checkbox's own info line instead.
     deps: { sizeMB: 0, size: "~0 MB*", time: "~0–10 min" },
-    caduceus: { sizeMB: 5, size: "~5 MB", time: "~10 s" },
+    // The universal .dmg carries both slices, so it is roughly twice the size
+    // of the app you end up running.
+    caduceus: { sizeMB: 10, size: "~10 MB", time: "~10 s" },
     hermes: { sizeMB: 150, size: "~150 MB", time: "~2–5 min" },
     ollama: { sizeMB: 80, size: "~80 MB", time: "~1 min" },
     "qwen3.5:4b": { sizeMB: 3400, size: "~3.4 GB", time: "~5–20 min" },
@@ -936,7 +943,17 @@
         "download is ~1.5 GB via Apple's installer.",
       on: true,
     },
-    { id: "caduceus", kind: "component", name: "Caduceus", detail: "the app itself", on: true },
+    {
+      id: "caduceus",
+      kind: "component",
+      name: "Caduceus",
+      detail: "the app itself",
+      info:
+        "One universal .dmg from the latest release — Apple Silicon and Intel, no toolchain, no " +
+        "build. The installer clears the quarantine flag for you, since Caduceus is not signed " +
+        "with an Apple Developer certificate.",
+      on: true,
+    },
     {
       id: "hermes",
       kind: "component",

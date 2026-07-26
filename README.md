@@ -25,8 +25,9 @@
 curl -fsSL https://vivaanshahani.com/caduceus/install.sh | bash
 ```
 
-That downloads the latest `.dmg`, mounts it, copies the app to `/Applications`,
-removes the quarantine flag, and launches it.
+That downloads the universal `.dmg` from the latest release, mounts it, copies
+the app to `/Applications`, removes the quarantine flag, and launches it. About
+10 MB and ten seconds, with no toolchain and nothing to configure.
 
 Prefer to do it yourself? Download the `.dmg` from
 [Releases](https://github.com/GeoWizard4645/caduceus/releases), drag Caduceus to
@@ -41,11 +42,21 @@ xattr -dr com.apple.quarantine /Applications/Caduceus.app
 
 Caduceus is not signed with an Apple Developer certificate yet, so macOS marks
 it as quarantined and refuses to open it. `xattr -dr com.apple.quarantine`
-clears that flag. You are telling macOS you trust this specific app — which you
-should only do because you can read the source in this repo and build it
-yourself.
+clears that flag — it is the same thing the right-click → Open dance does, more
+directly. You are telling macOS you trust this specific app, which you should
+only do because you can read the source in this repo and build it yourself.
+
+The installer runs that command for you, so the one-liner above needs no
+follow-up.
 
 </details>
+
+Would rather run only code you compiled? The installer will do that too, at the
+cost of a Rust and Node toolchain and a few minutes:
+
+```bash
+curl -fsSL https://vivaanshahani.com/caduceus/install.sh | bash -s -- --from-source
+```
 
 Caduceus lives in your menu bar. There is no Dock icon.
 
@@ -154,15 +165,29 @@ it.
 
 ## Building from source
 
-You need [Rust](https://rustup.rs), [Node](https://nodejs.org) 18+, and Xcode
+You need [Rust](https://rustup.rs), [Node](https://nodejs.org) 20+, and Xcode
 Command Line Tools (`xcode-select --install`).
 
 ```bash
 git clone https://github.com/GeoWizard4645/caduceus.git
 cd caduceus
 npm install
-npm start          # run in development
-npm run bundle     # build a .dmg into src-tauri/target/release/bundle/dmg
+npm start                             # run in development
+npm run tauri -- build --bundles app  # Caduceus.app into src-tauri/target/release/bundle/macos
+npm run bundle                        # the same, plus a .dmg
+```
+
+Then drag it across:
+
+```bash
+cp -R src-tauri/target/release/bundle/macos/Caduceus.app /Applications/
+```
+
+Releases ship a single universal `.dmg` covering Apple Silicon and Intel, which
+needs the Intel target installed once (`rustup target add x86_64-apple-darwin`):
+
+```bash
+npm run tauri -- build --target universal-apple-darwin --bundles dmg
 ```
 
 Tests:
