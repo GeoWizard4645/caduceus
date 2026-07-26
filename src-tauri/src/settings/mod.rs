@@ -149,17 +149,37 @@ fn migrate(s: &mut Settings) {
             .iter()
             .any(|label| label.eq_ignore_ascii_case(&staff_key));
         if is_function_key {
-            if let Some(binding) = s
+            let already_toggles = s
                 .general
                 .function_keys
-                .iter_mut()
-                .find(|b| b.key.eq_ignore_ascii_case(&staff_key))
-            {
-                // Only claim the row if it is unused — someone who deliberately
-                // put another action on that key keeps it.
-                if binding.action == FunctionKeyAction::None {
-                    binding.action = FunctionKeyAction::ToggleStaff;
+                .iter()
+                .any(|b| b.action == FunctionKeyAction::ToggleStaff);
+
+            if !already_toggles {
+                // Prefer the key they actually had. If they had since assigned
+                // something else to that row, take the first *free* row instead
+                // — never overwrite a binding the user chose, and never drop the
+                // staff toggle on the floor either.
+                let preferred = s
+                    .general
+                    .function_keys
+                    .iter()
+                    .position(|b| {
+                        b.key.eq_ignore_ascii_case(&staff_key)
+                            && b.action == FunctionKeyAction::None
+                    })
+                    .or_else(|| {
+                        s.general
+                            .function_keys
+                            .iter()
+                            .position(|b| b.action == FunctionKeyAction::None)
+                    });
+
+                if let Some(index) = preferred {
+                    s.general.function_keys[index].action = FunctionKeyAction::ToggleStaff;
                 }
+                // Every row occupied is possible but absurd; the menu-bar icon
+                // still toggles the staff, so nothing is unreachable.
             }
             s.general.toggle_orb_hotkey.clear();
         }
@@ -360,6 +380,10 @@ mod tests {
         if let Some(b) = s.general.function_keys.iter_mut().find(|b| b.key == "F5") {
             b.action = FunctionKeyAction::Screenshot;
         }
+        // Clear the default F12 toggle so the migration has to find a home.
+        if let Some(b) = s.general.function_keys.iter_mut().find(|b| b.key == "F12") {
+            b.action = FunctionKeyAction::None;
+        }
 
         migrate(&mut s);
 
@@ -368,6 +392,32 @@ mod tests {
             FunctionKeyAction::Screenshot,
             "a key the user already assigned must win over the migrated default"
         );
+        assert!(
+            s.general
+                .function_keys
+                .iter()
+                .any(|b| b.action == FunctionKeyAction::ToggleStaff),
+            "the staff toggle must land somewhere rather than being dropped"
+        );
+    }
+
+    #[test]
+    fn a_fully_occupied_table_does_not_panic() {
+        let mut s = Settings::default();
+        s.general.toggle_orb_hotkey = "F7".into();
+        for b in s.general.function_keys.iter_mut() {
+            b.action = FunctionKeyAction::Screenshot;
+        }
+
+        migrate(&mut s);
+
+        // Nothing was overwritten, and the field still handed over.
+        assert!(s
+            .general
+            .function_keys
+            .iter()
+            .all(|b| b.action == FunctionKeyAction::Screenshot));
+        assert!(s.general.toggle_orb_hotkey.is_empty());
     }
 
     #[test]

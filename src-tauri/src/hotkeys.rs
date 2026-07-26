@@ -26,90 +26,241 @@ use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
 use crate::settings::{FunctionKeyAction, SettingsManager};
 use crate::{voice, window};
 
+/// Accelerators tried, in order, when the configured one cannot be registered.
+///
+/// Every entry is deliberately something no stock macOS install claims. The
+/// point is that a fresh user whose preferred key is taken by another app still
+/// ends up with a *working* Caduceus rather than a silently dead shortcut.
+const COMMAND_CENTER_FALLBACKS: &[&str] = &[
+    "Control+Space",
+    "Alt+Space",
+    "Control+Shift+Space",
+    "Alt+Shift+Space",
+    "CommandOrControl+Alt+Space",
+    "F17",
+];
+
+const PUSH_TO_TALK_FALLBACKS: &[&str] = &[
+    "Alt+Shift+V",
+    "Control+Shift+V",
+    "CommandOrControl+Alt+V",
+    "F18",
+];
+
+const TOGGLE_STAFF_FALLBACKS: &[&str] = &[
+    "CommandOrControl+Alt+S",
+    "Control+Shift+S",
+    "Alt+Shift+S",
+];
+
+/// What happened to one binding Caduceus had to move.
+#[derive(Debug, Clone)]
+pub struct Rebound {
+    pub label: String,
+    pub wanted: String,
+    pub used: String,
+}
+
 /// Register every configured hotkey, replacing anything previously registered.
 ///
 /// Called at startup and again whenever settings change, so rebinding takes
 /// effect immediately.
+///
+/// # Never silently losing a binding
+///
+/// If the configured accelerator is taken by another application, Caduceus
+/// moves that action to the first free fallback and **persists** the change,
+/// rather than leaving a shortcut that does nothing. A key you chose is only
+/// ever replaced when the OS refuses it — the alternative is an app whose
+/// documented shortcut does not work and gives no reason why.
 pub fn register_all<R: Runtime>(app: &AppHandle<R>, settings: &SettingsManager) -> Vec<String> {
     let mut problems = Vec::new();
+    let mut rebound: Vec<Rebound> = Vec::new();
 
     if let Err(e) = app.global_shortcut().unregister_all() {
         log::warn!("could not clear old hotkeys: {e}");
     }
 
-    let cfg = settings.get();
-    let reserved: Vec<&str> = [
-        cfg.general.toggle_orb_hotkey.as_str(),
-        cfg.general.command_center_hotkey.as_str(),
-        if cfg.voice.enabled {
-            cfg.voice.push_to_talk_hotkey.as_str()
-        } else {
-            ""
-        },
-    ]
-    .into_iter()
-    .map(|s| s.trim())
-    .filter(|s| !s.is_empty())
-    .collect();
+    let mut cfg = settings.get();
+    let mut claimed: Vec<String> = Vec::new();
 
-    let mut register_one =
-        |problems: &mut Vec<String>, label: &str, accelerator: &str| {
-            let accelerator = accelerator.trim();
-            if accelerator.is_empty() {
-                return;
-            }
+    // Attempt one accelerator. `Ok(())` means the OS accepted it.
+    let try_register = |accelerator: &str| -> Result<(), String> {
+        let accelerator = accelerator.trim();
+        if accelerator.is_empty() {
+            return Err("empty accelerator".into());
+        }
+        let shortcut = Shortcut::from_str(accelerator).map_err(|e| e.to_string())?;
+        app.global_shortcut()
+            .register(shortcut)
+            .map_err(|e| e.to_string())
+    };
 
-            match Shortcut::from_str(accelerator) {
-                Ok(shortcut) => {
-                    if let Err(e) = app.global_shortcut().register(shortcut) {
+    /// Register `wanted`, falling back through `fallbacks` if the OS refuses.
+    /// Returns the accelerator that actually took effect.
+    macro_rules! bind {
+        ($label:expr, $wanted:expr, $fallbacks:expr) => {{
+            let wanted = $wanted.trim().to_string();
+            if wanted.is_empty() {
+                None
+            } else if claimed.iter().any(|c| c.eq_ignore_ascii_case(&wanted)) {
+                // Two Caduceus actions on one key: the second cannot have it.
+                problems.push(format!(
+                    "\u{201c}{wanted}\u{201d} is set for more than one Caduceus action; {} was left unbound.",
+                    $label
+                ));
+                None
+            } else if try_register(&wanted).is_ok() {
+                claimed.push(wanted.clone());
+                Some(wanted)
+            } else {
+                let replacement = $fallbacks.iter().find(|candidate| {
+                    !candidate.eq_ignore_ascii_case(&wanted)
+                        && !claimed.iter().any(|c| c.eq_ignore_ascii_case(candidate))
+                        && try_register(candidate).is_ok()
+                });
+                match replacement {
+                    Some(found) => {
+                        claimed.push((*found).to_string());
+                        rebound.push(Rebound {
+                            label: $label.to_string(),
+                            wanted: wanted.clone(),
+                            used: (*found).to_string(),
+                        });
+                        Some((*found).to_string())
+                    }
+                    None => {
                         problems.push(format!(
-                            "\u{201c}{accelerator}\u{201d} could not be registered for {label} \
-                             \u{2014} another app is probably using it. ({e})"
+                            "\u{201c}{wanted}\u{201d} could not be registered for {}, and no \
+                             alternative was free either. Pick a different combination in \
+                             Settings \u{2192} General.",
+                            $label
                         ));
+                        None
                     }
                 }
-                Err(e) => problems.push(format!(
-                    "\u{201c}{accelerator}\u{201d} is not a valid shortcut for {label}: {e}"
-                )),
             }
-        };
+        }};
+    }
 
-    register_one(&mut problems, "Toggle staff", cfg.general.toggle_orb_hotkey.as_str());
-    register_one(
-        &mut problems,
+    if let Some(used) = bind!(
+        "Toggle staff",
+        cfg.general.toggle_orb_hotkey.clone(),
+        TOGGLE_STAFF_FALLBACKS
+    ) {
+        cfg.general.toggle_orb_hotkey = used;
+    }
+
+    if let Some(used) = bind!(
         "Command Center",
-        cfg.general.command_center_hotkey.as_str(),
-    );
-    register_one(
-        &mut problems,
-        "Push to talk",
-        if cfg.voice.enabled {
-            cfg.voice.push_to_talk_hotkey.as_str()
-        } else {
-            ""
-        },
-    );
+        cfg.general.command_center_hotkey.clone(),
+        COMMAND_CENTER_FALLBACKS
+    ) {
+        cfg.general.command_center_hotkey = used;
+    }
 
-    for binding in &cfg.general.function_keys {
+    if cfg.voice.enabled {
+        if let Some(used) = bind!(
+            "Push to talk",
+            cfg.voice.push_to_talk_hotkey.clone(),
+            PUSH_TO_TALK_FALLBACKS
+        ) {
+            cfg.voice.push_to_talk_hotkey = used;
+        }
+    }
+
+    // --- function keys ------------------------------------------------------
+    //
+    // These are positional, so there is no sensible "fallback combination" —
+    // the fallback is another *free row* in the same table.
+    let free_rows: Vec<String> = cfg
+        .general
+        .function_keys
+        .iter()
+        .filter(|b| b.action == FunctionKeyAction::None)
+        .map(|b| b.key.clone())
+        .collect();
+    let mut free_rows = free_rows.into_iter();
+
+    for index in 0..cfg.general.function_keys.len() {
+        let binding = &cfg.general.function_keys[index];
         if binding.action == FunctionKeyAction::None {
             continue;
         }
         if binding.action == FunctionKeyAction::PushToTalk && !cfg.voice.enabled {
             continue;
         }
-        let key = binding.key.trim();
+        let key = binding.key.trim().to_string();
         if key.is_empty() {
             continue;
         }
-        if reserved.iter().any(|r| r.eq_ignore_ascii_case(key)) {
+        if claimed.iter().any(|c| c.eq_ignore_ascii_case(&key)) {
             problems.push(format!(
-                "\u{201c}{key}\u{201d} is already used by another Caduceus hotkey — \
-                 change that binding or pick a different function key."
+                "\u{201c}{key}\u{201d} is also a dedicated Caduceus hotkey \u{2014} clear it \
+                 there, or move this action to another function key."
             ));
             continue;
         }
-        let label = format!("Function key {key}");
-        register_one(&mut problems, &label, key);
+
+        if try_register(&key).is_ok() {
+            claimed.push(key);
+            continue;
+        }
+
+        // Taken by another app. Move the action to the first free row that the
+        // OS will accept, rather than dropping it.
+        let mut moved = None;
+        for candidate in free_rows.by_ref() {
+            if claimed.iter().any(|c| c.eq_ignore_ascii_case(&candidate)) {
+                continue;
+            }
+            if try_register(&candidate).is_ok() {
+                moved = Some(candidate);
+                break;
+            }
+        }
+
+        match moved {
+            Some(new_key) => {
+                let action = cfg.general.function_keys[index].action;
+                let shortcut_id = cfg.general.function_keys[index].shortcut_id.clone();
+                cfg.general.function_keys[index].action = FunctionKeyAction::None;
+                cfg.general.function_keys[index].shortcut_id = String::new();
+                if let Some(row) = cfg
+                    .general
+                    .function_keys
+                    .iter_mut()
+                    .find(|b| b.key == new_key)
+                {
+                    row.action = action;
+                    row.shortcut_id = shortcut_id;
+                }
+                claimed.push(new_key.clone());
+                rebound.push(Rebound {
+                    label: format!("Function key {key}"),
+                    wanted: key,
+                    used: new_key,
+                });
+            }
+            None => problems.push(format!(
+                "\u{201c}{key}\u{201d} is held by another app and no other function key was \
+                 free. Pick one in Settings \u{2192} General."
+            )),
+        }
+    }
+
+    // Persist anything we had to move, so the UI and the next launch agree with
+    // what is actually registered.
+    if !rebound.is_empty() {
+        for r in &rebound {
+            problems.push(format!(
+                "\u{201c}{}\u{201d} was unavailable, so {} now uses \u{201c}{}\u{201d}.",
+                r.wanted, r.label, r.used
+            ));
+        }
+        if let Err(e) = crate::settings::save(app, &cfg) {
+            log::error!("could not persist rebound hotkeys: {e}");
+        }
     }
 
     for p in &problems {

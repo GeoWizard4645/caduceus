@@ -1,0 +1,255 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Caduceus — docs</title>
+<meta name="description" content="Full documentation for Caduceus: the staff, the Command Center, prefixes, shortcuts, the system monitor, voice, clipboard, AI and every setting.">
+<link rel="icon" href="caduceus-mark.png">
+<script>
+(function () {
+  var k = "caduceus-site-theme";
+  try {
+    var t = localStorage.getItem(k);
+    if (t !== "light" && t !== "dark") {
+      t = "dark";
+    }
+    document.documentElement.setAttribute("data-theme", t);
+  } catch {
+    document.documentElement.setAttribute("data-theme", "dark");
+  }
+})();
+</script>
+<link rel="stylesheet" href="theme.css">
+<style>
+  :root {
+    --radius: 14px;
+    --page: 940px;
+  }
+  *, *::before, *::after { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--base);
+    color: var(--ink);
+    font: 16px/1.65 -apple-system, BlinkMacSystemFont, "Inter", system-ui, sans-serif;
+  }
+  a { color: var(--accent); }
+  .wrap { max-width: var(--page); margin: 0 auto; padding: 0 24px; }
+  .site-nav {
+    display: flex;
+    justify-content: center;
+    gap: 20px;
+    padding: 28px 0 8px;
+    font-size: 0.9rem;
+  }
+  .site-nav a {
+    color: var(--ink-mute);
+    text-decoration: none;
+    border-bottom: 1px solid transparent;
+  }
+  .site-nav a:hover, .site-nav a[aria-current="page"] {
+    color: var(--ink);
+    border-bottom-color: var(--accent);
+  }
+  header { text-align: center; padding: 24px 0 40px; }
+  h1 { margin: 0 0 8px; font-size: 2rem; letter-spacing: -0.02em; }
+  .sub { margin: 0 auto; max-width: 42ch; color: var(--ink-mute); }
+  section { padding: 40px 0; border-top: 1px solid var(--line); }
+  h2 { margin: 0 0 20px; font-size: 1.25rem; }
+  .feat-list { list-style: none; padding: 0; margin: 0; }
+  .feat-list > li {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 18px 20px;
+    margin-bottom: 14px;
+  }
+  .feat-list h3 { margin: 0 0 10px; font-size: 1rem; color: var(--ink-soft); }
+  .feat-list ul { margin: 0; padding-left: 1.15rem; color: var(--ink-mute); font-size: 0.92rem; }
+  .feat-list li { margin: 5px 0; }
+  footer {
+    border-top: 1px solid var(--line);
+    padding: 32px 0 48px;
+    text-align: center;
+    font-size: 0.85rem;
+    color: var(--ink-faint);
+  }
+  footer a { color: var(--ink-mute); text-decoration: none; }
+</style>
+
+<style>
+  .doc-toc {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 8px;
+    margin: 0 0 40px;
+  }
+  .doc-toc a {
+    display: block;
+    padding: 10px 12px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: var(--surface);
+    color: var(--ink-soft);
+    text-decoration: none;
+    font-size: 0.88rem;
+  }
+  .doc-toc a:hover { border-color: var(--accent); color: var(--ink); }
+  .doc-section { scroll-margin-top: 24px; padding: 28px 0; border-top: 1px solid var(--line); }
+  .doc-section h2 { margin: 0 0 4px; font-size: 1.2rem; letter-spacing: -0.02em; }
+  .doc-section .lede { margin: 0 0 16px; color: var(--ink-faint); font-size: 0.9rem; }
+  .doc-section p, .doc-section li { color: var(--ink-mute); font-size: 0.93rem; }
+  .doc-section ul { padding-left: 20px; }
+  .doc-section li { margin: 0 0 6px; }
+  kbd {
+    border: 1px solid var(--line);
+    border-bottom-width: 2px;
+    border-radius: 5px;
+    background: var(--raised);
+    padding: 1px 6px;
+    font: 0.82em ui-monospace, "SF Mono", Menlo, monospace;
+    color: var(--ink-soft);
+  }
+  code { font: 0.88em ui-monospace, "SF Mono", Menlo, monospace; color: var(--ink-soft); }
+</style>
+
+</head>
+<body>
+
+<button type="button" class="theme-toggle" id="theme-toggle" aria-label="Switch theme">
+  <span class="theme-seg theme-seg-sun" aria-hidden="true">☀</span>
+  <span class="theme-seg theme-seg-moon" aria-hidden="true">☾</span>
+</button>
+
+<a class="portfolio-back" href="https://vivaanshahani.com/" rel="noopener">
+  <span class="arrow" aria-hidden="true">←</span>
+  vivaanshahani.com
+</a>
+
+<div class="wrap">
+  <nav class="site-nav" aria-label="Site">
+    <a href="https://caduceus.vivaanshahani.com/">Overview</a>
+    <a href="https://caduceus.vivaanshahani.com/features">All features</a>
+    <a href="https://caduceus.vivaanshahani.com/docs" aria-current="page">Docs</a>
+    <a href="https://caduceus.vivaanshahani.com/configure-ai">Configure AI</a>
+  </nav>
+
+  <h1>Caduceus documentation</h1>
+  <p class="lead">
+    Every feature and every setting. The same reference is built into the app under
+    <b>Settings → Help</b>, so it works offline too.
+  </p>
+
+  <div class="doc-toc">
+      <a href="#staff">The staff</a>
+      <a href="#command-center">The Command Center</a>
+      <a href="#prefixes">Prefixes</a>
+      <a href="#shortcuts">Shortcuts</a>
+      <a href="#system">System monitor</a>
+      <a href="#voice">Voice and dictation</a>
+      <a href="#clipboard">Clipboard history</a>
+      <a href="#ai">AI</a>
+      <a href="#keys">Hotkeys and function keys</a>
+      <a href="#appearance">Appearance</a>
+      <a href="#privacy">Privacy and what leaves your machine</a>
+  </div>
+
+  <section class="doc-section" id="staff">
+    <h2>The staff</h2>
+    <p class="lede">The floating mark and the ring around it.</p>
+    <p>The staff floats above every window and every space, including another app's full-screen. Hover it and up to six shortcuts fan out on an arc; click one to run it.</p>
+    <ul>
+      <li><b>Single click</b> — opens the Command Center.</li>
+      <li><b>Double click</b> — starts dictation.</li>
+      <li><b>Right click</b> — opens Settings.</li>
+      <li><b>Drag</b> — move it anywhere; the arc flips to open away from the nearest edge.</li>
+      <li><kbd>F12</kbd> — show or hide it. Caduceus works fine with the staff off; the hotkey and menu-bar icon still reach everything.</li>
+    </ul>
+    <p>Settings → General controls the docked edge, the delay before the ring opens, how long before it folds back, and whether the staff is shown at all.</p>
+  </section>
+  <section class="doc-section" id="command-center">
+    <h2>The Command Center</h2>
+    <p class="lede">One bar that searches, launches, calculates and routes.</p>
+    <p>Press <kbd>Control</kbd><kbd>Space</kbd> anywhere. What you type is interpreted in this order:</p>
+    <ul>
+      <li><b>An app name</b> — <code>chrome</code> launches it. Fuzzy, so <code>chrm</code> works.</li>
+      <li><b>Maths</b> — <code>2+2</code>, <code>18% of 240</code>. Answers inline; Enter copies the result.</li>
+      <li><b>A prefix</b> — see below. The longest match wins.</li>
+      <li><b>Anything else</b> — searches the web with your configured engine.</li>
+    </ul>
+    <p>Drag the bottom-right grip to resize the window; double-click it to hide. <kbd>Esc</kbd> closes.</p>
+  </section>
+  <section class="doc-section" id="prefixes">
+    <h2>Prefixes</h2>
+    <p class="lede">Route a line somewhere specific.</p>
+    <p>Three ship by default:</p>
+    <ul>
+      <li><kbd>/</kbd> — ask your AI backend.</li>
+      <li><kbd>/v</kbd> — search clipboard history.</li>
+      <li><kbd>/c</kbd> — hand the task to an agent that can drive your screen.</li>
+    </ul>
+    <p>Add your own under Settings → Command Center. A prefix can open a URL template (<code>{query}</code> is where your text lands), run a shell command, run AppleScript, or point at any built-in route. The longest matching prefix wins, so <kbd>/c</kbd> beats <kbd>/</kbd> regardless of list order.</p>
+  </section>
+  <section class="doc-section" id="shortcuts">
+    <h2>Shortcuts</h2>
+    <p class="lede">The single primitive behind the ring and the palette.</p>
+    <p>A shortcut opens a URL, launches an app, runs a command, runs AppleScript, or opens a built-in view. The same list powers the staff's ring and the Command Center's results — which is why everything is editable, including the ones Caduceus ships with.</p>
+    <ul>
+      <li><b>Show in staff</b> puts it on the ring. The ring draws six; Settings warns rather than silently dropping the rest.</li>
+      <li><b>Keywords</b> are extra words that should match it in search.</li>
+      <li><b>Open in</b> sends a URL to a specific browser and profile, overriding the default.</li>
+      <li><b>Icon</b> is a built-in glyph, an uploaded image, or any emoji.</li>
+    </ul>
+  </section>
+  <section class="doc-section" id="system">
+    <h2>System monitor</h2>
+    <p class="lede">CPU, memory, disks, network — and quitting things.</p>
+    <p>On the staff ring, or type <code>system</code> in the Command Center.</p>
+    <p>Live CPU and memory, per-disk free space, network throughput, uptime and load average, plus the heaviest processes sorted by CPU or memory. Hover a row for <b>Quit</b> (asks politely) and <b>Force</b> (does not).</p>
+    <p>Processes you do not own show "system" instead of buttons — terminating them needs privileges Caduceus does not have, and a button that always fails is worse than no button.</p>
+  </section>
+  <section class="doc-section" id="voice">
+    <h2>Voice and dictation</h2>
+    <p class="lede">Hold to talk, or double-tap the staff.</p>
+    <p>Push-to-talk records while you hold the key; <kbd>F1</kbd> and double-clicking the staff toggle it instead. A red dot appears on the staff while the microphone is live.</p>
+    <p>What happens to the transcript is decided by <b>keyword groups</b> — say "search" and it goes to the web, "clipboard" and it searches your history. Anything unmatched falls through to your AI model.</p>
+    <p>macOS asks for Microphone and Speech Recognition the first time. Both are on-device.</p>
+  </section>
+  <section class="doc-section" id="clipboard">
+    <h2>Clipboard history</h2>
+    <p class="lede">Everything you copied, searchable.</p>
+    <p>Off by default. Once on, <kbd>/v</kbd> searches everything you have copied — text, images and file paths, with pinning.</p>
+    <p>It never leaves your machine and can be encrypted at rest. Add your password manager to the exclusion list: a clipboard history is a log of every password you copy.</p>
+  </section>
+  <section class="doc-section" id="ai">
+    <h2>AI</h2>
+    <p class="lede">Optional. Everything but / and /c works without it.</p>
+    <p>Settings → AI has a <b>Scan this Mac</b> button that checks the default ports for Ollama, LM Studio, llama.cpp, Jan and vLLM, and asks Hermes Agent whether it is configured. One click connects what it finds.</p>
+    <p>Otherwise add any OpenAI-compatible endpoint by hand, cloud or local. Keys go to your OS keychain, never to a config file, and there is no command to read one back out.</p>
+    <p>One backend is <b>primary</b> — that is what <kbd>/</kbd> talks to. <kbd>/c</kbd> uses the computer-use backend, which should be Hermes if you want it to actually control the screen. Leave <b>Ask before an agent controls this Mac</b> on.</p>
+    <p><a href="https://caduceus.vivaanshahani.com/configure-ai">Full AI setup guide →</a></p>
+  </section>
+  <section class="doc-section" id="keys">
+    <h2>Hotkeys and function keys</h2>
+    <p class="lede">What is bound, and what happens when something else holds it.</p>
+    <p>Two dedicated accelerators — Command Center and push-to-talk — plus the <kbd>F1</kbd>–<kbd>F20</kbd> table, which is the single place function keys are configured. <kbd>F12</kbd> shows and hides the staff out of the box.</p>
+    <p>If another app already holds a key, Caduceus moves that action to a free alternative at startup and saves the change, rather than leaving a shortcut that silently does nothing. Settings shows a note when that happens, and Settings → Help always lists what is actually bound.</p>
+    <p>On a Mac, set <i>Keyboard → Keyboard Shortcuts → Function Keys</i> to use F-keys as standard function keys if you want them to reach Caduceus globally.</p>
+  </section>
+  <section class="doc-section" id="appearance">
+    <h2>Appearance</h2>
+    <p class="lede">Theme, accent, and the size of everything.</p>
+    <p>Light, dark or follow the system, plus the accent colour used across all three windows. The staff's size, ring reach, icon size and idle opacity are all adjustable — turn idle opacity up if you keep losing it on a busy desktop.</p>
+  </section>
+  <section class="doc-section" id="privacy">
+    <h2>Privacy and what leaves your machine</h2>
+    <p class="lede">Short answer: almost nothing.</p>
+    <p>The launcher, calculator, clipboard history, dictation and the system monitor are entirely local. Dictation uses macOS on-device speech.</p>
+    <p>Two things touch the network, both only when you ask: a web search opens your browser, and the <kbd>/</kbd> and <kbd>/c</kbd> prefixes talk to whatever AI backend you configured — which can be a model on your own machine.</p>
+    <p>API keys live in the OS keychain. There is no command to read one back out, so a compromised webview cannot exfiltrate them.</p>
+  </section>
+</div>
+
+<script src="theme.js"></script>
+</body>
+</html>

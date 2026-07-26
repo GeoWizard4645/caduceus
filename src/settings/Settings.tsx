@@ -18,6 +18,7 @@ import { AiTab } from "./tabs/Ai";
 import { ClipboardTab } from "./tabs/Clipboard";
 import { CommandCenterTab } from "./tabs/CommandCenterTab";
 import { GeneralTab } from "./tabs/General";
+import { HelpTab } from "./tabs/Help";
 import { LearnTab, type TutorialId } from "./tabs/Learn";
 import { ShortcutsTab } from "./tabs/Shortcuts";
 import { VoiceTab } from "./tabs/Voice";
@@ -32,6 +33,7 @@ const TABS = [
   { id: "clipboard", label: "Clipboard", icon: "❐" },
   { id: "appearance", label: "Appearance", icon: "◑" },
   { id: "learn", label: "Learn", icon: "◆" },
+  { id: "help", label: "Help", icon: "?" },
 ] as const;
 
 type TabId = (typeof TABS)[number]["id"];
@@ -146,6 +148,9 @@ export function Settings() {
           {tab === "appearance" && <AppearanceTab draft={draft} />}
           {tab === "learn" && (
             <LearnTab draft={draft} focus={learnFocus} onNavigate={goToTab} />
+          )}
+          {tab === "help" && (
+            <HelpTab draft={draft} info={info.data} onNavigate={goToTab} />
           )}
         </div>
       </main>

@@ -21,6 +21,8 @@
 import { useEffect, useState } from "react";
 
 import * as api from "@/shared/api";
+import { commandCenterKey, hotkeyLabel } from "@/shared/hotkeyLabel";
+import type { Settings } from "@/shared/types";
 import { cx } from "@/shared/ui";
 
 export interface OnboardingSignals {
@@ -39,7 +41,8 @@ interface Step {
   waiting?: string;
 }
 
-const STEPS: Step[] = [
+function buildSteps(hotkey: string): Step[] {
+  return [
   {
     title: "This is the staff",
     body: "It floats above everything, on every space. Hover it — your shortcuts fan out around it.",
@@ -54,9 +57,13 @@ const STEPS: Step[] = [
   },
   {
     title: "Close it, then use the key",
-    body: "Escape closes the Command Center. Now press Control + Space — it opens from anywhere, whatever app you are in.",
-    done: (s) => s.hotkeyUsed,
-    waiting: "Press Control + Space…",
+    body: hotkey
+      ? `Escape closes the Command Center. Now press ${hotkey} — it opens from anywhere, whatever app you are in.`
+      : "Escape closes the Command Center. No global shortcut is bound right now — set one in Settings → General, then this step will name it.",
+    // Without a bound shortcut this step is unsatisfiable, which would trap
+    // the walkthrough on a screen with no way forward.
+    done: (s) => s.hotkeyUsed || !hotkey,
+    waiting: `Press ${hotkey}…`,
   },
   {
     title: "Type anything",
@@ -68,18 +75,24 @@ const STEPS: Step[] = [
   },
   {
     title: "One last thing",
-    body: "The / and /c prefixes need a model. Nothing else does — the launcher, clipboard, dictation and search all work as they are. Settings → AI has a walkthrough that finds what is already on your Mac and connects it.",
+    body: "The / and /c prefixes need a model. Nothing else does — the launcher, clipboard, dictation, system monitor and search all work as they are. Want to configure AI features? Settings → Learn walks you through it and can find what is already on your Mac.",
   },
-];
+  ];
+}
 
 export function Onboarding({
   signals,
+  settings,
   onFinish,
 }: {
   signals: OnboardingSignals;
+  settings: Settings;
   onFinish: () => void;
 }) {
   const [index, setIndex] = useState(0);
+  // Read at render, not baked in: startup may have rebound this to a fallback
+  // because another app held the configured key.
+  const STEPS = buildSteps(hotkeyLabel(commandCenterKey(settings)));
 
   // The staff window is click-through except right at the staff, so this card's
   // own buttons would otherwise land on whatever is behind it.
@@ -146,7 +159,7 @@ export function Onboarding({
                 type="button"
                 onClick={() => {
                   onFinish();
-                  void api.openSettingsWindow("learn");
+                  void api.openSettingsWindow("help");
                 }}
                 className="rounded-lg bg-accent px-2.5 py-1 text-2xs font-medium text-accent-ink transition-[filter] hover:brightness-110"
               >

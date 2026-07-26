@@ -357,6 +357,7 @@ export function Staff() {
       {settings.general.onboardingDone === false && (
         <Onboarding
           signals={signals}
+          settings={settings}
           onFinish={() =>
             void api.updateSettings({
               ...settings,
