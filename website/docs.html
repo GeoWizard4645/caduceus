@@ -111,6 +111,75 @@
     color: var(--ink-soft);
   }
   code { font: 0.88em ui-monospace, "SF Mono", Menlo, monospace; color: var(--ink-soft); }
+
+  .docs-mode-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px 20px;
+    margin: 0 0 28px;
+    padding: 14px 16px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: var(--surface);
+  }
+
+  .docs-mode-bar > span {
+    font-size: 0.88rem;
+    color: var(--ink-mute);
+  }
+
+  .docs-mode-switch {
+    display: inline-flex;
+    padding: 3px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: var(--raised);
+  }
+
+  .docs-mode-switch button {
+    border: 0;
+    background: transparent;
+    color: var(--ink-mute);
+    font: inherit;
+    font-size: 0.82rem;
+    font-weight: 500;
+    padding: 6px 14px;
+    border-radius: 999px;
+    cursor: pointer;
+    transition: background 0.12s, color 0.12s;
+  }
+
+  .docs-mode-switch button[aria-selected="true"] {
+    background: var(--surface);
+    color: var(--ink);
+    box-shadow: 0 1px 4px rgb(0 0 0 / 0.12);
+  }
+
+  .docs-mode-switch button:hover:not([aria-selected="true"]) {
+    color: var(--ink-soft);
+  }
+
+  .docs-mode-pane[hidden] { display: none !important; }
+
+  pre.dev-block {
+    margin: 14px 0;
+    padding: 14px 16px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: var(--surface);
+    overflow-x: auto;
+    font: 0.78rem/1.55 ui-monospace, "SF Mono", Menlo, monospace;
+    color: var(--ink-soft);
+  }
+
+  .dev-block .comment { color: var(--ink-faint); }
+  .doc-section h3 {
+    margin: 22px 0 8px;
+    font-size: 1rem;
+    color: var(--ink-soft);
+  }
 </style>
 
 </head>
@@ -148,12 +217,25 @@
   </nav>
 
   <h1>Caduceus documentation</h1>
-  <p class="lead">
-    Every feature and every setting. The same reference is built into the app under
+  <p class="lead" id="docs-lead">
+    Every feature and every setting. The same user reference is built into the app under
     <b>Settings → Help</b>, so it works offline too.
   </p>
 
-  <div class="doc-toc">
+  <div class="docs-mode-bar">
+    <span id="docs-mode-hint">Plain-language guide for using Caduceus.</span>
+    <div class="docs-mode-switch" role="tablist" aria-label="Documentation mode">
+      <button type="button" role="tab" id="docs-tab-user" aria-selected="true" aria-controls="docs-user-pane" data-mode="user">
+        User guide
+      </button>
+      <button type="button" role="tab" id="docs-tab-dev" aria-selected="false" aria-controls="docs-dev-pane" data-mode="dev">
+        Developer
+      </button>
+    </div>
+  </div>
+
+  <div id="docs-user-pane" class="docs-mode-pane" role="tabpanel" aria-labelledby="docs-tab-user">
+  <div class="doc-toc" id="doc-toc-user">
       <a href="#staff">The staff</a>
       <a href="#command-center">The Command Center</a>
       <a href="#prefixes">Prefixes</a>
@@ -270,6 +352,200 @@
       reproduce. The same links are in the app under <strong>Settings → Help</strong>.
     </p>
   </section>
+  </div>
+
+  <div id="docs-dev-pane" class="docs-mode-pane" role="tabpanel" aria-labelledby="docs-tab-dev" hidden>
+  <div class="doc-toc" id="doc-toc-dev">
+      <a href="#dev-architecture">Architecture</a>
+      <a href="#dev-ipc">IPC &amp; security</a>
+      <a href="#dev-palette">Palette dispatch</a>
+      <a href="#dev-providers">Result providers</a>
+      <a href="#dev-shortcuts">Shortcuts engine</a>
+      <a href="#dev-agent">Agent backends</a>
+      <a href="#dev-voice">Voice pipeline</a>
+      <a href="#dev-clipboard">Clipboard store</a>
+      <a href="#dev-window">Staff &amp; windows</a>
+      <a href="#dev-settings">Settings &amp; secrets</a>
+      <a href="#dev-events">Tauri events</a>
+      <a href="#dev-build">Build &amp; test</a>
+  </div>
+
+  <section class="doc-section" id="dev-architecture">
+    <h2>Architecture</h2>
+    <p class="lede">Tauri 2 app: three WebView windows, one Rust binary.</p>
+    <p>Caduceus is not a single-page app. Each surface is its own Vite entry and window label:</p>
+    <ul>
+      <li><code>staff</code> — floating caduceus + radial shortcuts (<code>src/staff/</code>)</li>
+      <li><code>command-center</code> — palette, agent panel, clipboard view (<code>src/command-center/</code>)</li>
+      <li><code>settings</code> — seven settings tabs + Help (<code>src/settings/</code>)</li>
+    </ul>
+    <p>Shared React utilities, IPC wrappers, and the design system live in <code>src/shared/</code>. All native work runs in <code>src-tauri/src/</code> and is exposed only through named <code>#[tauri::command]</code> handlers in <code>commands.rs</code> (registered in <code>lib.rs</code>). The shell, filesystem, and HTTP Tauri plugins are deliberately <em>not</em> enabled — the frontend never executes arbitrary shell strings.</p>
+    <pre class="dev-block">src-tauri/src/
+  agent/       AgentBackend trait; Hermes + OpenAI-compatible + Null
+  palette.rs   prefix parse + dispatch for Command Center submit
+  shortcuts/   Shortcut model, exec (open_url, open_app, run_command, …)
+  voice/       capture, live STT (macOS), keyword routing
+  clipboard/   NSPasteboard watcher → SQLite (+ optional encryption)
+  window/      staff placement, cursor tracker, hover/collapse timing
+  hotkeys.rs   global shortcuts + push-to-talk + fn_keys dispatch
+  settings/    JSON schema (tauri-plugin-store) + keychain secrets</pre>
+    <p>Startup order (see <code>lib.rs</code>): load settings → open clipboard DB → register hotkeys/tray → show staff. Clipboard and hotkey registration can fail softly; the app still runs.</p>
+  </section>
+
+  <section class="doc-section" id="dev-ipc">
+    <h2>IPC and security model</h2>
+    <p class="lede">The WebView calls Rust by command name; Rust never trusts HTML with secrets.</p>
+    <p>TypeScript invokes commands through <code>src/shared/api.ts</code> (<code>invoke&lt;T&gt;("command_name", …)</code>). Examples:</p>
+    <pre class="dev-block">// Frontend
+await invoke("dispatch_input", { input: "/ explain OAuth" });
+
+// Rust — commands.rs
+#[tauri::command]
+pub async fn dispatch_input(app: AppHandle, settings: State&lt;SettingsManager&gt;, input: String)
+  -&gt; Result&lt;DispatchOutcome, String&gt;
+{
+  Ok(palette::dispatch(&amp;app, &amp;settings, &amp;input).await)
+}</pre>
+    <p>Shortcuts run <strong>by id</strong> from saved settings (<code>run_shortcut</code>), not by passing a command string from the UI. API keys are written with <code>set_backend_api_key</code> and stored in the macOS keychain via the <code>keyring</code> crate; there is no command that reads a key back out.</p>
+  </section>
+
+  <section class="doc-section" id="dev-palette">
+    <h2>Palette parse and dispatch</h2>
+    <p class="lede"><code>palette.rs</code> — longest-prefix wins, then action enum.</p>
+    <p><code>parse_input</code> / <code>dispatch_input</code> implement the Command Center bar. Prefix rules come from <code>CommandCenterSettings::prefixes</code> (user-editable JSON). Alphanumeric prefixes require a word boundary after the token so <code>/c</code> does not match <code>/computer</code>.</p>
+    <pre class="dev-block">// Default routes (PrefixAction)
+WebSearch | PrimaryAi | ComputerUse | ClipboardSearch
+  | OpenUrl | RunCommand | RunAppleScript | InsertOnly | …
+
+// Dispatch flow (simplified)
+let parsed = parse(input, &amp;settings.command_center);
+match parsed.action() {
+  PrefixAction::PrimaryAi =&gt; agent::chat(primary_backend, remainder).await,
+  PrefixAction::ComputerUse =&gt; agent::start_session(cu_backend, …).await,
+  PrefixAction::WebSearch =&gt; open_url(search_template.replace("{query}", …)),
+  …
+}</pre>
+    <p>While typing, the React side uses <code>parse_input</code> for highlighting and <code>defaultProviders</code> in <code>providers.ts</code> for fuzzy rows (apps, shortcuts, calculator, clipboard). Submitting Enter calls <code>dispatch_input</code> for the authoritative Rust path.</p>
+  </section>
+
+  <section class="doc-section" id="dev-providers">
+    <h2>Result providers (frontend extension point)</h2>
+    <p class="lede"><code>ResultProvider</code> in <code>src/shared/providers.ts</code>.</p>
+    <pre class="dev-block">export interface ResultProvider {
+  id: string;
+  title: string;
+  search(ctx: ProviderContext): ResultItem[] | Promise&lt;ResultItem[]&gt;;
+}
+
+export const emojiProvider: ResultProvider = {
+  id: "emoji",
+  title: "Emoji",
+  search({ query }) {
+    if (!query) return [];
+    return findEmoji(query).map((e) =&gt; ({
+      id: `emoji:${e.name}`,
+      title: e.char,
+      subtitle: e.name,
+      icon: e.char,
+      group: "Emoji",
+      score: 400,
+      run: () =&gt; { void navigator.clipboard.writeText(e.char); },
+    }));
+  },
+};
+
+// Append to defaultProviders in providers.ts</pre>
+    <p>Providers return scored rows; the palette merges and sorts. A row’s <code>run()</code> may return <code>false</code> to keep the window open (e.g. chat still streaming).</p>
+  </section>
+
+  <section class="doc-section" id="dev-shortcuts">
+    <h2>Shortcuts engine</h2>
+    <p class="lede"><code>shortcuts/mod.rs</code> + <code>shortcuts/exec.rs</code>.</p>
+    <p>A <code>Shortcut</code> has a <code>ShortcutKind</code>: <code>OpenUrl</code>, <code>OpenApp</code>, <code>RunCommand</code>, <code>RunAppleScript</code>, built-in views, etc. Staff pop-out and palette search share the same list. Execution goes through <code>execute_shortcut(app, shortcut, …)</code> with browser profile substitution for URLs.</p>
+    <p>Function keys (<code>fn_keys.rs</code>) map F1–F20 to <code>FunctionKeyAction</code> (open Command Center, toggle dictation, run a shortcut by id, …). <code>hotkeys.rs</code> registers globals via <code>tauri-plugin-global-shortcut</code> and falls back to alternate bindings if macOS already owns a key.</p>
+  </section>
+
+  <section class="doc-section" id="dev-agent">
+    <h2>Agent backends</h2>
+    <p class="lede"><code>AgentBackend</code> trait — <code>backend_for(BackendKind)</code>.</p>
+    <pre class="dev-block">pub enum BackendKind {
+  Null,              // no-op; app usable without AI
+  OpenAiCompatible,  // HTTP chat/completions
+  Hermes,            // spawns Hermes CLI; computer_use via Hermes tools
+}
+
+pub fn backend_for(kind: BackendKind) -&gt; Arc&lt;dyn AgentBackend&gt; {
+  match kind {
+    BackendKind::Null =&gt; Arc::new(null::NullBackend),
+    BackendKind::OpenAiCompatible =&gt; Arc::new(openai::OpenAiCompatibleBackend),
+    BackendKind::Hermes =&gt; Arc::new(hermes::HermesBackend),
+  }
+}</pre>
+    <p><code>/</code> calls <code>chat</code> on the primary backend id from settings. <code>/c</code> starts a computer-use session on the configured backend (Hermes is the supported path for screen control — Caduceus does not embed its own mouse/screen driver). Steps stream to the UI on <code>caduceus://agent-step</code>. User approval is gated in settings (<code>confirmBeforeFirstAction</code>).</p>
+    <p>Local discovery: <code>agent/discover.rs</code> probes common Ollama/LM Studio ports and Hermes install state for the Settings → AI “Scan this Mac” button.</p>
+  </section>
+
+  <section class="doc-section" id="dev-voice">
+    <h2>Voice pipeline</h2>
+    <p class="lede">Push-to-talk and toggle dictation share <code>VoiceRuntime</code>.</p>
+    <ul>
+      <li><strong>macOS live path:</strong> <code>macos/CaduceusSTTLive.swift</code> — <code>AVAudioEngine</code> + Speech framework; partial lines on stdout; Rust reads them in <code>voice/live_macos.rs</code>.</li>
+      <li><strong>Batch path:</strong> record to WAV, then <code>SttBackend</code> (<code>SystemNative</code> or OpenAI-compatible Whisper HTTP).</li>
+      <li><strong>Routing:</strong> <code>voice/mod.rs</code> matches keyword groups from settings and returns <code>RoutedText</code> (web search, primary AI, computer use, clipboard, insert-only).</li>
+    </ul>
+    <p>Events: <code>caduceus://voice-state</code>, <code>voice-partial</code>, <code>voice-result</code>. Toggle dictation: <code>hotkeys::toggle_dictation</code> + Tauri command <code>toggle_dictation</code>; staff double-click calls the same from React.</p>
+  </section>
+
+  <section class="doc-section" id="dev-clipboard">
+    <h2>Clipboard store</h2>
+    <p class="lede">Watcher thread + SQLite in <code>clipboard/</code>.</p>
+    <p>The watcher polls the pasteboard on an interval, skips concealed types and excluded apps, writes rows to SQLite (WAL mode). Optional ChaCha20-Poly1305 encryption at rest with a key in the keychain. List/search/prune commands are exposed to the Command Center clipboard provider and <code>/v</code> dispatch.</p>
+  </section>
+
+  <section class="doc-section" id="dev-window">
+    <h2>Staff and windows</h2>
+    <p class="lede"><code>window/mod.rs</code> + macOS-specific level/workspaces in <code>window/macos.rs</code>.</p>
+    <p>The staff window is a large transparent square; hover/collapse is driven from Rust because the WebView stops receiving pointer events when the cursor leaves the window — Rust tracks cursor position (<code>CursorTracker</code>) and emits <code>caduceus://staff-hover</code>. Staff uses a high window level and <code>FullScreenAuxiliary</code> so it remains visible over full-screen apps. Custom marks: user PNG → <code>staff_mark.rs</code> + <code>StaffMark.tsx</code>.</p>
+  </section>
+
+  <section class="doc-section" id="dev-settings">
+    <h2>Settings and secrets</h2>
+    <p class="lede"><code>SettingsManager</code> + migrations in <code>settings/mod.rs</code>.</p>
+    <p>JSON persisted via <code>tauri-plugin-store</code> (shortcuts, prefixes, backends metadata, appearance, function keys, …). Secrets never go in JSON. <code>migrate_settings</code> runs on load to upgrade older configs (hidden dictation shortcut, glyph icons, default F1 dictation, etc.).</p>
+    <pre class="dev-block">// Rust — hermes_template / openai_compatible_template in settings/model.rs
+BackendConfig { id, display_name, kind: BackendKind::Hermes, … }
+
+// Frontend draft — settings/useDraft.ts debounced save → update_settings</pre>
+  </section>
+
+  <section class="doc-section" id="dev-events">
+    <h2>Tauri events</h2>
+    <p class="lede">Cross-window pub/sub (string channel names).</p>
+    <ul>
+      <li><code>caduceus://settings-changed</code> — reload settings in all webviews</li>
+      <li><code>caduceus://clipboard-changed</code> — palette clipboard provider refresh</li>
+      <li><code>caduceus://agent-step</code> — agent UI progress</li>
+      <li><code>caduceus://staff-hover</code>, <code>command-center-open</code>, <code>settings-tab</code></li>
+      <li><code>caduceus://voice-*</code>, <code>hotkey-problems</code></li>
+    </ul>
+    <p>Constants mirrored in <code>src/shared/types.ts</code> as <code>EVENTS</code>; hooks in <code>useTauriEvent</code>.</p>
+  </section>
+
+  <section class="doc-section" id="dev-build">
+    <h2>Build and test</h2>
+    <p class="lede">From repo root.</p>
+    <pre class="dev-block">npm install
+npm start              # Vite dev + Tauri dev
+npm run bundle         # production .dmg
+
+npm run typecheck      # tsc
+npm run test:rust      # cargo test in src-tauri
+
+python3 scripts/make-icons.py   # regenerate icons from pixel grid</pre>
+    <p>macOS-only today: live speech helper is compiled in <code>build.rs</code> on Apple targets. Website static assets live in <code>website/</code>; deploy with Cloudflare Workers (<code>worker/index.js</code> routes <code>/caduceus/*</code>).</p>
+    <p>Source: <a href="https://github.com/GeoWizard4645/caduceus">github.com/GeoWizard4645/caduceus</a></p>
+  </section>
+  </div>
 </div>
 
 <footer>
@@ -282,6 +558,57 @@
   </div>
 </footer>
 
+<script>
+  (function () {
+    var KEY = "caduceus-docs-mode";
+    var tabUser = document.getElementById("docs-tab-user");
+    var tabDev = document.getElementById("docs-tab-dev");
+    var paneUser = document.getElementById("docs-user-pane");
+    var paneDev = document.getElementById("docs-dev-pane");
+    var hint = document.getElementById("docs-mode-hint");
+    var lead = document.getElementById("docs-lead");
+    if (!tabUser || !tabDev || !paneUser || !paneDev) return;
+
+    function setMode(mode) {
+      var dev = mode === "dev";
+      tabUser.setAttribute("aria-selected", dev ? "false" : "true");
+      tabDev.setAttribute("aria-selected", dev ? "true" : "false");
+      paneUser.hidden = dev;
+      paneDev.hidden = !dev;
+      if (hint) {
+        hint.textContent = dev
+          ? "Rust, TypeScript, and how the pieces connect."
+          : "Plain-language guide for using Caduceus.";
+      }
+      if (lead) {
+        lead.innerHTML = dev
+          ? "Implementation reference for contributors and integrators. User-facing copy also lives in <b>Settings → Help</b>."
+          : "Every feature and every setting. The same user reference is built into the app under <b>Settings → Help</b>, so it works offline too.";
+      }
+      document.title = dev ? "Caduceus — developer docs" : "Caduceus — docs";
+      try {
+        localStorage.setItem(KEY, mode);
+      } catch (_) {}
+    }
+
+    tabUser.addEventListener("click", function () {
+      setMode("user");
+    });
+    tabDev.addEventListener("click", function () {
+      setMode("dev");
+    });
+
+    var saved = "user";
+    try {
+      saved = localStorage.getItem(KEY) === "dev" ? "dev" : "user";
+    } catch (_) {}
+    if (location.hash && location.hash.indexOf("dev-") === 1) saved = "dev";
+    try {
+      if (new URLSearchParams(location.search).get("mode") === "dev") saved = "dev";
+    } catch (_) {}
+    setMode(saved);
+  })();
+</script>
 <script src="theme.js"></script>
 </body>
 </html>

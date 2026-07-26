@@ -148,7 +148,7 @@ export function HelpTab({
       <Section title="Documentation" description="Everything published about Caduceus.">
         <div className="grid grid-cols-2 gap-2">
           {[
-            { label: "Full docs", detail: "Every feature and setting", url: DOCS_GUIDE },
+            { label: "Full docs", detail: "User guide + developer reference", url: DOCS_GUIDE },
             { label: "Overview", detail: "What Caduceus is", url: DOCS_HOME },
             { label: "All features", detail: "The complete list", url: DOCS_FEATURES },
             { label: "Configure AI", detail: "Local models and cloud keys", url: DOCS_CONFIGURE_AI },
