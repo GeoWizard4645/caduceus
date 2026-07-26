@@ -14,6 +14,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as api from "@/shared/api";
 import { StaffMark } from "@/shared/StaffMark";
 import { Onboarding, type OnboardingSignals } from "./Onboarding";
+import { StaffResizeFrame } from "./StaffResize";
 import { useSettings, useTauriEvent } from "@/shared/hooks";
 import { ShortcutIcon } from "@/shared/ShortcutIcon";
 import { cx } from "@/shared/ui";
@@ -43,6 +44,9 @@ export function Staff() {
   /** Keep icons on the arc while fading out — never slide them back to the staff. */
   const [arcHeld, setArcHeld] = useState(false);
   const [voice, setVoice] = useState<VoiceState>("idle");
+  /** Live size while a corner-drag is in progress; null means use settings. */
+  const [liveStaffSize, setLiveStaffSize] = useState<number | null>(null);
+  const [resizing, setResizing] = useState(false);
   // First-run walkthrough. Steps complete on the real interaction, so the staff
   // records what has actually happened rather than what has been read.
   const [signals, setSignals] = useState<OnboardingSignals>({
@@ -53,6 +57,8 @@ export function Staff() {
   });
   const sideWhileExpanded = useRef<"left" | "right">("right");
   const popoutRadiusWhileExpanded = useRef(0);
+  const settingsRef = useRef(settings);
+  settingsRef.current = settings;
 
   useTauriEvent<StaffHoverState>(EVENTS.staffHover, setHover);
   // The staff is the only Caduceus surface always on screen, so it is where
@@ -124,12 +130,13 @@ export function Staff() {
   const doubleClickWindow = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const onPointerDown = (e: React.PointerEvent) => {
-    if (e.button !== 0) return;
+    if (e.button !== 0 || resizing) return;
     pressOrigin.current = { x: e.screenX, y: e.screenY };
     dragging.current = false;
   };
 
   const onPointerMove = (e: React.PointerEvent) => {
+    if (resizing) return;
     const origin = pressOrigin.current;
     if (!origin || dragging.current) return;
     const travelled = Math.hypot(e.screenX - origin.x, e.screenY - origin.y);
@@ -153,7 +160,7 @@ export function Staff() {
     const wasDrag = dragging.current;
     pressOrigin.current = null;
     dragging.current = false;
-    if (wasDrag) return;
+    if (wasDrag || resizing) return;
 
     // Single click opens the Command Center; double-click also starts dictation
     // (F1 does the same).
@@ -219,10 +226,38 @@ export function Staff() {
     return () => clearTimeout(timer);
   }, [arcHeld, hover.expanded]);
 
+  // During a resize drag the pointer can leave the mark's hit circle; keep the
+  // window capturing until the gesture ends. (Hover alone uses a wider radius
+  // in Rust so the corner knobs stay hittable without swallowing the whole pad.)
+  useEffect(() => {
+    if (!settings || settings.general.onboardingDone === false) return;
+    if (!resizing) return;
+    void api.setStaffInteractive(true);
+    return () => {
+      void api.setStaffInteractive(false);
+    };
+  }, [resizing, settings]);
+
+  const commitStaffSize = useCallback((next: number) => {
+    const current = settingsRef.current;
+    if (!current || current.appearance.staffSize === next) {
+      setLiveStaffSize(null);
+      return;
+    }
+    void api
+      .updateSettings({
+        ...current,
+        appearance: { ...current.appearance, staffSize: next },
+      })
+      .finally(() => setLiveStaffSize(null));
+  }, []);
+
   if (!settings) return null;
 
-  const { staffSize, popoutRadius, popoutIconSize, staffIdleOpacity, staffIdleAnimation } =
+  const { popoutRadius, popoutIconSize, staffIdleOpacity, staffIdleAnimation } =
     settings.appearance;
+  const staffSize = liveStaffSize ?? settings.appearance.staffSize;
+  const showResize = (hover.hovering || resizing) && !hover.expanded;
   const expanded = hover.expanded;
   const onArc = expanded || arcHeld;
   const fadingOut = arcHeld && !expanded;
@@ -289,75 +324,86 @@ export function Staff() {
         })}
 
         {/* --- the staff ------------------------------------------------ */}
-        <button
-          type="button"
-          aria-label="Open the Caduceus Command Center"
-          onPointerDown={onPointerDown}
-          onPointerMove={onPointerMove}
-          onPointerUp={onPointerUp}
-          onContextMenu={(e) => {
-            e.preventDefault();
-            void api.openSettingsWindow();
-          }}
-          style={{ opacity: expanded || hover.hovering || voice !== "idle" ? 1 : staffIdleOpacity }}
-          className={cx(
-            "group relative flex -translate-x-1/2 -translate-y-1/2 items-center justify-center",
-            "transition-[opacity,transform] duration-150 ease-cad",
-            "hover:scale-[1.08] active:scale-[0.96]",
-            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2",
-          )}
-        >
-          {/* Accent bloom behind the mark, so it stays visible against a busy
-              desktop without the mark itself having to be opaque. */}
-          <span
-            aria-hidden="true"
-            className={cx(
-              "absolute rounded-full transition-opacity duration-200 ease-cad",
-              expanded ? "opacity-100" : "opacity-70",
-              staffIdleAnimation && !expanded && "animate-staff-pulse",
-            )}
-            style={{
-              width: staffSize * 1.5,
-              height: staffSize * 1.5,
-              background:
-                "radial-gradient(circle, rgb(var(--c-accent) / 0.30) 0%, rgb(var(--c-accent) / 0) 68%)",
+        <div className="absolute left-0 top-0 z-50 -translate-x-1/2 -translate-y-1/2">
+          <StaffResizeFrame
+            size={staffSize}
+            visible={showResize}
+            onLiveSize={setLiveStaffSize}
+            onCommit={commitStaffSize}
+            onResizingChange={setResizing}
+          />
+
+          <button
+            type="button"
+            aria-label="Open the Caduceus Command Center"
+            onPointerDown={onPointerDown}
+            onPointerMove={onPointerMove}
+            onPointerUp={onPointerUp}
+            onContextMenu={(e) => {
+              e.preventDefault();
+              void api.openSettingsWindow();
             }}
-          />
-
-          <StaffMark
-            height={staffSize}
-            icon={settings.appearance.staffMarkIcon}
-            className="relative drop-shadow-[0_2px_6px_rgb(0_0_0/0.55)]"
-          />
-
-          {/* Recording tell. Red rather than the accent colour on purpose: the
-              accent is used all over the staff for ordinary state, and "the mic
-              is on" should never be mistakable for any of it. */}
-          {voice !== "idle" && (
+            style={{ opacity: expanded || hover.hovering || voice !== "idle" ? 1 : staffIdleOpacity }}
+            className={cx(
+              "group relative flex items-center justify-center",
+              "transition-[opacity,transform] duration-150 ease-cad",
+              !resizing && "hover:scale-[1.08] active:scale-[0.96]",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2",
+            )}
+          >
+            {/* Accent bloom behind the mark, so it stays visible against a busy
+                desktop without the mark itself having to be opaque. */}
             <span
               aria-hidden="true"
-              className="absolute -right-0.5 -top-0.5 flex h-3 w-3"
-              style={{ transform: `translate(${staffSize * 0.18}px, ${staffSize * -0.18}px)` }}
-            >
-              {voice === "recording" && (
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#ff3b30] opacity-75" />
+              className={cx(
+                "absolute rounded-full transition-opacity duration-200 ease-cad",
+                expanded ? "opacity-100" : "opacity-70",
+                staffIdleAnimation && !expanded && !resizing && "animate-staff-pulse",
               )}
+              style={{
+                width: staffSize * 1.5,
+                height: staffSize * 1.5,
+                background:
+                  "radial-gradient(circle, rgb(var(--c-accent) / 0.30) 0%, rgb(var(--c-accent) / 0) 68%)",
+              }}
+            />
+
+            <StaffMark
+              height={staffSize}
+              icon={settings.appearance.staffMarkIcon}
+              className="relative drop-shadow-[0_2px_6px_rgb(0_0_0/0.55)]"
+            />
+
+            {/* Recording tell. Red rather than the accent colour on purpose: the
+                accent is used all over the staff for ordinary state, and "the mic
+                is on" should never be mistakable for any of it. */}
+            {voice !== "idle" && (
               <span
-                className={cx(
-                  "relative inline-flex h-3 w-3 rounded-full border border-black/30 bg-[#ff3b30]",
-                  "shadow-[0_0_8px_rgb(255_59_48/0.9)]",
-                  voice === "transcribing" && "animate-pulse opacity-70",
+                aria-hidden="true"
+                className="absolute -right-0.5 -top-0.5 flex h-3 w-3"
+                style={{ transform: `translate(${staffSize * 0.18}px, ${staffSize * -0.18}px)` }}
+              >
+                {voice === "recording" && (
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#ff3b30] opacity-75" />
                 )}
-              />
-            </span>
-          )}
-        </button>
+                <span
+                  className={cx(
+                    "relative inline-flex h-3 w-3 rounded-full border border-black/30 bg-[#ff3b30]",
+                    "shadow-[0_0_8px_rgb(255_59_48/0.9)]",
+                    voice === "transcribing" && "animate-pulse opacity-70",
+                  )}
+                />
+              </span>
+            )}
+          </button>
+        </div>
       </div>
 
       {settings.general.onboardingDone === false && (
         <Onboarding
           signals={signals}
           settings={settings}
+          staffSize={staffSize}
           onFinish={() =>
             void api.updateSettings({
               ...settings,

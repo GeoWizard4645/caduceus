@@ -38,11 +38,11 @@ export function GeneralTab({
           </li>
           <li>
             <strong className="font-medium text-ink-soft">Command Center palette</strong> — with
-            Caduceus running, open the palette and type <strong className="text-ink-soft">caduceus</strong>{" "}
+            Caduceus running, open the palette and type <strong className="text-ink-soft">Caduceus</strong>{" "}
             to focus or relaunch it.
           </li>
           <li>
-            <strong className="font-medium text-ink-soft">Menu bar</strong> — look for the caduceus
+            <strong className="font-medium text-ink-soft">Menu bar</strong> — look for the Caduceus
             icon near the clock; click for the Command Center, right-click for Settings and Quit.
           </li>
         </ul>

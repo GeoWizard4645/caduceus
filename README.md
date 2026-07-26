@@ -66,7 +66,7 @@ Caduceus lives in your menu bar. There is no Dock icon.
 
 ### The floating staff
 
-A pixel caduceus that sits on top of everything, on the right edge by default.
+A pixel Caduceus staff that sits on top of everything, on the right edge by default.
 
 - **Hover it** — six shortcut icons fan out around it
 - **Click it** — opens the Command Center

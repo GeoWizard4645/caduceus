@@ -381,6 +381,12 @@ pub enum SttBackendKind {
     #[default]
     SystemNative,
     /// Any OpenAI-compatible `/audio/transcriptions` endpoint.
+    ///
+    /// Spelled explicitly because `rename_all = "snake_case"` turns
+    /// `OpenAiCompatible` into `open_ai_compatible`, and every other place this
+    /// value exists — the TypeScript union, `voice/stt.rs`, the installer —
+    /// writes `openai_compatible`. See [`BackendKind::OpenAiCompatible`].
+    #[serde(rename = "openai_compatible", alias = "open_ai_compatible")]
     OpenAiCompatible,
 }
 
@@ -503,6 +509,17 @@ pub enum BackendKind {
     /// Any endpoint speaking the OpenAI `/chat/completions` dialect —
     /// OpenAI, Ollama, LM Studio, vLLM, llama.cpp, OpenRouter, Groq, and
     /// `hermes proxy start`.
+    ///
+    /// The wire name is spelled out rather than left to `rename_all`, which
+    /// would derive `open_ai_compatible` from the Rust casing. Nothing else in
+    /// the project uses that spelling: the `BackendKind` union in
+    /// `shared/types.ts`, the settings UI, `agent/openai.rs` and the installer
+    /// all say `openai_compatible`. When they disagreed, a backend added in the
+    /// UI wrote a variant the loader could not read, and since one unknown
+    /// variant fails the whole document, the next launch discarded every
+    /// setting the user had. The alias keeps files written during the
+    /// disagreement readable.
+    #[serde(rename = "openai_compatible", alias = "open_ai_compatible")]
     OpenAiCompatible,
     /// Hermes Agent, driven through its CLI. The default: it brings its own
     /// model routing, tools, memory and screen control, so Caduceus does not

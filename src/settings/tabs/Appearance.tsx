@@ -109,7 +109,10 @@ export function AppearanceTab({ draft }: { draft: Draft }) {
         description="Changes apply live — drag a value and watch the staff on screen."
       >
         <div className="grid grid-cols-2 gap-5">
-          <Field label="Staff size" hint="Height of the mark on screen (28–160 px).">
+          <Field
+            label="Staff size"
+            hint="Height of the mark (28–160 px). Or hover the staff and drag a corner knob."
+          >
             <NumberInput
               value={appearance.staffSize}
               min={28}
@@ -156,7 +159,7 @@ export function AppearanceTab({ draft }: { draft: Draft }) {
         <div className="mt-4 border-t border-line pt-4">
           <Field
             label="Staff image"
-            hint="Replace the default caduceus with your own pixel art (PNG recommended). Shown with crisp pixels, not smoothing."
+            hint="Replace the default Caduceus mark with your own pixel art (PNG recommended). Shown with crisp pixels, not smoothing."
           >
             <div className="flex flex-wrap items-center gap-4">
               <div className="flex h-20 w-20 items-center justify-center rounded-lg border border-line bg-base/60">

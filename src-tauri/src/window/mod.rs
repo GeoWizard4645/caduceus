@@ -396,6 +396,12 @@ pub fn spawn_cursor_tracker<R: Runtime>(
             let distance = ((cursor.x - centre_x).powi(2) + (cursor.y - centre_y).powi(2)).sqrt();
 
             let orb_radius = (appearance.staff_size as f64 / 2.0 + 8.0) * scale;
+            // Corner resize knobs sit on a square around the mark — reach the
+            // corner of that square plus the knob radius so they stay hittable.
+            let resize_reach = ((appearance.staff_size as f64 * 0.5 + 8.0)
+                * std::f64::consts::SQRT_2
+                + 10.0)
+                * scale;
             let popout_radius =
                 (appearance.popout_radius as f64 + appearance.popout_icon_size as f64 / 2.0 + 12.0)
                     * scale;
@@ -406,7 +412,12 @@ pub fn spawn_cursor_tracker<R: Runtime>(
             } else {
                 0.0
             };
-            let over_orb = distance <= orb_radius + hover_slack;
+            let hit_radius = if state.hovering {
+                orb_radius.max(resize_reach)
+            } else {
+                orb_radius
+            };
+            let over_orb = distance <= hit_radius + hover_slack;
             let over_popout = state.expanded && distance <= popout_radius + hover_slack;
             let inside = over_orb || over_popout;
             let near_staff = distance <= popout_radius + 28.0 * scale;
@@ -481,8 +492,13 @@ pub fn spawn_cursor_tracker<R: Runtime>(
             // means a fast pointer can land and click while the window is still
             // transparent, sending the click to the app underneath.
             let capture_margin = CAPTURE_MARGIN * scale;
+            let capture_radius = if state.hovering {
+                orb_radius.max(resize_reach)
+            } else {
+                orb_radius
+            };
             let should_capture = force_interactive.load(Ordering::Relaxed)
-                || distance <= orb_radius + capture_margin
+                || distance <= capture_radius + capture_margin
                 || (state.expanded && distance <= popout_radius + capture_margin);
             if should_capture == click_through {
                 let _ = window.set_ignore_cursor_events(!should_capture);

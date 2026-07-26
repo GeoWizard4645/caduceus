@@ -391,16 +391,6 @@ build_and_install_caduceus() {
 
   replace_installed_app "$built"
 
-  # With no Developer ID, Tauri leaves the bundle only linker-signed: the binary
-  # carries an ad-hoc signature but the bundle has no _CodeSignature, so
-  # `codesign --verify` rejects it. It runs either way; sealing it here means the
-  # installed app passes an inspection someone may reasonably run on it. Release
-  # .dmgs are sealed the same way before upload, so this is build-path only.
-  say "Sealing the ad-hoc signature…"
-  codesign --force --sign - --timestamp=none "${INSTALL_DIR}/${APP_NAME}.app" 2>/dev/null || \
-    sudo codesign --force --sign - --timestamp=none "${INSTALL_DIR}/${APP_NAME}.app" 2>/dev/null || \
-    warn "Could not re-sign the installed app. It will still run."
-
   mkdir -p "$CADUCEUS_HOME"
   echo "$head" > "$STAMP"
 }
@@ -424,6 +414,44 @@ replace_installed_app() {
     warn "Need permission to write to ${INSTALL_DIR}."
     sudo cp -R "$source_app" "$target"
   fi
+
+  seal_signature "$target"
+  request_onboarding
+}
+
+# macOS hangs privacy permissions — microphone, automation — off an app's code
+# signing identity. A bundle that is only linker-signed has no usable one: its
+# identifier is the executable name plus a hash, and its Info.plist is not bound
+# to the signature, so TCC cannot recognise the same app twice and re-asks for
+# the microphone on every single dictation.
+#
+# Builds now seal themselves (bundle.macOS.signingIdentity = "-"), so this is a
+# no-op on anything current. It exists for the releases published before that
+# fix: re-sealing in place repairs them without making anyone hunt for a newer
+# download. Entitlements are not restored here and do not need to be — Caduceus
+# is neither sandboxed nor hardened, so they are inert; the identifier and the
+# bound Info.plist are what TCC actually keys on.
+seal_signature() {
+  local target="$1"
+
+  if codesign --verify --strict "$target" >/dev/null 2>&1; then
+    return 0
+  fi
+
+  say "Sealing the app signature (so macOS stops re-asking for permissions)…"
+  codesign --force --sign - --identifier "$BUNDLE_ID" "$target" 2>/dev/null || \
+    sudo codesign --force --sign - --identifier "$BUNDLE_ID" "$target" 2>/dev/null || \
+    warn "Could not seal the signature. Caduceus still runs, but macOS may ask for
+the microphone every time you dictate."
+}
+
+# Ask the app to run its walkthrough on next launch. A marker file rather than an
+# edit to the settings JSON: rewriting that safely needs a real parser, and the
+# plain download path deliberately does not require python3.
+request_onboarding() {
+  local dir="$HOME/Library/Application Support/${BUNDLE_ID}"
+  mkdir -p "$dir" 2>/dev/null || return 0
+  : > "$dir/.run-onboarding" 2>/dev/null || true
 }
 
 install_caduceus() {
@@ -623,7 +651,7 @@ cat <<EOF
 
 ${green}${bold}Done.${reset}
 
-  ${dim}Look for the caduceus in your menu bar — there is no Dock icon.${reset}
+  ${dim}Look for Caduceus in your menu bar — there is no Dock icon.${reset}
 
   ${bold}Control+Space${reset}   open the Command Center
   ${bold}F12${reset}             hide or show the floating staff

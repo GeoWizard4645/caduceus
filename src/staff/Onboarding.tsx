@@ -11,11 +11,8 @@
  *    staff is actually hovered, not when you press Next. A tutorial you can
  *    click through without touching the product teaches nothing.
  * 2. **It never blocks the thing it is teaching.** The card is
- *    `pointer-events: none` except for its own buttons, so the staff underneath
- *    stays usable while the card is up.
- *
- * The staff window is a fixed 340px square, so the card is deliberately small
- * and sits beside the mark rather than over it.
+ *    `pointer-events: none` except for its own buttons, and it is parked
+ *    above the mark (not over it) so hover and click still reach the staff.
  */
 
 import { useEffect, useState } from "react";
@@ -83,10 +80,13 @@ function buildSteps(hotkey: string): Step[] {
 export function Onboarding({
   signals,
   settings,
+  staffSize,
   onFinish,
 }: {
   signals: OnboardingSignals;
   settings: Settings;
+  /** Used to park the card clear of the mark so the walkthrough cannot cover it. */
+  staffSize: number;
   onFinish: () => void;
 }) {
   const [index, setIndex] = useState(0);
@@ -106,6 +106,26 @@ export function Onboarding({
   const isLast = index === STEPS.length - 1;
   const satisfied = step.done ? step.done(signals) : true;
 
+  const go = (delta: number) =>
+    setIndex((i) => Math.min(Math.max(i + delta, 0), STEPS.length - 1));
+
+  // Free movement in both directions, unlike Next, which waits for the step's
+  // action. Re-reading a step you have already done should not require redoing
+  // it, and being unable to go back at all was the complaint that added this.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "ArrowLeft") {
+        e.preventDefault();
+        go(-1);
+      } else if (e.key === "ArrowRight") {
+        e.preventDefault();
+        go(1);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [STEPS.length]);
+
   // Auto-advance the moment the real action happens, so completing a step feels
   // like the product responding rather than a form being submitted.
   useEffect(() => {
@@ -115,13 +135,22 @@ export function Onboarding({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [signals.hovered, signals.expanded, signals.commandCenterOpened, signals.hotkeyUsed, index]);
 
+  // Sit above the mark with a small gap. Outer shell is pointer-events none so
+  // only the card itself captures clicks — never the staff underneath.
+  const clearance = Math.round(staffSize / 2) + 14;
+
   return (
-    <div className="pointer-events-none absolute inset-0 z-50 flex items-center justify-center">
+    <div className="pointer-events-none absolute inset-0 z-40">
       <div
         className={cx(
-          "pointer-events-auto w-[290px] animate-fade-rise rounded-cad px-4 py-3.5",
+          "pointer-events-auto absolute left-1/2 w-[min(290px,calc(100%-16px))] -translate-x-1/2",
+          "overflow-y-auto animate-fade-rise rounded-cad px-4 py-3.5",
           "glass shadow-float",
         )}
+        style={{
+          bottom: `calc(50% + ${clearance}px)`,
+          maxHeight: `calc(50% - ${clearance + 8}px)`,
+        }}
       >
         <div className="row justify-between">
           <span className="text-2xs font-medium uppercase tracking-[0.1em] text-accent">
@@ -140,17 +169,55 @@ export function Onboarding({
         <p className="mt-1.5 text-2xs leading-relaxed text-ink-mute">{step.body}</p>
 
         <div className="row mt-3.5 justify-between">
-          <div className="row gap-1">
-            {STEPS.map((_, i) => (
-              <span
-                key={i}
-                aria-hidden="true"
-                className={cx(
-                  "h-1 w-1 rounded-full transition-colors",
-                  i === index ? "bg-accent" : i < index ? "bg-ink-faint" : "bg-overlay",
-                )}
-              />
-            ))}
+          {/* Arrows as buttons, not just key handlers: the staff window is
+              created unfocused and usually stays that way, so ArrowLeft and
+              ArrowRight only reach this card once it has been clicked. The
+              buttons always work. */}
+          <div className="row gap-1.5">
+            <button
+              type="button"
+              onClick={() => go(-1)}
+              disabled={index === 0}
+              aria-label="Previous step"
+              title="Previous step (←)"
+              className={cx(
+                "rounded px-1 text-2xs leading-none transition-colors",
+                index === 0
+                  ? "cursor-default text-overlay"
+                  : "text-ink-faint hover:bg-raised hover:text-ink",
+              )}
+            >
+              ‹
+            </button>
+
+            <div className="row gap-1">
+              {STEPS.map((_, i) => (
+                <span
+                  key={i}
+                  aria-hidden="true"
+                  className={cx(
+                    "h-1 w-1 rounded-full transition-colors",
+                    i === index ? "bg-accent" : i < index ? "bg-ink-faint" : "bg-overlay",
+                  )}
+                />
+              ))}
+            </div>
+
+            <button
+              type="button"
+              onClick={() => go(1)}
+              disabled={isLast}
+              aria-label="Next step"
+              title="Next step (→)"
+              className={cx(
+                "rounded px-1 text-2xs leading-none transition-colors",
+                isLast
+                  ? "cursor-default text-overlay"
+                  : "text-ink-faint hover:bg-raised hover:text-ink",
+              )}
+            >
+              ›
+            </button>
           </div>
 
           {isLast ? (

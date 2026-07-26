@@ -16,6 +16,8 @@
   <string>com.caduceus.desktop.speech-helper</string>
   <key>CFBundleName</key>
   <string>Caduceus Speech Helper</string>
+  <key>CFBundleDisplayName</key>
+  <string>Caduceus</string>
   <key>CFBundleShortVersionString</key>
   <string>1.0</string>
   <key>NSMicrophoneUsageDescription</key>

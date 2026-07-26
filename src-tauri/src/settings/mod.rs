@@ -347,6 +347,61 @@ mod tests {
             .expect("function key row should exist")
     }
 
+    /// The exact spelling the TypeScript `BackendKind` union, the settings UI
+    /// and the installer all write. Serde would otherwise derive
+    /// `open_ai_compatible` from the Rust casing, and the two disagreeing meant
+    /// a backend added in the UI could not be read back.
+    #[test]
+    fn backend_kind_uses_the_spelling_the_rest_of_the_project_writes() {
+        let json = serde_json::to_string(&BackendKind::OpenAiCompatible).unwrap();
+        assert_eq!(json, "\"openai_compatible\"");
+
+        let parsed: BackendKind = serde_json::from_str("\"openai_compatible\"").unwrap();
+        assert_eq!(parsed, BackendKind::OpenAiCompatible);
+
+        let stt = serde_json::to_string(&SttBackendKind::OpenAiCompatible).unwrap();
+        assert_eq!(stt, "\"openai_compatible\"");
+    }
+
+    /// Files written while Rust and the UI disagreed still contain the derived
+    /// spelling. They have to keep loading, or fixing the bug would itself wipe
+    /// the settings of everyone who hit it.
+    #[test]
+    fn the_old_derived_spelling_still_loads() {
+        let parsed: BackendKind = serde_json::from_str("\"open_ai_compatible\"").unwrap();
+        assert_eq!(parsed, BackendKind::OpenAiCompatible);
+
+        let stt: SttBackendKind = serde_json::from_str("\"open_ai_compatible\"").unwrap();
+        assert_eq!(stt, SttBackendKind::OpenAiCompatible);
+    }
+
+    /// A backend configured in the UI must survive a round trip through the
+    /// whole document. One unreadable enum fails the entire file, so this is
+    /// the case that cost a full settings profile rather than one field.
+    #[test]
+    fn a_ui_configured_backend_survives_a_full_round_trip() {
+        let raw = serde_json::json!({
+            "agents": {
+                "primaryBackendId": "ollama-chat",
+                "backends": [{
+                    "id": "ollama-chat",
+                    "displayName": "Ollama",
+                    "kind": "openai_compatible",
+                    "baseUrl": "http://localhost:11434/v1",
+                    "model": "qwen3.5:4b",
+                }],
+            }
+        });
+
+        let settings: Settings =
+            serde_json::from_value(raw).expect("a UI-written backend must load");
+        assert_eq!(settings.agents.backends[0].kind, BackendKind::OpenAiCompatible);
+
+        let round_tripped: Settings =
+            serde_json::from_value(serde_json::to_value(&settings).unwrap()).unwrap();
+        assert_eq!(round_tripped.agents.backends[0].kind, BackendKind::OpenAiCompatible);
+    }
+
     #[test]
     fn f12_toggles_the_staff_out_of_the_box() {
         let s = Settings::default();
