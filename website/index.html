@@ -3,129 +3,14 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Caduceus — open-source macOS command palette and launcher</title>
-<meta name="description" content="A fast, local-first command centre for macOS: app launcher, calculator, clipboard history, on-device voice and an optional AI agent. Open source, no accounts, no tracking.">
+<title>Caduceus — a command centre for your Mac</title>
+<meta name="description" content="A private, local-first command centre for macOS — fully open source and customizable, with no monetization, no data collection, no telemetry, and no tracking.">
 
-
-<link rel="canonical" href="https://caduceus.vivaanshahani.com/">
-<meta name="theme-color" content="#12131d">
-<meta name="author" content="Vivaan Shahani">
-<meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1">
-
-<meta property="og:site_name" content="Caduceus">
-<meta property="og:locale" content="en_GB">
+<meta property="og:title" content="Caduceus">
+<meta property="og:description" content="Private, secure, and as local as you want. Open source, customizable, and free — no accounts, no tracking.">
 <meta property="og:type" content="website">
-<meta property="og:url" content="https://caduceus.vivaanshahani.com/">
-<meta property="og:title" content="Caduceus — open-source macOS command palette and launcher">
-<meta property="og:description" content="A fast, local-first command centre for macOS: app launcher, calculator, clipboard history, on-device voice and an optional AI agent. Open source, no accounts, no tracking.">
-<meta property="og:image" content="https://caduceus.vivaanshahani.com/og-image.png">
-<meta property="og:image:width" content="1200">
-<meta property="og:image:height" content="630">
-<meta property="og:image:alt" content="The Caduceus mark beside the words “Caduceus — a fast, local-first command centre for your Mac”">
-
-<meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="Caduceus — open-source macOS command palette and launcher">
-<meta name="twitter:description" content="A fast, local-first command centre for macOS: app launcher, calculator, clipboard history, on-device voice and an optional AI agent. Open source, no accounts, no tracking.">
-<meta name="twitter:image" content="https://caduceus.vivaanshahani.com/og-image.png">
-<meta name="twitter:image:alt" content="The Caduceus mark beside the words “Caduceus — a fast, local-first command centre for your Mac”">
 
 <link rel="icon" href="caduceus-mark.png">
-
-<script type="application/ld+json">
-{
-  "@context": "https://schema.org",
-  "@graph": [
-    {
-      "@type": "SoftwareApplication",
-      "@id": "https://caduceus.vivaanshahani.com/#app",
-      "name": "Caduceus",
-      "alternateName": "Caduceus for macOS",
-      "description": "A fast, local-first command centre for macOS: a floating staff, a command palette that launches apps and does maths, searchable clipboard history, on-device push-to-talk voice, and an optional AI agent that can drive the machine when asked. Works fully offline with no account and no API key.",
-      "applicationCategory": "UtilitiesApplication",
-      "applicationSubCategory": "Productivity",
-      "operatingSystem": "macOS 11.0 or later",
-      "processorRequirements": "Apple Silicon or Intel",
-      "softwareVersion": "3.2.1",
-      "fileSize": "10MB",
-      "downloadUrl": "https://github.com/GeoWizard4645/caduceus/releases/latest",
-      "installUrl": "https://caduceus.vivaanshahani.com/",
-      "softwareHelp": {
-        "@id": "https://caduceus.vivaanshahani.com/docs"
-      },
-      "releaseNotes": "https://github.com/GeoWizard4645/caduceus/releases",
-      "license": "https://www.gnu.org/licenses/gpl-3.0.html",
-      "isAccessibleForFree": true,
-      "image": "https://caduceus.vivaanshahani.com/og-image.png",
-      "screenshot": "https://caduceus.vivaanshahani.com/og-image.png",
-      "url": "https://caduceus.vivaanshahani.com/",
-      "sameAs": [
-        "https://github.com/GeoWizard4645/caduceus"
-      ],
-      "author": {
-        "@id": "https://caduceus.vivaanshahani.com/#author"
-      },
-      "publisher": {
-        "@id": "https://caduceus.vivaanshahani.com/#author"
-      },
-      "offers": {
-        "@type": "Offer",
-        "price": "0",
-        "priceCurrency": "USD",
-        "availability": "https://schema.org/InStock"
-      },
-      "featureList": [
-        "Command palette with fuzzy app launcher",
-        "Inline calculator and unit conversion",
-        "Searchable clipboard history with optional encryption at rest",
-        "On-device push-to-talk voice transcription",
-        "Window management and system controls",
-        "Screen OCR and colour picker",
-        "Developer tools: hashing, JSON, UUID, base64",
-        "Optional AI agent via Hermes, Ollama or any OpenAI-compatible endpoint",
-        "One-file JavaScript extensions with a permission-checked API"
-      ]
-    },
-    {
-      "@type": "SoftwareSourceCode",
-      "@id": "https://caduceus.vivaanshahani.com/#source",
-      "name": "Caduceus source",
-      "codeRepository": "https://github.com/GeoWizard4645/caduceus",
-      "programmingLanguage": [
-        "Rust",
-        "TypeScript"
-      ],
-      "runtimePlatform": "Tauri",
-      "license": "https://www.gnu.org/licenses/gpl-3.0.html",
-      "about": {
-        "@id": "https://caduceus.vivaanshahani.com/#app"
-      }
-    },
-    {
-      "@type": "Person",
-      "@id": "https://caduceus.vivaanshahani.com/#author",
-      "name": "Vivaan Shahani",
-      "url": "https://vivaanshahani.com",
-      "sameAs": [
-        "https://github.com/GeoWizard4645"
-      ]
-    },
-    {
-      "@type": "WebSite",
-      "@id": "https://caduceus.vivaanshahani.com/#website",
-      "url": "https://caduceus.vivaanshahani.com/",
-      "name": "Caduceus",
-      "inLanguage": "en-GB",
-      "publisher": {
-        "@id": "https://caduceus.vivaanshahani.com/#author"
-      },
-      "about": {
-        "@id": "https://caduceus.vivaanshahani.com/#app"
-      }
-    }
-  ]
-}
-</script>
-
 <script>
 (function () {
   var k = "caduceus-site-theme";
@@ -665,79 +550,6 @@
     color: var(--ink-faint);
     min-height: 1.2em;
   }
-
-  .bundle-models {
-    margin: 12px 0 4px;
-    padding: 12px 14px;
-    border: 1px solid var(--line);
-    border-radius: 10px;
-    background: var(--raised);
-  }
-
-  .bundle-models-heading {
-    margin: 0 0 10px;
-    font-size: 0.78rem;
-    font-weight: 600;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
-    color: var(--ink-faint);
-  }
-
-  .bundle-model-row {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(9rem, 12rem);
-    gap: 6px 10px;
-    align-items: center;
-    margin-bottom: 10px;
-  }
-
-  .bundle-model-row:last-child { margin-bottom: 0; }
-
-  .bundle-model-row label {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    font-size: 0.82rem;
-    color: var(--ink-soft);
-    font-weight: 500;
-  }
-
-  .bundle-model-row label span.hint {
-    font-size: 0.72rem;
-    font-weight: 400;
-    color: var(--ink-faint);
-  }
-
-  .bundle-model-row select {
-    width: 100%;
-    padding: 7px 8px;
-    border-radius: 8px;
-    border: 1px solid var(--line);
-    background: var(--surface);
-    color: var(--ink-soft);
-    font: inherit;
-    font-size: 0.78rem;
-  }
-
-  .bundle-model-row select:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-
-  .bundle-model-meta {
-    grid-column: 1 / -1;
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px 14px;
-    font-size: 0.72rem;
-    color: var(--ink-faint);
-    padding-left: 2px;
-  }
-
-  .bundle-model-meta .est { color: var(--ink-mute); }
-  .bundle-model-meta .mac { color: var(--accent); font-weight: 500; }
-
-  .bundle-models.disabled { opacity: 0.55; pointer-events: none; }
 
   .bundle-customize-dialog {
     padding: 0;
@@ -1379,11 +1191,6 @@
             </div>
           </details>
 
-          <div class="bundle-models" id="bundle-models" aria-labelledby="bundle-models-heading">
-            <p class="bundle-models-heading" id="bundle-models-heading">Local models (Ollama)</p>
-            <div id="bundle-model-rows"></div>
-          </div>
-
           <button
             type="button"
             class="bundle-customize-open"
@@ -1843,18 +1650,8 @@ export default async function (input, ctx) {
       Caduceus reads that header <strong>without running your code</strong>, so you can see an
       extension's name and every permission it asks for before a line of it has executed.
       Permissions are a closed set — <code>clipboard</code>, <code>network</code>,
-      <code>selection</code>, <code>notifications</code>, <code>shell</code>,
-      <code>automation</code>, <code>files</code>, <code>settings</code>,
-      <code>commands</code>, <code>ai</code>, <code>shortcuts</code> — and each one is checked
-      in Rust on every call, against the file on disk, not against anything the extension says
-      at run time.
-    </p>
-    <p>
-      Read that line before you install something. <code>shell</code> and
-      <code>automation</code> are not capabilities in the sense the others are: they mean this
-      file can run commands and drive every app on your Mac, which is to say it can do whatever
-      you can do. The sandbox below bounds what an extension reaches by accident. It does not
-      bound what it reaches by asking.
+      <code>selection</code>, <code>notifications</code> — and there is no filesystem, no
+      shell and no ambient <code>fetch</code> to reach around them.
     </p>
 
     <h3>Don't want to write it?</h3>
@@ -1866,22 +1663,12 @@ export default async function (input, ctx) {
       Save it as <code>.js</code> and drag it in.
     </p>
 
-    <h3>How it runs</h3>
-    <p>
-      Type the extension's name in the Command Center; anything after the name is handed to it
-      as <code>input</code>. It executes in a Web Worker — no DOM, and no way to call a Caduceus
-      command directly, because Tauri's IPC bridge is injected into a page and not into a
-      worker. The network globals are removed from its scope, and the app's content-security
-      policy allows <code>connect-src 'self'</code> and nothing else, so <code>ctx.fetch</code>
-      goes through Rust — where the extension's header is re-read from disk and checked before
-      the request is made. Every other capability works the same way: a named Rust command that
-      verifies the permission first. A run gets 120 seconds before the worker is terminated.
-    </p>
-
     <div class="note">
-      <strong>Installing and running both work</strong> as of 3.1.2. The format has not changed
-      since it was published in 2.0.0, which was the point of publishing it before the runtime
-      existed. Full reference:
+      <strong>Installing works; running does not yet.</strong> Dropping a file, reading its
+      header, checking its permissions, listing and removing all ship today. The sandbox that
+      executes extensions is still to come, so an installed extension does nothing for now.
+      The format is published so you can write against it — and argue with it — before code
+      depends on it. Full reference:
       <a href="https://github.com/GeoWizard4645/caduceus/blob/main/EXTENSIONS.md">EXTENSIONS.md</a>.
     </div>
   </div>
@@ -1903,96 +1690,23 @@ export default async function (input, ctx) {
 <script>
   // --- the configured-package picker ------------------------------------
   //
-  // Components are checkboxes; models are dropdowns with download size + Mac guidance.
-
-  /** @typedef {{ id: string, label: string, vendor: string, mac: string, sizeMB: number, size: string, time: string }} ModelOption */
-
-  /** @type {Record<string, { sizeMB: number, size: string, time: string }>} */
+  // Every tag lives in this one array so correcting a model name is a one-line
+  // change. `role` is what the installer wires the model into: "ai" backs the
+  // `/` prefix, "hermesModel" is the Ollama tag Hermes uses (vision for /c).
   const DOWNLOAD_EST = {
+    // The Command Line Tools are ~1.5 GB, but nearly every machine that gets
+    // this far already has them, so counting them in the total would overstate
+    // it for almost everyone. Called out in the checkbox's own info line instead.
     deps: { sizeMB: 0, size: "~0 MB*", time: "~0–10 min" },
+    // The universal .dmg carries both slices, so it is roughly twice the size
+    // of the app you end up running.
     caduceus: { sizeMB: 10, size: "~10 MB", time: "~10 s" },
     hermes: { sizeMB: 150, size: "~150 MB", time: "~2–5 min" },
     ollama: { sizeMB: 80, size: "~80 MB", time: "~1 min" },
-    none: { sizeMB: 0, size: "—", time: "—" },
-    "qwen3:1.7b": { sizeMB: 1300, size: "~1.3 GB", time: "~2–8 min" },
-    "qwen3:4b": { sizeMB: 2600, size: "~2.6 GB", time: "~4–15 min" },
-    "qwen3:8b": { sizeMB: 5200, size: "~5.2 GB", time: "~8–30 min" },
-    "qwen2.5:3b": { sizeMB: 1900, size: "~1.9 GB", time: "~3–12 min" },
-    "qwen2.5:7b": { sizeMB: 4700, size: "~4.7 GB", time: "~7–25 min" },
-    "qwen2.5vl:3b": { sizeMB: 3200, size: "~3.2 GB", time: "~5–18 min" },
+    "qwen3.5:4b": { sizeMB: 3400, size: "~3.4 GB", time: "~5–20 min" },
     "qwen2.5vl:7b": { sizeMB: 6000, size: "~6 GB", time: "~10–35 min" },
-    "gemma3:1b": { sizeMB: 900, size: "~0.9 GB", time: "~2–6 min" },
     "gemma3:4b": { sizeMB: 3300, size: "~3.3 GB", time: "~5–20 min" },
-    "gemma3:12b": { sizeMB: 8200, size: "~8.2 GB", time: "~15–45 min" },
-    "llama3.2:1b": { sizeMB: 1300, size: "~1.3 GB", time: "~2–8 min" },
-    "llama3.2:3b": { sizeMB: 2000, size: "~2.0 GB", time: "~3–12 min" },
-    "mistral:7b": { sizeMB: 4400, size: "~4.4 GB", time: "~7–25 min" },
-    "phi3:mini": { sizeMB: 2300, size: "~2.3 GB", time: "~4–14 min" },
-    "deepseek-r1:7b": { sizeMB: 4700, size: "~4.7 GB", time: "~8–28 min" },
-    "llava:7b": { sizeMB: 4700, size: "~4.7 GB", time: "~8–28 min" },
-    "minicpm-v": { sizeMB: 5500, size: "~5.5 GB", time: "~10–32 min" },
   };
-
-  /** @type {ModelOption[]} */
-  const CHAT_MODELS = [
-    { id: "qwen3:1.7b", label: "Qwen3 1.7B", vendor: "Alibaba", mac: "Any Mac · 8 GB RAM (recommended default)", sizeMB: 1300, size: "~1.3 GB", time: "~2–8 min" },
-    { id: "qwen3:4b", label: "Qwen3 4B", vendor: "Alibaba", mac: "M1/M2/M3 · 16 GB RAM", sizeMB: 2600, size: "~2.6 GB", time: "~4–15 min" },
-    { id: "qwen3:8b", label: "Qwen3 8B", vendor: "Alibaba", mac: "M2 Pro / M3 · 24 GB RAM", sizeMB: 5200, size: "~5.2 GB", time: "~8–30 min" },
-    { id: "qwen2.5:3b", label: "Qwen2.5 3B", vendor: "Alibaba", mac: "M1/M2 · 8–16 GB RAM", sizeMB: 1900, size: "~1.9 GB", time: "~3–12 min" },
-    { id: "qwen2.5:7b", label: "Qwen2.5 7B", vendor: "Alibaba", mac: "M2 Pro / M3 · 16 GB RAM", sizeMB: 4700, size: "~4.7 GB", time: "~7–25 min" },
-    { id: "gemma3:1b", label: "Gemma 3 1B", vendor: "Google", mac: "Any Mac · 8 GB RAM", sizeMB: 900, size: "~0.9 GB", time: "~2–6 min" },
-    { id: "gemma3:4b", label: "Gemma 3 4B", vendor: "Google", mac: "M1/M2/M3 · 16 GB RAM", sizeMB: 3300, size: "~3.3 GB", time: "~5–20 min" },
-    { id: "gemma3:12b", label: "Gemma 3 12B", vendor: "Google", mac: "M3 Pro / Max · 32 GB RAM", sizeMB: 8200, size: "~8.2 GB", time: "~15–45 min" },
-    { id: "llama3.2:1b", label: "Llama 3.2 1B", vendor: "Meta", mac: "Any Mac · 8 GB RAM", sizeMB: 1300, size: "~1.3 GB", time: "~2–8 min" },
-    { id: "llama3.2:3b", label: "Llama 3.2 3B", vendor: "Meta", mac: "M1/M2 · 8–16 GB RAM", sizeMB: 2000, size: "~2.0 GB", time: "~3–12 min" },
-    { id: "mistral:7b", label: "Mistral 7B", vendor: "Mistral", mac: "M2 Pro / M3 · 16 GB RAM", sizeMB: 4400, size: "~4.4 GB", time: "~7–25 min" },
-    { id: "phi3:mini", label: "Phi-3 Mini", vendor: "Microsoft", mac: "M1/M2 · 8–16 GB RAM", sizeMB: 2300, size: "~2.3 GB", time: "~4–14 min" },
-    { id: "deepseek-r1:7b", label: "DeepSeek R1 7B", vendor: "DeepSeek", mac: "M2 Pro / M3 · 16 GB RAM", sizeMB: 4700, size: "~4.7 GB", time: "~8–28 min" },
-  ];
-
-  /** @type {ModelOption[]} */
-  const VISION_MODELS = [
-    { id: "qwen2.5vl:7b", label: "Qwen2.5-VL 7B", vendor: "Alibaba", mac: "M2 Pro / M3 · 16 GB RAM (default for /c)", sizeMB: 6000, size: "~6 GB", time: "~10–35 min" },
-    { id: "qwen2.5vl:3b", label: "Qwen2.5-VL 3B", vendor: "Alibaba", mac: "M1/M2/M3 · 8–16 GB RAM", sizeMB: 3200, size: "~3.2 GB", time: "~5–18 min" },
-    { id: "llava:7b", label: "LLaVA 7B", vendor: "Community", mac: "M2 Pro / M3 · 16 GB RAM", sizeMB: 4700, size: "~4.7 GB", time: "~8–28 min" },
-    { id: "minicpm-v", label: "MiniCPM-V", vendor: "OpenBMB", mac: "M2 / M3 · 16 GB RAM", sizeMB: 5500, size: "~5.5 GB", time: "~10–32 min" },
-  ];
-
-  /** @type {ModelOption[]} */
-  const EXTRA_MODELS = [
-    { id: "none", label: "None", vendor: "—", mac: "Skip an extra pull", sizeMB: 0, size: "—", time: "—" },
-    ...CHAT_MODELS.filter((m) => !["qwen3:1.7b"].includes(m.id)),
-  ];
-
-  const MODEL_SLOTS = [
-    {
-      slot: "ai",
-      title: "Chat model",
-      hint: "Wired to / in Caduceus (Ollama on localhost)",
-      defaultId: "qwen3:1.7b",
-      options: CHAT_MODELS,
-      needsOllama: true,
-      needsHermes: false,
-    },
-    {
-      slot: "hermes",
-      title: "Screen / computer-use model",
-      hint: "Hermes agent + vision for /c",
-      defaultId: "qwen2.5vl:7b",
-      options: VISION_MODELS,
-      needsOllama: true,
-      needsHermes: true,
-    },
-    {
-      slot: "extra",
-      title: "Optional extra model",
-      hint: "Pulled but not auto-wired — swap in Settings → AI later",
-      defaultId: "none",
-      options: EXTRA_MODELS,
-      needsOllama: true,
-      needsHermes: false,
-    },
-  ];
 
   const PARTS = [
     {
@@ -2033,11 +1747,19 @@ export default async function (input, ctx) {
       docUrl: "https://ollama.com/",
       on: true,
     },
+    { id: "qwen3.5:4b", kind: "model", role: "ai", name: "qwen3.5:4b", detail: "Caduceus / via localhost API", on: true },
+    {
+      id: "qwen2.5vl:7b",
+      kind: "model",
+      role: "hermesModel",
+      name: "qwen2.5vl:7b",
+      detail: "Hermes agent + screen control",
+      on: true,
+    },
+    { id: "gemma3:4b", kind: "model", name: "gemma3:4b", detail: "optional extra (~131k context)", on: false },
   ];
 
   const optsList = document.getElementById("opts");
-  const modelRows = document.getElementById("bundle-model-rows");
-  const bundleModels = document.getElementById("bundle-models");
   const bundleCode = document.getElementById("bundle-cmd");
   const bundleMeta = document.getElementById("bundle-meta");
   const optsNote = document.getElementById("opts-note");
@@ -2047,9 +1769,7 @@ export default async function (input, ctx) {
   const customizeClose = document.getElementById("bundle-customize-close");
   const customizeDone = document.getElementById("bundle-customize-done");
 
-  if (optsList && bundleCode && modelRows) {
-    const slotSelects = {};
-
+  if (optsList && bundleCode) {
     for (const part of PARTS) {
       const li = document.createElement("li");
       const label = document.createElement("label");
@@ -2102,59 +1822,6 @@ export default async function (input, ctx) {
       optsList.append(li);
     }
 
-    for (const slot of MODEL_SLOTS) {
-      const wrap = document.createElement("div");
-      wrap.className = "bundle-model-row";
-      wrap.dataset.slot = slot.slot;
-
-      const label = document.createElement("label");
-      label.htmlFor = `model-${slot.slot}`;
-      const title = document.createElement("span");
-      title.textContent = slot.title;
-      const hint = document.createElement("span");
-      hint.className = "hint";
-      hint.textContent = slot.hint;
-      label.append(title, hint);
-
-      const select = document.createElement("select");
-      select.id = `model-${slot.slot}`;
-      select.dataset.slot = slot.slot;
-      for (const opt of slot.options) {
-        const o = document.createElement("option");
-        o.value = opt.id;
-        o.textContent = `${opt.label} (${opt.vendor})`;
-        if (opt.id === slot.defaultId) o.selected = true;
-        select.append(o);
-      }
-
-      const meta = document.createElement("div");
-      meta.className = "bundle-model-meta";
-      meta.innerHTML =
-        `<span class="est" data-est="${slot.slot}"></span>` +
-        `<span class="mac" data-mac="${slot.slot}"></span>`;
-
-      wrap.append(label, select, meta);
-      modelRows.append(wrap);
-      slotSelects[slot.slot] = select;
-    }
-
-    const estFor = (id) => DOWNLOAD_EST[id] || { sizeMB: 0, size: "—", time: "—" };
-
-    const updateModelMeta = (slotKey) => {
-      const slotDef = MODEL_SLOTS.find((s) => s.slot === slotKey);
-      if (!slotDef) return;
-      const select = slotSelects[slotKey];
-      const id = select.value;
-      const row = slotDef.options.find((o) => o.id === id) || slotDef.options[0];
-      const estEl = modelRows.querySelector(`[data-est="${slotKey}"]`);
-      const macEl = modelRows.querySelector(`[data-mac="${slotKey}"]`);
-      const est = estFor(id);
-      if (estEl) estEl.textContent = `${est.size} · ${est.time} download`;
-      if (macEl) macEl.textContent = row.mac;
-    };
-
-    for (const slot of MODEL_SLOTS) updateModelMeta(slot.slot);
-
     const boxFor = (id) => optsList.querySelector(`input[data-id="${CSS.escape(id)}"]`);
 
     const formatTotalSize = (mb) => {
@@ -2190,28 +1857,29 @@ export default async function (input, ctx) {
       const depsBox = boxFor("deps");
       const depsLabel = optsList.querySelector('label[data-for="deps"]');
 
-      const ollamaOn = ollamaBox.checked;
-      const hermesOn = hermesBox.checked;
-
-      if (bundleModels) {
-        bundleModels.classList.toggle("disabled", !ollamaOn);
-      }
-      for (const slot of MODEL_SLOTS) {
-        const select = slotSelects[slot.slot];
-        const off = !ollamaOn || (slot.needsHermes && !hermesOn);
-        select.disabled = off;
+      // Model pulls need Ollama; vision /c model needs Hermes — sync checks, never grey out.
+      for (const part of PARTS.filter((p) => p.kind === "model")) {
+        const modelBox = boxFor(part.id);
+        if (modelBox.checked && !ollamaBox.checked) ollamaBox.checked = true;
+        if (part.role === "hermesModel" && modelBox.checked && !hermesBox.checked) {
+          hermesBox.checked = true;
+        }
       }
 
-      const aiId = ollamaOn ? slotSelects.ai.value : "";
-      const hermesModelId = ollamaOn && hermesOn ? slotSelects.hermes.value : "";
-      const extraId = ollamaOn ? slotSelects.extra.value : "none";
+      if (!ollamaBox.checked) {
+        for (const part of PARTS.filter((p) => p.kind === "model")) {
+          boxFor(part.id).checked = false;
+        }
+      }
 
-      const pullSet = new Set();
-      if (aiId) pullSet.add(aiId);
-      if (hermesModelId) pullSet.add(hermesModelId);
-      if (extraId && extraId !== "none") pullSet.add(extraId);
+      if (!hermesBox.checked) {
+        for (const part of PARTS.filter((p) => p.role === "hermesModel")) {
+          boxFor(part.id).checked = false;
+        }
+      }
 
-      const needsDeps = ollamaOn || hermesOn;
+      const models = picked("model");
+      const needsDeps = ollamaBox.checked || hermesBox.checked;
       if (needsDeps) depsBox.checked = true;
       depsBox.disabled = needsDeps;
       depsLabel.classList.toggle("locked", needsDeps);
@@ -2220,19 +1888,19 @@ export default async function (input, ctx) {
       const components = [...picked("dependency"), ...picked("component")];
       const parts = ["curl -fsSL https://vivaanshahani.com/caduceus/install.sh | bash -s --"];
       if (components.length) parts.push("--with=" + components.map((p) => p.id).join(","));
-      if (pullSet.size) parts.push("--pull=" + [...pullSet].join(","));
-      if (aiId) parts.push("--ai=" + aiId);
-      if (hermesModelId) parts.push("--hermes-model=" + hermesModelId);
+      if (models.length) parts.push("--pull=" + models.map((p) => p.id).join(","));
 
-      const nothing = !components.length && !pullSet.size;
+      const ai = models.find((p) => p.role === "ai");
+      const hm = models.find((p) => p.role === "hermesModel");
+      if (ai) parts.push("--ai=" + ai.id);
+      if (hm) parts.push("--hermes-model=" + hm.id);
+
+      const nothing = !components.length && !models.length;
       bundleCode.innerHTML = '<span class="prompt">$ </span>';
       bundleCode.append(nothing ? "# nothing selected" : parts.join(" "));
 
-      const selectedForEstimate = [
-        ...components,
-        ...[...pullSet].map((id) => ({ id })),
-      ];
-      const totals = estimateBundle(selectedForEstimate);
+      const selected = [...components, ...models];
+      const totals = estimateBundle(selected);
       if (bundleMeta) {
         bundleMeta.innerHTML = nothing
           ? ""
@@ -2241,7 +1909,7 @@ export default async function (input, ctx) {
       }
 
       optsNote.textContent = nothing
-        ? "Tick at least one component or choose a model to get a command."
+        ? "Tick at least one thing to get a command."
         : needsDeps
           ? "Required tools are included whenever Ollama or Hermes is in the command."
           : "";
@@ -2250,10 +1918,7 @@ export default async function (input, ctx) {
         if (nothing) {
           bundleIncludes.textContent = "";
         } else {
-          const labels = [...components.map((p) => p.name)];
-          if (aiId) labels.push(`chat: ${aiId}`);
-          if (hermesModelId) labels.push(`screen: ${hermesModelId}`);
-          if (extraId && extraId !== "none") labels.push(`extra: ${extraId}`);
+          const labels = selected.map((p) => p.name);
           bundleIncludes.textContent = "Includes: " + labels.join(", ");
         }
       }
@@ -2262,14 +1927,18 @@ export default async function (input, ctx) {
     optsList.addEventListener("change", (ev) => {
       const target = ev.target;
       if (!(target instanceof HTMLInputElement) || target.type !== "checkbox") return;
-      render();
-    });
+      const id = target.dataset.id;
 
-    modelRows.addEventListener("change", (ev) => {
-      const target = ev.target;
-      if (!(target instanceof HTMLSelectElement)) return;
-      const slotKey = target.dataset.slot;
-      if (slotKey) updateModelMeta(slotKey);
+      if (id === "ollama" && !target.checked) {
+        for (const part of PARTS.filter((p) => p.kind === "model")) {
+          boxFor(part.id).checked = false;
+        }
+      }
+      if (id === "hermes" && !target.checked) {
+        for (const part of PARTS.filter((p) => p.role === "hermesModel")) {
+          boxFor(part.id).checked = false;
+        }
+      }
       render();
     });
     render();
