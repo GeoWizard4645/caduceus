@@ -64,6 +64,29 @@ try {
   check("asking for Settings → Voice while Settings is open moves to Voice",
     settingsTab?.section === "voice" && voice.tabs.filter((t) => t.kind === "settings").length === 1);
 
+  // --- tool and permission pages are singletons *per thing* --------------
+  // Every command has a page now, so "one tab per kind" would mean one tool
+  // page at a time — you could not have SHA-256 and Slugify open together,
+  // which is the whole reason they are tabs.
+  const sha = openTab([homeTab()], { kind: "tool", commandId: "dev.sha256" });
+  const slug = openTab(sha.tabs, { kind: "tool", commandId: "text.slugify" });
+  check("two different tool pages coexist", slug.tabs.length === 3);
+
+  const shaAgain = openTab(slug.tabs, { kind: "tool", commandId: "dev.sha256" });
+  check(
+    "opening the same tool page twice focuses the one you have",
+    shaAgain.tabs.length === 3 && shaAgain.activeId === sha.activeId,
+  );
+
+  const ax = openTab(slug.tabs, { kind: "permission", permission: "accessibility" });
+  const axAgain = openTab(ax.tabs, { kind: "permission", permission: "accessibility" });
+  check(
+    "one page per permission, not one per failure",
+    axAgain.tabs.length === ax.tabs.length && axAgain.activeId === ax.activeId,
+  );
+  const mic = openTab(ax.tabs, { kind: "permission", permission: "microphone" });
+  check("a different permission is a different page", mic.tabs.length === ax.tabs.length + 1);
+
   // --- the cap ------------------------------------------------------------
   let filled = [homeTab()];
   for (let i = 1; i < MAX_TABS; i += 1) filled = openTab(filled, { kind: "home" }).tabs;
@@ -98,7 +121,8 @@ try {
 
   // --- labels -------------------------------------------------------------
   check("every kind has a label",
-    ["home", "clipboard", "chat", "settings", "system", "awake", "sound", "ports", "docker", "machine"]
+    ["home", "clipboard", "chat", "settings", "system", "awake", "sound", "ports", "docker",
+     "machine", "tool", "permission"]
       .every((kind) => tabLabel({ id: "x", kind }).length > 0));
   check("a Home tab shows its query once there is one",
     tabLabel({ id: "x", kind: "home", title: "sha256 hello" }) === "sha256 hello");

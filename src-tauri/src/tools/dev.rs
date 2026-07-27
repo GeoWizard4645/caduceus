@@ -137,8 +137,12 @@ pub fn needs_input(id: ToolId) -> bool {
 
 /// Run a tool.
 pub fn run(id: ToolId, input: &str) -> ToolResult {
+    // Reaching this at all now means something went round the front end: the
+    // palette opens a tool's page rather than running it on nothing, and the
+    // page will not let Run be pressed with an empty box. Kept as a guard, but
+    // phrased for someone looking at that page rather than at a command line.
     if needs_input(id) && input.trim().is_empty() {
-        return ToolResult::err("Type something after the command first.");
+        return ToolResult::err("There is nothing to work on yet — fill the box above.");
     }
 
     match id {

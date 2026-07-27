@@ -86,12 +86,12 @@ fn run_tool(program: &str, args: &[&str]) -> Result<String, String> {
 fn osa(script: &str) -> Result<String, String> {
     run_tool("osascript", &["-e", script]).map_err(|e| {
         if e.contains("-1743") || e.contains("Not authorized") {
-            "Caduceus is not allowed to control that app yet. Grant it in System Settings → \
-             Privacy & Security → Automation."
+            "Caduceus needs Automation permission to control that app. Grant it in System \
+             Settings → Privacy & Security → Automation."
                 .to_string()
         } else if e.contains("-25211") || e.contains("assistive access") {
-            "This needs Accessibility permission. Grant it in System Settings → Privacy & \
-             Security → Accessibility."
+            "Caduceus needs Accessibility permission for this. Grant it in System Settings → \
+             Privacy & Security → Accessibility."
                 .to_string()
         } else {
             e

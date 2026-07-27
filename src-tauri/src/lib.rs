@@ -126,6 +126,7 @@ pub fn run() {
             commands::extension_permissions,
             commands::toggle_staff,
             commands::save_staff_position,
+            commands::refresh_staff_layout,
             commands::collapse_staff_popout,
             commands::resolve_shortcut_icon,
             commands::import_shortcut_icon,
@@ -252,7 +253,30 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
 
     // --- settings ---------------------------------------------------------
     discard_legacy_onboarding_marker(&handle);
-    let loaded = settings::load(&handle);
+    let mut loaded = settings::load(&handle);
+
+    // Until the walkthrough finishes, keep the staff on screen even if a prior
+    // session hid it — otherwise a reinstall with old settings looks broken.
+    let mut dirty = false;
+    if !loaded.general.onboarding_done && !loaded.general.staff_visible {
+        loaded.general.staff_visible = true;
+        dirty = true;
+    }
+
+    // First launch of this build: show the staff, whatever a previous version
+    // was told. Settings outlive the bundle, so "I installed it and nothing
+    // appeared" is what a months-old `staff_visible: false` looks like — and
+    // the staff is the only part of Caduceus you can see at all.
+    let version = env!("CARGO_PKG_VERSION");
+    if loaded.general.last_launched_version.as_deref() != Some(version) {
+        loaded.general.last_launched_version = Some(version.to_string());
+        loaded.general.staff_visible = true;
+        dirty = true;
+    }
+
+    if dirty {
+        let _ = settings::save(&handle, &loaded);
+    }
 
     let manager = SettingsManager::new(loaded.clone());
     app.manage(manager.clone());
@@ -311,13 +335,41 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     if let Some(staff) = window::staff(&handle) {
         let _ = staff.set_ignore_cursor_events(true);
         let _ = window::position_staff(&handle, &manager);
-        if loaded.general.staff_visible {
+        if window::should_show_staff(&loaded) {
             let _ = staff.show();
+            window::configure_staff_floating(&staff);
         }
-        window::configure_staff_floating(&staff);
     }
     if let Some(w) = handle.get_webview_window(window::COMMAND_CENTER_WINDOW) {
         window::apply_vibrancy(&w);
+        // Set up the panel now rather than on the first hotkey press. It is the
+        // same work either way, and doing it while the window is still hidden
+        // means the very first open is already allowed into whatever Space the
+        // user happens to be in.
+        window::configure_command_center_floating(&w);
+    }
+
+    // Ask again a beat later. `show()` above runs while the event loop has not
+    // started, and on the first launch after an install the window server is
+    // busy enough — Gatekeeper, the quarantine check, the login-item
+    // registration — that it does not always stick. The symptom is an app that
+    // starts and visibly does nothing, which is the worst possible first
+    // impression and exactly what one cheap re-assert prevents.
+    {
+        let handle = handle.clone();
+        let manager = manager.clone();
+        tauri::async_runtime::spawn(async move {
+            tokio::time::sleep(std::time::Duration::from_millis(900)).await;
+            if !window::should_show_staff(&manager.get()) {
+                return;
+            }
+            let Some(staff) = window::staff(&handle) else { return };
+            if !staff.is_visible().unwrap_or(false) {
+                let _ = window::position_staff(&handle, &manager);
+                let _ = staff.show();
+            }
+            window::configure_staff_floating(&staff);
+        });
     }
 
     let tracker = window::spawn_cursor_tracker(handle.clone(), manager.clone());
@@ -355,15 +407,11 @@ fn handle_window_event(window: &tauri::Window, event: &WindowEvent) {
         WindowEvent::CloseRequested { api, .. } => {
             if window.label() != window::STAFF_WINDOW {
                 api.prevent_close();
+                // Closing puts Caduceus back in the menu bar where it lives.
+                // The tabs are still there on the next open — they are written
+                // down as well as held in memory, so even a restart reopens on
+                // what you left.
                 let _ = window.hide();
-                // Closing the one window puts Caduceus back in the menu bar
-                // where it lives; the tabs are still there on the next open.
-                #[cfg(target_os = "macos")]
-                {
-                    let _ = window
-                        .app_handle()
-                        .set_activation_policy(tauri::ActivationPolicy::Accessory);
-                }
             }
         }
 
@@ -376,10 +424,14 @@ fn handle_window_event(window: &tauri::Window, event: &WindowEvent) {
         WindowEvent::Focused(false) => {
             if window.label() == window::COMMAND_CENTER_WINDOW {
                 let app = window.app_handle();
-                let floating = app
-                    .try_state::<window::PaletteFloating>()
-                    .map(|state| state.get())
-                    .unwrap_or(true);
+                let state = app.try_state::<window::PaletteFloating>();
+                // A non-activating panel can resign key for a moment as the
+                // window server hands it over. Closing on that would make the
+                // palette flash open and vanish.
+                if state.as_ref().is_some_and(|s| s.just_shown()) {
+                    return;
+                }
+                let floating = state.map(|state| state.get()).unwrap_or(true);
                 let dismisses = app
                     .try_state::<SettingsManager>()
                     .map(|s| s.with(|s| s.command_center.close_on_action))

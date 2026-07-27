@@ -27,7 +27,9 @@ export type TabKind =
   | "sound"
   | "ports"
   | "docker"
-  | "machine";
+  | "machine"
+  | "tool"
+  | "permission";
 
 export interface Tab {
   /** Unique for the lifetime of the tab, so React keys stay stable. */
@@ -35,16 +37,34 @@ export interface Tab {
   kind: TabKind;
   /** Overrides the kind's default label — a chat tab shows its thread name. */
   title?: string;
+  /** Overrides the kind's default icon, for kinds that are one page per thing. */
+  icon?: string;
   /** For `settings`: which pane to select on open. */
   section?: string;
   /** For `chat`: which conversation to show. */
   conversationId?: number;
+  /** For `tool`: which command's page this is. */
+  commandId?: string;
+  /** For `tool`: text to start the page's input with. */
+  prefill?: string;
+  /** For `permission`: which grant is missing. */
+  permission?: PermissionId;
+  /** For `permission`: the command to offer to re-run once it is granted. */
+  retryCommandId?: string;
 }
+
+/** The macOS grants Caduceus can walk someone through. */
+export type PermissionId = "accessibility" | "screen-recording" | "microphone" | "automation";
 
 interface KindMeta {
   label: string;
   icon: string;
-  /** Whether a second tab of this kind is allowed. */
+  /**
+   * Whether a second tab of this kind is allowed.
+   *
+   * "Singleton" is per {@link singletonKey}, not per kind: two different tool
+   * pages are two different things, and opening the same one twice is not.
+   */
   singleton: boolean;
   /**
    * Whether this tab makes the window a *window* rather than an overlay.
@@ -66,7 +86,27 @@ export const TAB_KINDS: Record<TabKind, KindMeta> = {
   ports: { label: "Ports", icon: "◈", singleton: true, page: true },
   docker: { label: "Docker", icon: "◉", singleton: true, page: true },
   machine: { label: "This Mac", icon: "◍", singleton: true, page: true },
+  tool: { label: "Tool", icon: "⌂", singleton: true, page: true },
+  permission: { label: "Permission", icon: "⚠", singleton: true, page: true },
 };
+
+/**
+ * What makes two tabs "the same tab" for singleton purposes.
+ *
+ * Clipboard is one page, so its key is its kind. A tool page is one page *per
+ * command*, so `sha256` and `slugify` coexist while asking for `sha256` twice
+ * lands you back on the one you already have.
+ */
+export function singletonKey(tab: Pick<Tab, "kind" | "commandId" | "permission">): string {
+  switch (tab.kind) {
+    case "tool":
+      return `tool:${tab.commandId ?? ""}`;
+    case "permission":
+      return `permission:${tab.permission ?? ""}`;
+    default:
+      return tab.kind;
+  }
+}
 
 /** The most tabs one window session will hold. */
 export const MAX_TABS = 24;
@@ -80,7 +120,7 @@ export function tabLabel(tab: Tab): string {
 }
 
 export function tabIcon(tab: Tab): string {
-  return TAB_KINDS[tab.kind].icon;
+  return tab.icon ?? TAB_KINDS[tab.kind].icon;
 }
 
 /** Whether this set of tabs should behave as an overlay rather than a window. */
@@ -114,7 +154,8 @@ export function openTab(tabs: Tab[], request: Omit<Tab, "id">): OpenResult {
   const meta = TAB_KINDS[request.kind];
 
   if (meta.singleton) {
-    const existing = tabs.find((tab) => tab.kind === request.kind);
+    const key = singletonKey(request);
+    const existing = tabs.find((tab) => singletonKey(tab) === key);
     if (existing) {
       // Focusing carries the new payload across: asking for Settings → Voice
       // while Settings is already open should move to Voice, not ignore you.
@@ -165,4 +206,88 @@ export function closeTab(
       : activeId;
 
   return { tabs: remaining, activeId: nextActive, emptied: false };
+}
+
+// ---------------------------------------------------------------------------
+// Persistence
+// ---------------------------------------------------------------------------
+
+const STORAGE_KEY = "caduceus.tabs.v1";
+
+/**
+ * What gets written down.
+ *
+ * Tabs are the window. Closing it puts it away rather than throwing it out —
+ * that has always been true of the *window*, but the tabs lived only in React
+ * state, so anything that reloaded the webview (an update, a crash, a restart)
+ * silently emptied it. A tab you deliberately left open is a thing you meant to
+ * come back to.
+ *
+ * Only the identifying fields are kept, never anything live: a chat tab is
+ * saved as "this conversation", not as its messages, so it reloads rather than
+ * restores something stale.
+ */
+interface StoredTabs {
+  tabs: Tab[];
+  activeId: string;
+}
+
+export function saveTabs(tabs: Tab[], activeId: string): void {
+  try {
+    const payload: StoredTabs = { tabs: tabs.map(forStorage), activeId };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+  } catch {
+    // A window that cannot remember its tabs is still a working window.
+  }
+}
+
+/**
+ * Strip what should not come back.
+ *
+ * A Home tab is labelled with whatever is in its search box. Restoring that
+ * label without the query it describes gives you a tab called "sha256 hello"
+ * containing an empty palette — a tab that lies about itself.
+ */
+function forStorage(tab: Tab): Tab {
+  if (tab.kind !== "home") return tab;
+  const { title: _title, ...rest } = tab;
+  return rest;
+}
+
+/**
+ * Read the tabs back, or `null` if there is nothing usable to read.
+ *
+ * Validated rather than trusted: a kind that no longer exists (a page dropped
+ * in an update) is skipped instead of rendering as `undefined`, and an id
+ * collision with a freshly generated one is made impossible by advancing the
+ * counter past everything restored.
+ */
+export function loadTabs(): { tabs: Tab[]; activeId: string } | null {
+  let stored: unknown;
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return null;
+    stored = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+
+  if (typeof stored !== "object" || stored === null) return null;
+  const { tabs, activeId } = stored as Partial<StoredTabs>;
+  if (!Array.isArray(tabs)) return null;
+
+  const restored = tabs
+    .filter((tab): tab is Tab => Boolean(tab) && isTabKind((tab as Tab).kind))
+    .slice(0, MAX_TABS);
+  if (restored.length === 0) return null;
+
+  // Ids are `${kind}-${n}`; keep the counter above every restored one so a new
+  // tab in this session can never collide with a tab from the last.
+  for (const tab of restored) {
+    const suffix = Number.parseInt(String(tab.id).split("-").pop() ?? "", 10);
+    if (Number.isFinite(suffix)) counter = Math.max(counter, suffix);
+  }
+
+  const active = restored.some((tab) => tab.id === activeId) ? activeId! : restored[0].id;
+  return { tabs: restored, activeId: active };
 }

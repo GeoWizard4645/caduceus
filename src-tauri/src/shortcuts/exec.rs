@@ -223,6 +223,12 @@ pub async fn open_settings_pane(pane: &str) -> ExecOutcome {
         "accessibility" => {
             "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"
         }
+        "screen-recording" => {
+            "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture"
+        }
+        "automation" => {
+            "x-apple.systempreferences:com.apple.preference.security?Privacy_Automation"
+        }
         "login-items" => "x-apple.systempreferences:com.apple.LoginItems-Settings.extension",
         other => {
             return ExecOutcome::err(format!(

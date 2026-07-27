@@ -65,6 +65,9 @@ pub async fn update_settings<R: Runtime>(
     if previous.appearance != next.appearance {
         let _ = window::sync_staff_window(&app, &settings);
     }
+    if previous.general.onboarding_done != next.general.onboarding_done {
+        let _ = window::position_staff(&app, &settings);
+    }
     crate::tray::refresh(&app);
 
     // Launch-at-login is an OS-level registration, not just a flag.
@@ -362,6 +365,14 @@ pub fn save_staff_position<R: Runtime>(
     settings: tauri::State<'_, SettingsManager>,
 ) -> Res<()> {
     window::persist_staff_position(&app, &settings)
+}
+
+#[tauri::command]
+pub fn refresh_staff_layout<R: Runtime>(
+    app: AppHandle<R>,
+    settings: tauri::State<'_, SettingsManager>,
+) -> Res<()> {
+    window::refresh_staff_layout(&app, &settings)
 }
 
 /// Collapse the staff pop-out immediately (e.g. after a shortcut click).

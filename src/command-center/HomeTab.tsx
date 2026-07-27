@@ -38,6 +38,7 @@ import type {
   VoiceState,
 } from "@/shared/types";
 import { EVENTS } from "@/shared/types";
+import { PERMISSIONS, permissionFromMessage } from "@/shared/permissions";
 import { Kbd, Spinner, cx } from "@/shared/ui";
 import { ShortcutIcon } from "@/shared/ShortcutIcon";
 import { loadUsage, recordUsage } from "@/shared/usage";
@@ -77,6 +78,10 @@ export function HomeTab({
 
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
+  // Which command produced the message currently being handled, so a permission
+  // wall can offer to re-run the thing that hit it rather than just naming the
+  // switch and leaving the user to remember what they were doing.
+  const lastRun = useRef<string | undefined>(undefined);
 
   // 45ms, not 90: every provider behind this was measured in the tens of
   // microseconds (parse 0.1ms, calculator 0.3ms, app list cached in-process),
@@ -92,7 +97,22 @@ export function HomeTab({
         inputRef.current?.focus();
       },
       openTab: onOpenTab,
-      notify,
+      // A missing macOS permission is not an error message, it is a task. It
+      // opens the page that walks through granting it — with the command that
+      // hit the wall attached, so it can be run again in place.
+      notify: (message, tone) => {
+        const permission = tone === "error" ? permissionFromMessage(message) : null;
+        if (permission) {
+          onOpenTab({
+            kind: "permission",
+            permission,
+            retryCommandId: lastRun.current,
+            title: `${PERMISSIONS[permission].title} permission`,
+          });
+          return;
+        }
+        notify(message, tone);
+      },
       showOutput: (next) => setOutput(next),
     }),
     [notify, onOpenTab],
@@ -107,15 +127,31 @@ export function HomeTab({
     setSelected(0);
     setOutput(null);
     setPendingConfirm(null);
-    // The webview needs a tick to become focusable after the window is shown.
-    setTimeout(() => {
-      inputRef.current?.focus();
-      if (payload.selectAll) inputRef.current?.select();
-    }, 40);
+    // Three attempts, not one. The webview needs a tick to become focusable
+    // after the window is shown, and how many ticks depends on whether macOS
+    // was also moving the panel into a full-screen Space at the time. A single
+    // 40ms shot won that race most of the time, which is the worst kind of
+    // reliable — the palette would come up and quietly ignore the keyboard.
+    for (const delay of [0, 60, 180]) {
+      setTimeout(() => {
+        if (document.activeElement === inputRef.current) return;
+        inputRef.current?.focus();
+        if (payload.selectAll) inputRef.current?.select();
+      }, delay);
+    }
   });
 
   useEffect(() => {
     if (active) inputRef.current?.focus();
+  }, [active]);
+
+  // The panel can be handed key status a frame after it is ordered in, and a
+  // webview that was not focusable when we asked becomes focusable then.
+  useEffect(() => {
+    if (!active) return;
+    const refocus = () => inputRef.current?.focus();
+    window.addEventListener("focus", refocus);
+    return () => window.removeEventListener("focus", refocus);
   }, [active]);
 
   // Label the tab with the query, truncated. An untouched palette stays "Search".
@@ -260,11 +296,11 @@ export function HomeTab({
     [input, notify, onOpenTab],
   );
 
-  const runItem = async (item: ResultItem) => {
+  const runItem = async (item: ResultItem, asPage = false) => {
     // Anything that ends the session or deletes something asks once. In a fuzzy
     // list "Shut down" sits a keystroke away from "Sleep", and an undo for that
-    // does not exist.
-    if (item.confirm && pendingConfirm?.id !== item.id) {
+    // does not exist. Opening a page is never destructive, so it skips this.
+    if (!asPage && item.confirm && pendingConfirm?.id !== item.id) {
       setPendingConfirm({ id: item.id, message: item.confirm });
       return;
     }
@@ -273,10 +309,14 @@ export function HomeTab({
     // Counted here rather than inside each command, so applications, shortcuts
     // and commands are all ranked by the same rule.
     if (item.usageKey) recordUsage(item.usageKey);
+    lastRun.current = item.usageKey?.startsWith("command:")
+      ? item.usageKey.slice("command:".length)
+      : undefined;
 
     setBusy(true);
     try {
-      const keepOpen = (await item.run()) === false;
+      const action = asPage && item.openPage ? item.openPage : item.run;
+      const keepOpen = (await action()) === false;
       if (!keepOpen) {
         setInput("");
         await api.hideCommandCenter();
@@ -289,55 +329,130 @@ export function HomeTab({
   };
 
   // --- keyboard -----------------------------------------------------------
-  const onKeyDown = (e: React.KeyboardEvent) => {
+  //
+  // On `window`, not on the `<input>`.
+  //
+  // The palette is an Accessory app's panel. It takes key status without the
+  // application ever becoming active, and in that state the caret does not
+  // always land in the search field — most visibly over a full-screen app,
+  // where the window would come up with ⌘T working (a window listener) and
+  // Escape, the arrows and Enter doing nothing at all, because every one of
+  // those lived on an element that did not have focus. Clicking any button in
+  // the palette had the same effect, permanently.
+  //
+  // One listener on the window fixes both: these keys belong to the palette
+  // wherever focus happens to be sitting.
+
+  /** Whether focus is somewhere other than the search field that wants the raw key. */
+  const focusIsInAField = () => {
+    const element = document.activeElement;
+    if (!element || element === inputRef.current) return false;
+    return element.tagName === "TEXTAREA" || element.tagName === "INPUT";
+  };
+
+  /**
+   * Escape, in order of what is on screen: cancel the confirmation, dismiss the
+   * output, leave the agent session, clear the query, close the window.
+   */
+  const handleEscape = (): boolean => {
+    if (pendingConfirm) {
+      setPendingConfirm(null);
+      return true;
+    }
+    if (output) {
+      setOutput(null);
+      return true;
+    }
+    if (session) {
+      setSession(null);
+      return true;
+    }
+    if (input) {
+      setInput("");
+      inputRef.current?.focus();
+      return true;
+    }
+    void api.hideCommandCenter();
+    return true;
+  };
+
+  // Reassigned on every render so the listener below can stay registered once
+  // and still never see a stale `results` or `selected`.
+  const onPaletteKey = (event: KeyboardEvent) => {
     // ⌘-anything belongs to the tab shell: new tab, close tab, switch tab.
-    if (e.metaKey) return;
+    if (event.metaKey || event.ctrlKey || event.defaultPrevented) return;
 
     const count = results.length;
 
-    switch (e.key) {
+    switch (event.key) {
       case "ArrowDown":
-        e.preventDefault();
+        event.preventDefault();
         setPendingConfirm(null);
         setSelected((i) => (count === 0 ? 0 : (i + 1) % count));
-        break;
+        return;
 
       case "ArrowUp":
-        e.preventDefault();
+        event.preventDefault();
         setPendingConfirm(null);
         setSelected((i) => (count === 0 ? 0 : (i - 1 + count) % count));
-        break;
+        return;
 
       case "Enter": {
-        e.preventDefault();
+        if (focusIsInAField()) return;
+        event.preventDefault();
         // While an output panel is up, Enter must not silently re-run the row
         // that produced it. Escape is the way back.
         if (output) return;
         // A prefixed input always dispatches, even if a shortcut happens to be
         // highlighted — typing "/c open mail" must never launch a bookmark.
         const item = results[selected];
-        if (item && !parsed?.rule) void runItem(item);
+        // ⇧↵ asks for the page rather than the action: a way to open the tool
+        // and keep it open, for the times you are about to use it twice.
+        if (item && !parsed?.rule) void runItem(item, event.shiftKey && Boolean(item.openPage));
         else void submit();
-        break;
+        return;
       }
 
       case "Escape":
-        e.preventDefault();
-        if (pendingConfirm) setPendingConfirm(null);
-        else if (output) setOutput(null);
-        else if (session) setSession(null);
-        else if (input) setInput("");
-        else void api.hideCommandCenter();
-        break;
+        event.preventDefault();
+        handleEscape();
+        return;
 
       case "Tab":
+        if (focusIsInAField()) return;
         // Completes to the highlighted row instead of moving focus out of the
         // input — there is nowhere else for focus to usefully go.
-        e.preventDefault();
+        event.preventDefault();
         if (results[selected]) setInput(results[selected].title);
-        break;
+        return;
+    }
+
+    // Anything printable while the caret is adrift: put it back in the search
+    // field. The keystroke itself still lands there, because the default action
+    // runs against whatever has focus once dispatch finishes.
+    if (
+      event.key.length === 1 &&
+      !event.altKey &&
+      document.activeElement !== inputRef.current &&
+      !focusIsInAField()
+    ) {
+      inputRef.current?.focus();
     }
   };
+
+  const paletteKey = useRef(onPaletteKey);
+  paletteKey.current = onPaletteKey;
+
+  // On `document`, while the shell's fallback is on `window`. Both are
+  // bubble-phase, so the propagation path — not the order the two effects
+  // happened to run in — is what guarantees the palette gets first refusal and
+  // the shell only sees what the palette left alone.
+  useEffect(() => {
+    if (!active) return;
+    const listener = (event: KeyboardEvent) => paletteKey.current(event);
+    document.addEventListener("keydown", listener);
+    return () => document.removeEventListener("keydown", listener);
+  }, [active]);
 
   // Keep the highlighted row visible.
   useEffect(() => {
@@ -376,7 +491,6 @@ export function HomeTab({
             setSelected(0);
             setPendingConfirm(null);
           }}
-          onKeyDown={onKeyDown}
           placeholder={placeholder}
           spellCheck={false}
           autoComplete="off"
@@ -471,7 +585,9 @@ export function HomeTab({
                       active={index === selected}
                       query={parsed?.remainder ?? input.trim()}
                       onHover={() => setSelected(index)}
-                      onClick={() => void runItem(item)}
+                      onClick={(event) =>
+                        void runItem(item, event.shiftKey && Boolean(item.openPage))
+                      }
                     />
                   );
                 })}
@@ -489,6 +605,8 @@ export function HomeTab({
           <span>navigate</span>
           <Kbd>↵</Kbd>
           <span>run</span>
+          <Kbd>⇧↵</Kbd>
+          <span>open its page</span>
           <Kbd>⌘T</Kbd>
           <span>new tab</span>
           <Kbd>esc</Kbd>
@@ -540,7 +658,7 @@ function ResultRow({
   active: boolean;
   query: string;
   onHover: () => void;
-  onClick: () => void;
+  onClick: (event: React.MouseEvent) => void;
 }) {
   const segments = item.positions?.length
     ? highlightSegments(item.title, item.positions)

@@ -10,7 +10,13 @@
  */
 
 import * as api from "./api";
-import { COMMANDS, commandWeight, matchTrigger, type CommandOutput } from "./commands";
+import {
+  COMMANDS,
+  commandWeight,
+  matchTrigger,
+  type CommandDef,
+  type CommandOutput,
+} from "./commands";
 import { usageBoost } from "./usage";
 import { fuzzyMatch, fuzzyScore } from "./fuzzy";
 import type { Tab } from "./tabs";
@@ -56,6 +62,13 @@ export interface ResultItem {
   confirm?: string;
   /** Runs when the row is chosen. Return `false` to keep the palette open. */
   run: () => void | boolean | Promise<void | boolean>;
+  /**
+   * Opens this row's own page instead of running it, on ⇧↵.
+   *
+   * Set by anything that *has* a page — every built-in command does. Rows
+   * without one (a clipboard entry, a web search) simply do not offer it.
+   */
+  openPage?: () => void | boolean | Promise<void | boolean>;
 }
 
 /** Everything a provider is given to answer a query. */
@@ -608,8 +621,8 @@ export const commandProvider: ResultProvider = {
         title: command.title,
         subtitle: input
           ? `${command.detail.split(".")[0]} — on “${truncate(input, 48)}”`
-          : command.argument
-            ? `Type ${command.argument} after ${command.trigger}`
+          : needsItsPage(command, input)
+            ? `Opens its page, with a box for the ${command.argument}`
             : command.detail,
         icon: command.icon,
         group: "Commands",
@@ -617,8 +630,9 @@ export const commandProvider: ResultProvider = {
         // unambiguous, and outranking the calculator here is the point.
         score: 950,
         accessory: "↵",
-        confirm: command.confirm,
-        run: () => command.run({ input, actions }),
+        confirm: input ? command.confirm : undefined,
+        openPage: () => openCommandPage(command, input, actions),
+        run: () => runCommand(command, input, actions),
       };
       return [row];
     }
@@ -644,9 +658,10 @@ export const commandProvider: ResultProvider = {
         // Below the prefix hints and the clipboard, which is where a list this
         // long belongs — it is a reference, not a suggestion.
         score: EMPTY_STATE_BASE - index,
-        accessory: command.trigger ? `${command.trigger} …` : "↵",
-        confirm: command.confirm,
-        run: () => command.run({ input: "", actions }),
+        accessory: accessoryFor(command),
+        confirm: command.argument ? undefined : command.confirm,
+        openPage: () => openCommandPage(command, "", actions),
+        run: () => runCommand(command, "", actions),
       }));
     }
 
@@ -668,13 +683,54 @@ export const commandProvider: ResultProvider = {
         // touch.
         score: score - 10 + usageBoost(`command:${command.id}`),
         positions: match?.positions,
-        accessory: command.trigger ? `${command.trigger} …` : "↵",
-        confirm: command.confirm,
-        run: () => command.run({ input: "", actions }),
+        accessory: accessoryFor(command),
+        confirm: command.argument ? undefined : command.confirm,
+        openPage: () => openCommandPage(command, "", actions),
+        run: () => runCommand(command, "", actions),
       };
     }).filter((item): item is ResultItem => item !== null);
   },
 };
+
+/** Open a command's own page, optionally with what has already been typed. */
+function openCommandPage(command: CommandDef, input: string, actions: PaletteActions): false {
+  actions.openTab({
+    kind: "tool",
+    commandId: command.id,
+    title: command.title,
+    icon: command.icon,
+    prefill: input || undefined,
+  });
+  // The palette stays; the page opened beside it.
+  return false;
+}
+
+/**
+ * Run a command from the palette — or open its page when running is not what
+ * the user can have meant.
+ *
+ * A command that takes an argument, chosen from the list with nothing typed
+ * after it, used to run on an empty string and come back with "Type something
+ * after the command first." Nobody picked the row wanting that sentence: they
+ * picked it wanting the tool. So they get the tool, with a box in it.
+ */
+function runCommand(command: CommandDef, input: string, actions: PaletteActions) {
+  if (needsItsPage(command, input)) {
+    return openCommandPage(command, input, actions);
+  }
+  return command.run({ input, actions });
+}
+
+/** Whether picking this row with this input should open the page instead. */
+function needsItsPage(command: CommandDef, input: string): boolean {
+  return Boolean(command.argument) && !command.argumentOptional && !input.trim();
+}
+
+/** The right-hand hint: what Enter is about to do. */
+function accessoryFor(command: CommandDef): string {
+  if (command.argument && !command.argumentOptional) return "opens ▸";
+  return command.trigger ? `${command.trigger} …` : "↵";
+}
 
 /**
  * Where the full command list starts on an empty query.

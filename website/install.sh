@@ -648,6 +648,7 @@ cat <<EOF
 ${green}${bold}Done.${reset}
 
   ${dim}Look for Caduceus in your menu bar — there is no Dock icon.${reset}
+  ${dim}The floating staff appears on the edge of your screen right away.${reset}
 
   ${bold}Control+Space${reset}   open the Command Center
   ${bold}F12${reset}             hide or show the floating staff

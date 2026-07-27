@@ -23,6 +23,7 @@
  */
 
 import * as api from "./api";
+import { PERMISSION_WALL } from "./permissions";
 import type { Tab } from "./tabs";
 import type { MediaAction, SystemAction, ToolId, WindowVerb } from "./types";
 
@@ -78,6 +79,16 @@ export interface CommandDef {
   trigger?: string;
   /** Placeholder describing what to type after the trigger. */
   argument?: string;
+  /**
+   * Set when running with an empty argument is a meaningful thing to do.
+   *
+   * A command with a required argument, chosen from the list with nothing typed
+   * after it, opens its own page instead of running on an empty string — see
+   * `runCommand` in `providers.ts`. A handful already do something sensible
+   * with nothing (`awake` on its own opens the Keep Awake page) and opt out of
+   * that redirection here.
+   */
+  argumentOptional?: boolean;
   /** Shown before the command runs; Enter again confirms. */
   confirm?: string;
   run(ctx: CommandContext): Promise<CommandResult> | CommandResult;
@@ -233,12 +244,19 @@ async function tool(actions: CommandActions, id: ToolId, input: string): Promise
   }
 }
 
-/** Run a window verb, turning a missing permission into a usable sentence. */
+/** Run a window verb, turning a missing permission into a way to grant it. */
 async function windowVerb(actions: CommandActions, verb: WindowVerb): Promise<CommandResult> {
   try {
     const result = await api.windowAction(verb);
     if (result.ok) return true;
-    actions.notify(result.message, "error");
+    // `needsPermission` is the structured answer; `PERMISSION_WALL` is the
+    // sentence every caller of `notify` knows how to recognise. Sending the
+    // canonical one makes the routing a contract rather than a lucky substring
+    // match on whatever the AX layer happened to say.
+    actions.notify(
+      result.needsPermission ? PERMISSION_WALL.accessibility : result.message,
+      "error",
+    );
     return false;
   } catch (error) {
     actions.notify(api.errorMessage(error), "error");
@@ -1314,6 +1332,7 @@ const OTHER_COMMANDS: CommandDef[] = [
     ],
     trigger: "awake",
     argument: "duration (45, 2h, 1h30m) — or empty for the page",
+    argumentOptional: true,
     async run({ input, actions }) {
       // `awake 45` starts a session without opening anything; a bare `awake`
       // opens the management page, which is where the options live.
@@ -1337,7 +1356,16 @@ const OTHER_COMMANDS: CommandDef[] = [
     group: "utilities",
     icon: "☾",
     keywords: ["awake", "caffeine", "sleep", "allow", "release", "amphetamine", "end session"],
-    run: ({ actions }) => outcome(actions, "Sleep", () => api.awakeStop()),
+    async run({ actions }) {
+      const status = await api.awakeStatus();
+      // Nothing to stop is not an error and it is not news either — it is
+      // someone reaching for the sleep controls. Give them the sleep controls.
+      if (!status.active) {
+        actions.openTab({ kind: "awake" });
+        return false;
+      }
+      return outcome(actions, "Sleep", () => api.awakeStop());
+    },
   },
   {
     id: "utility.define",

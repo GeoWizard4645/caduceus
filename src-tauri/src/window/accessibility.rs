@@ -466,8 +466,11 @@ unsafe impl Send for AxElement {}
 pub fn describe_error(err: AXError) -> String {
     match err {
         kAXErrorSuccess => "Done.".into(),
+        // Kept word-for-word in step with `PERMISSION_WALL.accessibility` in
+        // `src/shared/permissions.ts`: the webview reads the permission back
+        // out of this sentence to decide which walkthrough to open.
         kAXErrorAPIDisabled => {
-            "Caduceus does not have Accessibility permission yet. Grant it in System Settings → \
+            "Caduceus needs Accessibility permission for this. Grant it in System Settings → \
              Privacy & Security → Accessibility."
                 .into()
         }

@@ -75,6 +75,15 @@ export interface GeneralSettings {
   onboardingDone: boolean;
   cursorPollMs: number;
   functionKeys: FunctionKeyBinding[];
+  /**
+   * The version that last started with this settings file.
+   *
+   * Written by Rust at startup and round-tripped untouched. It is in this type
+   * so that saving settings from the UI does not drop it — a missing value
+   * reads as "new install" and would put the staff back on screen every time
+   * anyone changed a checkbox.
+   */
+  lastLaunchedVersion: string | null;
 }
 
 export type FunctionKeyAction =

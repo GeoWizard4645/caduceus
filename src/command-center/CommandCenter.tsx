@@ -37,13 +37,17 @@ import { SoundPage } from "./pages/SoundPage";
 import { PortsPage } from "./pages/PortsPage";
 import { DockerPage } from "./pages/DockerPage";
 import { MachinePage } from "./pages/MachinePage";
+import { PermissionPage } from "./pages/PermissionPage";
+import { ToolPage } from "./pages/ToolPage";
 import {
   MAX_TABS,
   closeTab as closeTabIn,
   homeTab,
   isFloating,
   isTabKind,
+  loadTabs,
   openTab as openTabIn,
+  saveTabs,
   tabIcon,
   tabLabel,
   type Tab,
@@ -62,14 +66,33 @@ const PAGE_MIN_WIDTH = 940;
 const PAGE_MIN_HEIGHT = 660;
 
 export function CommandCenter() {
-  const [tabs, setTabs] = useState<Tab[]>(() => [homeTab()]);
-  const [activeId, setActiveId] = useState<string>(() => "");
+  // Restored during the first render, so a reopened window *is* the window you
+  // left rather than a blank one that fills in a frame later. Read through a
+  // lazy initialiser: `useRef(loadTabs())` would re-read storage on every
+  // render and throw the result away.
+  const [restored] = useState(loadTabs);
+  const [tabs, setTabs] = useState<Tab[]>(() => restored?.tabs ?? [homeTab()]);
+  const [activeId, setActiveId] = useState<string>(() => restored?.activeId ?? "");
   const { toasts, notify } = useToasts();
 
   // The first tab's id is generated during the initial state, so adopt it once.
   useEffect(() => {
     if (!activeId && tabs[0]) setActiveId(tabs[0].id);
   }, [activeId, tabs]);
+
+  // Write them down as they change. Hiding the window keeps React state alive,
+  // so this is really about the times it does not survive — an app restart, an
+  // update, a reloaded webview — after which an empty window is
+  // indistinguishable from having lost your work.
+  //
+  // Debounced because a Home tab renames itself on every keystroke, and
+  // serialising the whole set per character typed is a lot of work to record
+  // something nobody is going to read until the next launch.
+  useEffect(() => {
+    if (!activeId) return;
+    const timer = setTimeout(() => saveTabs(tabs, activeId), 300);
+    return () => clearTimeout(timer);
+  }, [tabs, activeId]);
 
   const floating = isFloating(tabs);
 
@@ -169,31 +192,62 @@ export function CommandCenter() {
   });
 
   // --- keyboard ------------------------------------------------------------
+  //
+  // Two listeners, deliberately, because they want opposite priorities.
+  //
+  // The browser keys are registered in the **capture** phase: ⌘T means "new
+  // tab" everywhere in this window, and no page inside it gets to eat it first.
+  // They are also matched on `event.code`, not `event.key` — with a non-Latin
+  // layout active, `key` for the T key is not "t", and the shortcut simply
+  // stopped existing.
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
-      if (!event.metaKey) return;
+      if (!event.metaKey || event.ctrlKey || event.altKey) return;
 
-      if (event.key === "t") {
+      if (event.code === "KeyT") {
         event.preventDefault();
         openTab({ kind: "home" });
         return;
       }
-      if (event.key === "w") {
+      if (event.code === "KeyW") {
         event.preventDefault();
         if (activeId) closeTab(activeId);
         return;
       }
       // ⌘9 is the last tab, as in every browser; ⌘1–⌘8 are positional.
-      const digit = Number.parseInt(event.key, 10);
-      if (digit >= 1 && digit <= 9) {
+      const digit = /^Digit([1-9])$/.exec(event.code)?.[1];
+      if (digit) {
         event.preventDefault();
-        const target = digit === 9 ? tabs[tabs.length - 1] : tabs[digit - 1];
+        const index = Number(digit);
+        const target = index === 9 ? tabs[tabs.length - 1] : tabs[index - 1];
         if (target) setActiveId(target.id);
       }
     };
+    window.addEventListener("keydown", handler, true);
+    return () => window.removeEventListener("keydown", handler, true);
+  }, [tabs, activeId, openTab, closeTab]);
+
+  // Escape is the opposite: the page in front gets first refusal, because
+  // inside a page it means "dismiss this output" or "clear the search". Only
+  // once nothing has claimed it does it mean "put the window away".
+  //
+  // `window` is the last stop in the bubble path, after the page's own listener
+  // on `document` and after React's handlers on the root container inside it —
+  // so anything that dealt with the key has already had the chance to say so by
+  // calling `preventDefault`. Before this, Escape existed only on the palette's
+  // `<input>`: click a button, press Escape, nothing happened.
+  useEffect(() => {
+    const handler = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || event.defaultPrevented) return;
+      event.preventDefault();
+      // Closing the last tab hides the window, which is what Escape in a bare
+      // palette has always done; with pages open it closes the page in front.
+      if (activeId) closeTab(activeId);
+      else void api.hideCommandCenter();
+    };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [tabs, activeId, openTab, closeTab]);
+  }, [activeId, closeTab]);
 
   return (
     <div
@@ -202,17 +256,19 @@ export function CommandCenter() {
         floating ? "glass" : "bg-base",
       )}
     >
-      {/* A single Home tab keeps the bare palette look — no chrome above the
-          search field, which is the whole point of a launcher. */}
-      {!floating && (
-        <TabBar
-          tabs={tabs}
-          activeId={activeId}
-          onSelect={setActiveId}
-          onClose={closeTab}
-          onNew={() => openTab({ kind: "home" })}
-        />
-      )}
+      {/* Always. The tab strip used to appear only once a second tab existed,
+          which meant the window you opened with the hotkey had no visible tabs,
+          no + button and nothing to suggest ⌘T would do anything — and then
+          grew a tab bar out of nowhere the first time you opened Settings. One
+          window that behaves like a browser has to look like one from the
+          first frame. */}
+      <TabBar
+        tabs={tabs}
+        activeId={activeId}
+        onSelect={setActiveId}
+        onClose={closeTab}
+        onNew={() => openTab({ kind: "home" })}
+      />
 
       {/* Every tab stays mounted; hiding is CSS. Unmounting would restart a
           countdown, drop a half-written message and reset a filter every time
@@ -365,6 +421,25 @@ function TabContent({
       return <DockerPage active={active} />;
     case "machine":
       return <MachinePage active={active} />;
+    case "tool":
+      return (
+        <ToolPage
+          active={active}
+          commandId={tab.commandId ?? ""}
+          prefill={tab.prefill}
+          onOpenTab={onOpenTab}
+          onSetTitle={onSetTitle}
+        />
+      );
+    case "permission":
+      return (
+        <PermissionPage
+          active={active}
+          permission={tab.permission ?? "accessibility"}
+          retryCommandId={tab.retryCommandId}
+          onOpenTab={onOpenTab}
+        />
+      );
     case "settings":
       return (
         <LazyPage>

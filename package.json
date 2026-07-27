@@ -9,14 +9,15 @@
     "start": "tauri dev",
     "bundle": "tauri build",
     "dev": "vite",
-    "build": "npm run check:ipc && npm run check:ranking && npm run check:tabs && npm run catalog && tsc --noEmit && vite build",
+    "build": "npm run check:ipc && npm run check:ranking && npm run check:tabs && npm run check:permissions && npm run catalog && tsc --noEmit && vite build",
     "typecheck": "tsc --noEmit",
     "test:rust": "cd src-tauri && cargo test",
     "tauri": "tauri",
     "catalog": "node scripts/build-features-catalog.mjs",
     "check:ipc": "python3 scripts/check-ipc-enums.py",
     "check:ranking": "node scripts/check-ranking.mjs",
-    "check:tabs": "node scripts/check-tabs.mjs"
+    "check:tabs": "node scripts/check-tabs.mjs",
+    "check:permissions": "node scripts/check-permissions.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.9.0",

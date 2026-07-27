@@ -98,6 +98,14 @@ pub struct GeneralSettings {
     /// users often remap hardware keys to standard function keys in System
     /// Settings so Caduceus can intercept them globally.
     pub function_keys: Vec<FunctionKeyBinding>,
+    /// The version of Caduceus that last started with this settings file.
+    ///
+    /// Settings survive a reinstall — the app data directory is not part of the
+    /// bundle — so someone who had hidden the staff months ago installs a new
+    /// version, sees nothing at all, and reasonably concludes it is broken.
+    /// A version that does not match brings the staff back once, so a fresh
+    /// install always looks like something happened. See `lib.rs`.
+    pub last_launched_version: Option<String>,
 }
 
 impl Default for GeneralSettings {
@@ -126,6 +134,10 @@ impl Default for GeneralSettings {
             cursor_poll_ms: 33,
             onboarding_done: false,
             function_keys: default_function_key_bindings(),
+            // `None` means "never started" — which is true both of a genuinely
+            // fresh install and of one upgrading from before this field
+            // existed. Both want the staff on screen.
+            last_launched_version: None,
         }
     }
 }

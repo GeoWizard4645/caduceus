@@ -31,6 +31,8 @@ use crate::settings::{Settings, SettingsManager, StaffEdge, Point};
 
 #[cfg(target_os = "macos")]
 mod macos;
+#[cfg(target_os = "macos")]
+mod panel;
 
 #[cfg(target_os = "macos")]
 pub mod accessibility;
@@ -66,20 +68,44 @@ pub struct TabRequest {
 /// full-screen Spaces, and dismisses when you click away. False once it holds
 /// working tabs, when all three of those become wrong.
 #[derive(Debug)]
-pub struct PaletteFloating(pub std::sync::atomic::AtomicBool);
+pub struct PaletteFloating {
+    floating: AtomicBool,
+    /// When the Command Center was last presented.
+    ///
+    /// A non-activating panel takes key status while Caduceus stays in the
+    /// background, and AppKit can hand it back and forth once as the window
+    /// server settles. Without a grace period that momentary resign reads as
+    /// "the user clicked away" and closes the palette on the frame it opened.
+    shown_at: parking_lot::Mutex<std::time::Instant>,
+}
+
+/// How long after opening a lost-focus event is ignored.
+const FOCUS_SETTLE: std::time::Duration = std::time::Duration::from_millis(400);
 
 impl Default for PaletteFloating {
     fn default() -> Self {
-        Self(AtomicBool::new(true))
+        Self {
+            floating: AtomicBool::new(true),
+            shown_at: parking_lot::Mutex::new(
+                std::time::Instant::now() - FOCUS_SETTLE * 2,
+            ),
+        }
     }
 }
 
 impl PaletteFloating {
     pub fn get(&self) -> bool {
-        self.0.load(Ordering::Relaxed)
+        self.floating.load(Ordering::Relaxed)
     }
     pub fn set(&self, floating: bool) {
-        self.0.store(floating, Ordering::Relaxed);
+        self.floating.store(floating, Ordering::Relaxed);
+    }
+    pub fn mark_shown(&self) {
+        *self.shown_at.lock() = std::time::Instant::now();
+    }
+    /// Whether the window is still inside its post-open settling window.
+    pub fn just_shown(&self) -> bool {
+        self.shown_at.lock().elapsed() < FOCUS_SETTLE
     }
 }
 
@@ -145,6 +171,24 @@ pub fn sync_staff_window<R: Runtime>(app: &AppHandle<R>, settings: &SettingsMana
     if let Some(window) = staff(app) {
         configure_staff_floating(&window);
         position_staff(app, settings)?;
+    }
+    Ok(())
+}
+
+/// Whether the staff window should be visible at launch / after layout refresh.
+pub fn should_show_staff(settings: &Settings) -> bool {
+    settings.general.staff_visible || !settings.general.onboarding_done
+}
+
+/// Resize, reposition, and show the staff when the webview has loaded settings.
+pub fn refresh_staff_layout<R: Runtime>(app: &AppHandle<R>, settings: &SettingsManager) -> Result<(), String> {
+    let cfg = settings.get();
+    if let Some(window) = staff(app) {
+        position_staff(app, settings).map_err(|e| e.to_string())?;
+        if should_show_staff(&cfg) {
+            window.show().map_err(|e| e.to_string())?;
+            configure_staff_floating(&window);
+        }
     }
     Ok(())
 }
@@ -332,19 +376,27 @@ const IDLE_POLL_MS: u64 = 500;
 /// pointer arriving until the next tick, so whatever this is set to is roughly
 /// the worst-case delay before the staff reacts. At the old 400ms that was a
 /// visible stall on both hover and the first click.
-const FAR_POLL_MS: u64 = 90;
+const FAR_POLL_MS: u64 = 60;
 /// How many multiples of the pop-out radius count as "approaching".
 ///
 /// Larger keeps the fast rate over a wider area, so a pointer heading for the
 /// staff is already being sampled quickly by the time it arrives.
-const APPROACH_BANDS: f64 = 5.0;
+const APPROACH_BANDS: f64 = 7.0;
 /// Extra radius, in logical px, where the window still captures clicks.
 ///
 /// Click-through is toggled from a polled sample, so between the pointer
 /// entering the staff and the next tick the window is still transparent and the
-/// click lands on whatever is behind it. Arming capture slightly early closes
-/// that gap without making the visible hit area bigger.
-const CAPTURE_MARGIN: f64 = 10.0;
+/// click lands on whatever is behind it. Arming capture early closes that gap
+/// without making the visible hit area bigger.
+///
+/// Sized against the worst case rather than the typical one: a pointer crossing
+/// at a few thousand logical pixels per second covers a lot of ground in one
+/// [`FAR_POLL_MS`] tick, and every pixel of that is a click that lands on the
+/// app underneath and looks like the staff ignoring you. The cost of being
+/// generous is a ring a couple of dozen pixels wider than the mark that
+/// swallows clicks — on a window the user positioned at the edge of the screen
+/// precisely so nothing else is there.
+const CAPTURE_MARGIN: f64 = 28.0;
 
 /// Poll interval for the next tick, given how far the pointer is from the staff.
 ///
@@ -691,25 +743,35 @@ pub fn open_command_center<R: Runtime>(
         }
     }
 
+    if let Some(state) = app.try_state::<PaletteFloating>() {
+        state.mark_shown();
+    }
+
+    // Configure, *then* show. Ordering a window in before its collection
+    // behaviour allows every Space puts it in the Space it was created in — the
+    // desktop — where, from inside a full-screen app, it is not hidden or
+    // behind anything, it is elsewhere. Setting the flag afterwards does not
+    // reliably bring it across, which is why the hotkey appeared to do nothing.
+    #[cfg(target_os = "macos")]
+    macos::prepare_command_center(&window);
+
     window.show().map_err(|e| e.to_string())?;
     window.unminimize().ok();
 
-    // Not just `set_always_on_top`: on macOS that alone leaves the window at
-    // floating level in whichever Space it was created in, so pressing the
-    // hotkey inside another app's full-screen Space did nothing visible.
-    //
-    // And not just the level either. Caduceus is an Accessory app, so it is
-    // never the active application; raising a window without *activating* gives
-    // you a palette that is on screen, unfocused, and behind the full-screen app
-    // that owns the Space. Level and activation happen together, on the main
-    // thread, in that order.
+    // And not just the level and the Space either. Caduceus is an Accessory
+    // app, so it is never the active application, and an ordinary window of an
+    // inactive app cannot hold the keyboard. It is presented as a
+    // non-activating panel: key — so it can be typed into immediately — without
+    // dragging the user out of the full-screen Space they are in.
     #[cfg(target_os = "macos")]
     macos::present_command_center(&window);
     #[cfg(not(target_os = "macos"))]
     {
         configure_command_center_floating(&window);
+        // `set_focus` is `activateIgnoringOtherApps:` underneath. Everywhere
+        // but macOS that is simply how a window gets focused.
+        window.set_focus().map_err(|e| e.to_string())?;
     }
-    window.set_focus().map_err(|e| e.to_string())?;
     let source = payload.source.clone();
     window
         .emit(COMMAND_CENTER_OPEN_EVENT, payload)
@@ -806,21 +868,14 @@ pub fn set_palette_floating<R: Runtime>(app: &AppHandle<R>, floating: bool) -> R
         return Ok(());
     };
 
+    // Both personalities are the same window on macOS now, and deliberately so.
+    // Switching to `Regular` and handing the window back to AppKit gave a
+    // window with tabs a Dock icon and an ordinary level — and threw anyone who
+    // opened Settings from a full-screen app out to the desktop to see it. The
+    // only thing that changes here is whether clicking away dismisses, which is
+    // read from `PaletteFloating` in the blur handler above.
     #[cfg(target_os = "macos")]
-    {
-        if floating {
-            macos::configure_command_center_window(&window);
-        } else {
-            macos::configure_normal_window(&window);
-        }
-        // A window you work in belongs in the Dock and the app switcher; an
-        // overlay does not.
-        let _ = app.set_activation_policy(if floating {
-            tauri::ActivationPolicy::Accessory
-        } else {
-            tauri::ActivationPolicy::Regular
-        });
-    }
+    macos::keep_in_place(&window);
     #[cfg(not(target_os = "macos"))]
     {
         let _ = window.set_always_on_top(floating);

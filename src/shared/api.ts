@@ -96,6 +96,8 @@ export type SystemSettingsPane =
   | "keyboard-shortcuts"
   | "microphone"
   | "accessibility"
+  | "screen-recording"
+  | "automation"
   | "login-items";
 
 export const openSystemSettings = (pane: SystemSettingsPane) =>
@@ -148,6 +150,7 @@ export const setStaffCaptureRect = (
 ) => invoke<void>("set_staff_capture_rect", { rect });
 
 export const saveStaffPosition = () => invoke<void>("save_staff_position");
+export const refreshStaffLayout = () => invoke<void>("refresh_staff_layout");
 
 export const collapseStaffPopout = () => invoke<void>("collapse_staff_popout");
 

@@ -13,6 +13,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import * as api from "@/shared/api";
 import { StaffMark } from "@/shared/StaffMark";
+import { CaduceusMark } from "@/shared/CaduceusMark";
 import { Onboarding, type OnboardingSignals } from "./Onboarding";
 import { StaffResizeFrame } from "./StaffResize";
 import { useSettings, useTauriEvent } from "@/shared/hooks";
@@ -26,6 +27,17 @@ const ARC_SPREAD_DEG = 76;
 
 /** Pointer travel, in px, before a press becomes a drag rather than a click. */
 const DRAG_THRESHOLD = 4;
+
+/**
+ * How long a second click still counts as a double-click.
+ *
+ * Longer than macOS's own default, on purpose: the first click of the pair has
+ * already opened the Command Center, and the panel appearing and taking key
+ * status costs real milliseconds that come out of the user's budget for the
+ * second click. At 280ms the double-click-for-dictation gesture worked about as
+ * often as it did not.
+ */
+const DOUBLE_CLICK_MS = 450;
 
 // Expand time is felt as latency, not as polish: the ring is not usable until
 // it lands. 260ms plus a 24ms stagger meant the sixth icon arrived 380ms after
@@ -179,7 +191,7 @@ export function Staff() {
     void api.openCommandCenter(undefined, undefined, "staff");
     doubleClickWindow.current = setTimeout(() => {
       doubleClickWindow.current = null;
-    }, 280);
+    }, DOUBLE_CLICK_MS);
   };
 
   useEffect(
@@ -237,6 +249,11 @@ export function Staff() {
     };
   }, [resizing, settings]);
 
+  useEffect(() => {
+    if (!settings) return;
+    void api.refreshStaffLayout();
+  }, [settings]);
+
   const commitStaffSize = useCallback((next: number) => {
     const current = settingsRef.current;
     if (!current || current.appearance.staffSize === next) {
@@ -251,7 +268,15 @@ export function Staff() {
       .finally(() => setLiveStaffSize(null));
   }, []);
 
-  if (!settings) return null;
+  if (!settings) {
+    return (
+      <div className="relative h-full w-full overflow-hidden">
+        <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 opacity-90">
+          <CaduceusMark height={72} className="drop-shadow-[0_2px_6px_rgb(0_0_0/0.55)]" />
+        </div>
+      </div>
+    );
+  }
 
   const { popoutRadius, popoutIconSize, staffIdleOpacity, staffIdleAnimation } =
     settings.appearance;
