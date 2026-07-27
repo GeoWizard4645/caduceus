@@ -65,7 +65,19 @@
     margin-bottom: 12px;
     overflow: hidden;
   }
-  .group[data-excluded="true"] { border-style: dashed; background: transparent; }
+  .group[data-upcoming="true"] .tag-soon {
+    display: inline-block;
+    font-size: 0.65rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 2px 6px;
+    border-radius: 4px;
+    margin-left: 8px;
+    vertical-align: middle;
+    background: rgb(232 196 104 / 0.15);
+    color: var(--gold);
+  }
   .group > summary {
     display: flex;
     gap: 14px;
@@ -237,9 +249,9 @@
       return copy;
     });
     return capabilities
-      .filter(function (g) { return g.id !== "not-built"; })
+      .filter(function (g) { return g.id !== "first-party-extensions"; })
       .concat(commands)
-      .concat(capabilities.filter(function (g) { return g.id === "not-built"; }));
+      .concat(capabilities.filter(function (g) { return g.id === "first-party-extensions"; }));
   }
 
   function render() {
@@ -259,15 +271,16 @@
       if (!items.length) return;
       shown += items.length;
 
-      var excluded = group.id === "not-built";
+      var upcoming = group.id === "first-party-extensions";
       /* Filtering forces every matching group open: a hit inside a collapsed
          section is the same as no hit at all. */
       html +=
-        '<details class="group" data-excluded="' + excluded + '"' + (q ? " open" : "") + ">" +
+        '<details class="group" data-upcoming="' + upcoming + '"' + (q ? " open" : "") + ">" +
         "<summary>" +
         '<span class="chev" aria-hidden="true">&rsaquo;</span>' +
         '<span class="head"><h2>' + escapeHtml(group.title) + "</h2>" +
         (group.runnable ? '<span class="tag">Commands</span>' : "") +
+        (upcoming ? '<span class="tag-soon">Coming soon</span>' : "") +
         (group.blurb ? "<p>" + escapeHtml(group.blurb) + "</p>" : "") +
         "</span>" +
         '<span class="count">' + items.length + "</span>" +
@@ -291,7 +304,7 @@
     .then(function (r) { return r.json(); })
     .then(function (data) {
       catalog = data;
-      var capabilities = (data.groups || []).filter(function (g) { return g.id !== "not-built"; });
+      var capabilities = (data.groups || []).filter(function (g) { return g.id !== "first-party-extensions"; });
       var total = capabilities.reduce(function (n, g) { return n + g.items.length; }, 0);
       var commands = (data.commandGroups || []).reduce(function (n, g) { return n + g.items.length; }, 0);
       if (stats) {

@@ -535,7 +535,74 @@
     color: var(--ink-mute);
   }
 
+  .hero-intro {
+    max-width: 640px;
+    margin: 28px auto 36px;
+    text-align: left;
+    font-size: 0.95rem;
+    line-height: 1.65;
+    color: var(--ink-mute);
+  }
+
+  .hero-intro p { margin: 0 0 14px; }
+  .hero-intro p:last-child { margin-bottom: 0; }
+  .hero-intro strong { color: var(--ink-soft); font-weight: 600; }
+
   #why .sub { max-width: none; text-align: center; margin-left: auto; margin-right: auto; }
+
+  .compare-wrap {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    margin-bottom: 24px;
+  }
+
+  table.compare {
+    width: 100%;
+    min-width: 680px;
+    border-collapse: collapse;
+    font-size: 0.86rem;
+  }
+
+  table.compare th,
+  table.compare td {
+    padding: 11px 12px;
+    border-bottom: 1px solid var(--line);
+    vertical-align: top;
+    text-align: left;
+  }
+
+  table.compare th {
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+  }
+
+  table.compare th.col-caduceus,
+  table.compare td.col-caduceus {
+    background: rgb(124 124 255 / 0.06);
+    color: var(--ink-soft);
+  }
+
+  table.compare td.topic {
+    width: 18%;
+    font-weight: 500;
+    color: var(--ink-soft);
+    padding-right: 16px;
+  }
+
+  table.compare td { color: var(--ink-mute); }
+
+  .compare-verdict {
+    margin: 0;
+    font-size: 0.92rem;
+    line-height: 1.65;
+    color: var(--ink-mute);
+    max-width: 68ch;
+  }
+
+  .compare-verdict strong { color: var(--ink-soft); }
 
   /* --- the typing table ------------------------------------------------ */
 
@@ -657,6 +724,7 @@
     <li><a href="#why">Why Caduceus</a></li>
     <li><a href="#type-anything">Type anything</a></li>
     <li><a href="#features">What you get</a></li>
+    <li><a href="#compare">Compare</a></li>
     <li><a href="#hermes">Hermes &amp; AI</a></li>
   </ol>
 </nav>
@@ -685,6 +753,23 @@
       <span class="badge">Apple Silicon &amp; Intel</span>
       <span class="badge">MIT licensed</span>
       <span class="badge">~10 MB</span>
+    </div>
+
+    <div class="hero-intro">
+      <p>
+        <strong>Caduceus is a command centre for your Mac</strong> — not another Dock icon.
+        A pixel staff floats on the edge of your screen for six favourite shortcuts; click it
+        (or press your palette hotkey) and you get one bar that launches apps, evaluates maths,
+        searches the web, recalls clipboard history, runs dozens of built-in system commands,
+        and optionally routes to AI chat or computer-use when you configure a backend.
+      </p>
+      <p>
+        Use it if you want launcher speed in the Raycast mould, but with
+        <strong>source you can audit</strong>, <strong>no subscription or account</strong>,
+        clipboard and dictation that stay on the machine by default, and AI that can be
+        entirely local (Ollama + Hermes) or pointed at whatever API you already trust.
+        Everything in the core app works offline; you add cloud only where you choose.
+      </p>
     </div>
 
     <div class="install" id="install">
@@ -949,6 +1034,92 @@
   </div>
 </section>
 
+<section id="compare">
+  <div class="wrap">
+    <h2>How it compares</h2>
+    <p class="sub">
+      Spotlight, Alfred, and Raycast are excellent at what they optimize for. Caduceus is for
+      a different trade: open source, privacy-first defaults, and a single surface that still
+      works when AI is turned off.
+    </p>
+
+    <div class="compare-wrap">
+      <table class="compare">
+        <thead>
+          <tr>
+            <th scope="col"></th>
+            <th scope="col">Spotlight</th>
+            <th scope="col">Alfred</th>
+            <th scope="col">Raycast</th>
+            <th scope="col" class="col-caduceus">Caduceus</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="topic">What it is</td>
+            <td>Built into macOS — fast file and app search.</td>
+            <td>Launcher + workflows; Powerpack unlocks the deep stuff.</td>
+            <td>Modern launcher with extensions, clipboard, and AI features.</td>
+            <td class="col-caduceus">Launcher, staff shortcuts, clipboard, voice, system commands, optional agent — one MIT app.</td>
+          </tr>
+          <tr>
+            <td class="topic">Price</td>
+            <td>Free with the OS.</td>
+            <td>Free tier; Powerpack is a paid upgrade.</td>
+            <td>Free tier; Pro is a subscription for advanced features.</td>
+            <td class="col-caduceus"><strong>Free forever</strong> — no in-app purchases, no Pro tier.</td>
+          </tr>
+          <tr>
+            <td class="topic">Source &amp; trust</td>
+            <td>Closed Apple code.</td>
+            <td>Closed source; you trust the vendor.</td>
+            <td>Closed source; account and cloud sync for much of the ecosystem.</td>
+            <td class="col-caduceus"><strong>Full source on GitHub</strong> — build it yourself if you want. No telemetry or tracking.</td>
+          </tr>
+          <tr>
+            <td class="topic">Clipboard &amp; voice</td>
+            <td>Neither.</td>
+            <td>Clipboard history needs Powerpack or workflows.</td>
+            <td>Clipboard history built in (Pro features vary by plan).</td>
+            <td class="col-caduceus">Searchable history, optional encryption, on-device push-to-talk — <strong>no wake word</strong>.</td>
+          </tr>
+          <tr>
+            <td class="topic">AI &amp; automation</td>
+            <td>Limited Siri integration.</td>
+            <td>Workflows and scripts you wire up.</td>
+            <td>Tight AI and cloud integrations; vendor-chosen stack.</td>
+            <td class="col-caduceus"><strong>Your backend</strong> — local Ollama, Hermes Agent, or any OpenAI-compatible API. Palette works with AI uninstalled.</td>
+          </tr>
+          <tr>
+            <td class="topic">Customization</td>
+            <td>Minimal.</td>
+            <td>Deep if you buy in to Alfred workflows.</td>
+            <td>Extension store; many extensions are Raycast-specific.</td>
+            <td class="col-caduceus">Hotkeys, prefixes, staff layout, extensions as plain <code>.js</code> files — <strong>no store required</strong>.</td>
+          </tr>
+          <tr>
+            <td class="topic">Footprint</td>
+            <td>Always there.</td>
+            <td>Light when idle; grows with workflows.</td>
+            <td>Heavier; background services for sync and extensions.</td>
+            <td class="col-caduceus"><strong>~10 MB</strong> menu-bar app; local-first core.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p class="compare-verdict">
+      <strong>Why Caduceus wins for its audience:</strong> if you want a command centre that
+      feels as fast as the proprietary launchers but won't nag you to sign in, won't phone home,
+      and won't lock AI or clipboard behind a subscription — while still offering optional
+      screen-driving agent work through open Hermes — Caduceus is the one you can read, fork,
+      and run locally end to end. If you need Apple's zero-install Spotlight, Alfred's decade of
+      Powerpack workflows, or Raycast's polished extension marketplace today, keep those tools;
+      Caduceus is the bet that <em>your</em> Mac should answer to you, not to a vendor dashboard.
+    </p>
+  </div>
+</section>
+
 <section id="hermes">
   <div class="wrap">
     <h2>The AI is Hermes</h2>
@@ -992,26 +1163,29 @@
     </p>
 
     <p>
-      Some things people ask for <strong>cannot</strong> be free, so they are deliberately
-      not built rather than half-built:
+      Integrations that need a paid API, an extra install, or permissions beyond a
+      normal palette command are <strong>first-party extensions coming soon</strong> —
+      not half-shipped built-ins. See the
+      <a href="https://caduceus.vivaanshahani.com/features">full feature list</a>
+      for the roadmap; examples include:
     </p>
 
     <table>
       <tr>
         <td><strong>Google Translate</strong></td>
-        <td>The Cloud Translation API bills per character. The free endpoint is undocumented and against Google's terms.</td>
+        <td>The Cloud Translation API bills per character — planned as an extension with your API key.</td>
       </tr>
       <tr>
         <td><strong>Authy</strong></td>
-        <td>No public API, and the desktop apps were discontinued in 2024. A built-in TOTP generator you paste your own seed into is the honest version.</td>
+        <td>Planned first-party extension; Authy has no public API and desktop apps were discontinued in 2024.</td>
       </tr>
       <tr>
         <td><strong>Jira, Linear</strong></td>
-        <td>The APIs are free to call; the products are not, for any real team. Better as extensions.</td>
+        <td>Planned first-party extensions — APIs are free to call; the products assume a paid team plan.</td>
       </tr>
       <tr>
         <td><strong>Bluetooth control, video download, keyboard brightness</strong></td>
-        <td>Free, but need a tool you install yourself (<code>blueutil</code>, <code>yt-dlp</code>) or a private API Apple keeps breaking.</td>
+        <td>Coming as first-party extensions with optional helpers (<code>blueutil</code>, <code>yt-dlp</code>) you install yourself.</td>
       </tr>
     </table>
 

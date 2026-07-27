@@ -560,49 +560,49 @@
       ]
     },
     {
-      "id": "not-built",
-      "title": "Deliberately not built",
-      "blurb": "A built-in has to work for free, offline, with no account and no API key. These do not, so they are named here rather than half-shipped.",
+      "id": "first-party-extensions",
+      "title": "First-party extensions (coming soon)",
+      "blurb": "Official Caduceus extensions in development — same drag-in format as community extensions, maintained in-repo. They ship separately from built-ins so API keys, extra tools you install, and permissions stay explicit when you turn them on.",
       "items": [
         {
           "name": "Google Translate",
-          "detail": "The Cloud Translation API is billed per character. The free endpoint is undocumented, rate-limited and against Google's terms, so it is not something to depend on."
+          "detail": "Calls the Cloud Translation API with your key (billed per character). Coming as a first-party extension rather than a built-in that depends on an undocumented free endpoint."
         },
         {
           "name": "Jira and Linear",
-          "detail": "The APIs are free to call, but both products need a paid plan for any real team use. Better as community extensions than as built-ins most people cannot use."
+          "detail": "Issue search and quick actions over each product's API. Coming soon — you'll bring your own account; both products assume a paid team plan for real use."
         },
         {
           "name": "Internet speed test",
-          "detail": "Needs somebody's bandwidth to measure against. Cloudflare's endpoint is free to use, but silently depending on it is not a decision to make on a user's behalf."
+          "detail": "Measure download/upload against an endpoint you choose. Coming as an extension so Caduceus does not silently consume someone else's bandwidth on your behalf."
         },
         {
           "name": "Authy import",
-          "detail": "Authy has no public API and Twilio shut its desktop apps down in 2024. Reading its store would mean reverse-engineering an encrypted database holding 2FA secrets."
+          "detail": "Authy has no public API and desktop apps were discontinued in 2024. A first-party path is being explored with the same bar as any extension that touches 2FA material."
         },
         {
           "name": "Starting a macOS Focus session",
-          "detail": "Focus cannot be set programmatically. The only supported route is a Shortcuts action you trigger, which Caduceus can call — but it cannot flip Focus itself."
+          "detail": "macOS does not expose Focus directly; the supported route is a Shortcuts action. Coming as an extension that runs the Shortcut you configure."
         },
         {
           "name": "Bluetooth device switching",
-          "detail": "macOS has no supported CLI or public API for connecting a specific device. Every tool that does this ships a private-framework helper Apple has broken repeatedly."
+          "detail": "Connect a named Bluetooth device from the palette. Coming with an optional helper — macOS still has no supported public API for this."
         },
         {
           "name": "Keyboard backlight control",
-          "detail": "No public API. Requires a private framework or a kernel helper, both of which have broken across releases."
+          "detail": "Adjust keyboard brightness where hardware allows. Coming as an extension; may require a helper because Apple provides no stable public API."
         },
         {
           "name": "Per-application volume",
-          "detail": "Needs a CoreAudio process tap and, in practice, an audio driver. That is a system extension, not a palette command."
+          "detail": "Set volume per app via CoreAudio. Coming as an extension — likely a separate helper or driver, not a single built-in command."
         },
         {
           "name": "Downloading video from a website",
-          "detail": "Needs yt-dlp, which Caduceus does not bundle, and carries per-site terms-of-service questions that belong to the person running it."
+          "detail": "Wraps yt-dlp you install yourself. Coming soon — Caduceus will not bundle yt-dlp; site terms stay between you and the host."
         },
         {
           "name": "Text expansion that types for you",
-          "detail": "Expanding a trigger as you type anywhere in macOS needs a system-wide keyboard event tap — a keylogger by any technical definition. It deserves its own release and its own review, not a line in a feature list."
+          "detail": "System-wide expansion needs a keyboard event tap and a dedicated opt-in. Coming as its own first-party extension after a focused security review — palette snippets stay the built-in alternative."
         }
       ]
     }

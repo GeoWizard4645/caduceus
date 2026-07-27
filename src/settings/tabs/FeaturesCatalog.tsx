@@ -105,15 +105,10 @@ function FeatureAccordion({
   locked: boolean;
   onToggle: () => void;
 }) {
-  const isExcluded = section.id === "not-built";
+  const isUpcoming = section.id === "first-party-extensions";
 
   return (
-    <div
-      className={cx(
-        "overflow-hidden rounded-xl border transition-colors",
-        isExcluded ? "border-dashed border-line bg-base/10" : "border-line bg-base/20",
-      )}
-    >
+    <div className="overflow-hidden rounded-xl border border-line bg-base/20 transition-colors">
       <button
         type="button"
         onClick={onToggle}
@@ -140,6 +135,11 @@ function FeatureAccordion({
             {section.runnable && (
               <span className="rounded bg-accent/15 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-accent">
                 Commands
+              </span>
+            )}
+            {isUpcoming && (
+              <span className="rounded bg-caution/15 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-caution">
+                Coming soon
               </span>
             )}
           </span>

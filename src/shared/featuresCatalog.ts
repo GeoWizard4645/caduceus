@@ -12,12 +12,14 @@
  * The old shipped/planned split is gone. A roadmap that lives in the app ages
  * badly and, worse, invites a reader to tick off features against somebody
  * else's product — which is why the "Raycast-class / Caduceus idea" labels are
- * gone too. What is here is what the app does; the last section says what it
- * deliberately does not, and why.
+ * gone too. What is here is what the app does; the last section lists official
+ * first-party extensions in development.
  */
 
 import catalog from "../../website/features-catalog.json";
 import { COMMANDS, COMMAND_GROUPS } from "./commands";
+
+const FIRST_PARTY_EXTENSIONS_ID = "first-party-extensions";
 
 export interface FeatureItem {
   name: string;
@@ -63,19 +65,19 @@ const CAPABILITY_SECTIONS: FeatureSection[] = file.groups.map((group) => ({
 }));
 
 /**
- * Capabilities first, then commands, then the "not built" section last.
+ * Capabilities first, then commands, then first-party extensions (coming soon) last.
  *
  * That order answers the two questions a reader arrives with in the order they
  * arrive in: "what *is* this thing" before "what can I type into it".
  */
 export const FEATURE_SECTIONS: FeatureSection[] = [
-  ...CAPABILITY_SECTIONS.filter((section) => section.id !== "not-built"),
+  ...CAPABILITY_SECTIONS.filter((section) => section.id !== FIRST_PARTY_EXTENSIONS_ID),
   ...COMMAND_SECTIONS,
-  ...CAPABILITY_SECTIONS.filter((section) => section.id === "not-built"),
+  ...CAPABILITY_SECTIONS.filter((section) => section.id === FIRST_PARTY_EXTENSIONS_ID),
 ];
 
 export function countFeatures(): number {
-  return FEATURE_SECTIONS.filter((section) => section.id !== "not-built").reduce(
+  return FEATURE_SECTIONS.filter((section) => section.id !== FIRST_PARTY_EXTENSIONS_ID).reduce(
     (total, section) => total + section.items.length,
     0,
   );

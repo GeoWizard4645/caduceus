@@ -92,24 +92,22 @@ Detected and used when present; never a silent failure.
 - **`yt-dlp`** for downloading media from a website. Not bundled, and the
   per-site terms-of-service question belongs to the person running it.
 
-## Deliberately not built
+## First-party extensions (coming soon)
 
-The reasons, in full, are in the last section of the in-app catalogue and on the
-website. In short: Google Translate (billed per character), Jira and Linear
-(free API, paid product), speed test (somebody else's bandwidth), Authy import
-(no API, and the data is 2FA secrets), macOS Focus (not settable
-programmatically), Bluetooth device switching and keyboard backlight (no public
-API, private ones break every release), and per-application volume (needs an
-audio driver, not a palette command).
+The full list and rationale are in the last section of the in-app catalogue and on the
+website. These ship as official Caduceus extensions (same drag-in format as community
+ones) rather than silent built-ins — so API keys, helpers you install, and permissions
+stay explicit. Planned first-party work includes Google Translate, Jira and Linear,
+speed test, Authy import, macOS Focus via Shortcuts, Bluetooth switching, keyboard
+backlight, per-application volume, yt-dlp media download, and system-wide text expansion.
 
 ### Text expansion that types for you
 
-Called out separately because it is the one people ask for most. Expanding a
+Still called out separately because it is the one people ask for most. Expanding a
 trigger as you type anywhere in macOS needs a system-wide keyboard event tap —
-a keylogger by any technical definition. That deserves its own release, its own
-security review and its own opt-in, not a line in a feature list. Snippets you
-pick from the palette and paste are a smaller, honest version of the same idea
-and are the likely next step.
+a keylogger by any technical definition. It will ship as its own first-party extension
+after a focused security review and opt-in. Snippets you pick from the palette and
+paste are the built-in alternative today.
 
 ## Better as extensions than built-ins
 
