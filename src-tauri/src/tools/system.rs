@@ -408,10 +408,28 @@ pub fn machine_summary() -> ToolOutcome {
         format!(
             "Model     {model}\nChip      {chip}\nCores     {cores}\nMemory    {memory}\n\
              macOS     {os} ({build})\nBattery   {battery}\nUptime    {}",
-            uptime.split_once("up ").map(|(_, rest)| rest).unwrap_or(&uptime).trim()
+            uptime_duration(&uptime),
         ),
         "Copied the summary",
     )
+}
+
+/// Just the "up 22 days, 11:37" part of `uptime`.
+///
+/// The raw line also carries the user count and three load averages, which are
+/// not what the word "uptime" is asking for and push the line off the panel.
+fn uptime_duration(raw: &str) -> String {
+    let after_up = raw.split_once("up ").map(|(_, rest)| rest).unwrap_or(raw);
+    let trimmed = after_up
+        .split_once(", load average")
+        .map(|(head, _)| head)
+        .unwrap_or(after_up);
+    // Drop a trailing ", N users" without cutting "22 days, 11:37".
+    let trimmed = match trimmed.rfind(", ") {
+        Some(index) if trimmed[index..].contains("user") => &trimmed[..index],
+        _ => trimmed,
+    };
+    trimmed.trim().trim_end_matches(',').to_string()
 }
 
 /// Wi-Fi status: which network, what address, and how to share it.
@@ -425,26 +443,67 @@ pub fn wifi_summary() -> ToolOutcome {
         return ToolOutcome::ok(format!("Wi-Fi is off ({device})."));
     }
 
-    // macOS 14 removed the SSID from `airport -I` and gates it behind Location
-    // Services in several tools; `networksetup` is the one that still answers.
-    let network = run_tool("networksetup", &["-getairportnetwork", &device])
-        .unwrap_or_default()
-        .split_once(": ")
-        .map(|(_, name)| name.to_string())
-        .unwrap_or_else(|| "unknown".into());
-
     let address = run_tool("ipconfig", &["getifaddr", &device]).unwrap_or_default();
     let router = run_tool("sh", &["-c", "route -n get default 2>/dev/null | awk '/gateway/{print $2}'"])
         .unwrap_or_default();
 
-    ToolOutcome::copied(
-        network.clone(),
-        format!(
-            "{network} · {} · router {} · {device}",
-            if address.is_empty() { "no address".into() } else { address },
-            if router.is_empty() { "unknown".into() } else { router },
+    match network_name(&device) {
+        Some(name) => ToolOutcome::copied(
+            name.clone(),
+            format!(
+                "{name} · {} · router {} · {device}",
+                if address.is_empty() { "no address".into() } else { address },
+                if router.is_empty() { "unknown".into() } else { router },
+            ),
         ),
-    )
+        // The address is still worth having, and is what gets copied. Saying
+        // *why* the name is missing matters more than the name: "unknown" reads
+        // like a bug, and this is a deliberate macOS restriction.
+        None if !address.is_empty() => ToolOutcome::copied(
+            address.clone(),
+            format!(
+                "Connected on {device} · {address} · router {} — macOS only reveals the network \
+                 name to apps with Location Services access, which Caduceus does not ask for",
+                if router.is_empty() { "unknown".into() } else { router },
+            ),
+        ),
+        None => ToolOutcome::ok(format!("Wi-Fi is on ({device}) but not connected to a network.")),
+    }
+}
+
+/// The name of the Wi-Fi network, if macOS is willing to say.
+///
+/// It usually is not. Since macOS 14, reading the SSID requires Location
+/// Services authorisation — `airport -I` was removed outright, `networksetup`
+/// answers "You are not associated with an AirPort network" even while
+/// connected, and `ipconfig getsummary` prints a literal `<redacted>`.
+///
+/// Caduceus does not ask for Location Services for this, so all three are tried
+/// and `None` is the expected answer rather than a failure.
+fn network_name(device: &str) -> Option<String> {
+    let plausible = |name: String| {
+        let name = name.trim().to_string();
+        let unusable = name.is_empty()
+            || name == "<redacted>"
+            || name.contains("not associated")
+            || name.contains("You are not");
+        (!unusable).then_some(name)
+    };
+
+    let from_networksetup = run_tool("networksetup", &["-getairportnetwork", device])
+        .ok()
+        .and_then(|line| line.split_once(": ").map(|(_, name)| name.to_string()))
+        .and_then(plausible);
+    if from_networksetup.is_some() {
+        return from_networksetup;
+    }
+
+    run_tool("sh", &[
+        "-c",
+        &format!("ipconfig getsummary {device} 2>/dev/null | awk '/ SSID :/ {{print $3}}'"),
+    ])
+    .ok()
+    .and_then(plausible)
 }
 
 #[cfg(test)]
@@ -485,10 +544,68 @@ mod tests {
     }
 
     #[test]
+    fn a_redacted_or_absent_ssid_is_never_reported_as_a_network_name() {
+        // macOS 14+ answers with one of these instead of the SSID unless the
+        // caller holds Location Services access. Showing any of them as the
+        // network name would read as a bug rather than as the restriction it is.
+        if let Some(device) = wifi_interface() {
+            if let Some(name) = network_name(&device) {
+                assert!(!name.is_empty());
+                assert_ne!(name, "<redacted>");
+                assert!(!name.contains("not associated"), "leaked a refusal: {name}");
+                assert!(!name.contains("You are not"), "leaked a refusal: {name}");
+            }
+        }
+    }
+
+    #[test]
+    fn the_wifi_summary_is_useful_even_when_the_name_is_withheld() {
+        let outcome = wifi_summary();
+        assert!(!outcome.message.is_empty());
+        // Never copies a placeholder: it is either a real name, a real address,
+        // or nothing at all.
+        if let Some(copied) = &outcome.copied {
+            assert!(!copied.is_empty());
+            assert_ne!(copied, "unknown");
+            assert_ne!(copied, "<redacted>");
+        }
+    }
+
+    #[test]
     fn permissions_are_reported_without_prompting() {
         // The assertion is that this returns at all: a prompting variant would
         // block the test run waiting for a click.
         let report = permissions();
         assert!(report.native_helper, "the native helper should be built");
+    }
+}
+
+#[cfg(test)]
+mod uptime_tests {
+    use super::uptime_duration;
+
+    #[test]
+    fn the_duration_is_extracted_without_the_load_averages() {
+        assert_eq!(
+            uptime_duration("21:01  up 22 days, 11:37, 2 users, load averages: 3.19 3.18 3.06"),
+            "22 days, 11:37"
+        );
+    }
+
+    #[test]
+    fn a_single_user_and_a_short_uptime_both_work() {
+        assert_eq!(
+            uptime_duration("9:15  up 3 mins, 1 user, load averages: 2.11 1.90 1.44"),
+            "3 mins"
+        );
+        assert_eq!(
+            uptime_duration("9:15  up 1:04, 1 user, load averages: 2.11 1.90 1.44"),
+            "1:04"
+        );
+    }
+
+    #[test]
+    fn an_unexpected_format_is_passed_through_rather_than_emptied() {
+        assert_eq!(uptime_duration("something else entirely"), "something else entirely");
     }
 }

@@ -66,6 +66,23 @@ pub fn interfaces() -> Vec<Interface> {
     result
 }
 
+/// The interface carrying the default route, if there is one.
+///
+/// This is what "my IP address" means. Taking the first interface that happens
+/// to have an address gets it wrong the moment a Thunderbolt dock, a VM bridge
+/// or a VPN adapter is present — `networksetup` lists those ahead of Wi-Fi, and
+/// copying a virtual adapter's 10.x address instead of the real one is a
+/// confusing failure because it still looks like a plausible answer.
+fn primary_interface() -> Option<String> {
+    run_tool("sh", &[
+        "-c",
+        "route -n get default 2>/dev/null | awk '/interface:/{print $2}'",
+    ])
+    .ok()
+    .map(|name| name.trim().to_string())
+    .filter(|name| !name.is_empty())
+}
+
 /// A summary of local addressing, for the output panel.
 pub fn local_summary() -> ToolOutcome {
     let found = interfaces();
@@ -73,20 +90,30 @@ pub fn local_summary() -> ToolOutcome {
         return ToolOutcome::err("No interface has an IP address right now.");
     }
 
-    let primary = found[0].address.clone();
+    let default_route = primary_interface();
+    let primary = default_route
+        .as_ref()
+        .and_then(|name| found.iter().find(|i| &i.name == name))
+        .unwrap_or(&found[0]);
+
     let router = run_tool("sh", &["-c", "route -n get default 2>/dev/null | awk '/gateway/{print $2}'"])
         .unwrap_or_default();
 
     let mut lines: Vec<String> = found
         .iter()
-        .map(|i| format!("{:<22} {:<8} {}", i.label, i.name, i.address))
+        .map(|i| {
+            // Mark the one traffic actually leaves by, so a list of five
+            // adapters still answers the question that was asked.
+            let marker = if i.name == primary.name { "→" } else { " " };
+            format!("{marker} {:<22} {:<8} {}", i.label, i.name, i.address)
+        })
         .collect();
     if !router.is_empty() {
         lines.push(String::new());
-        lines.push(format!("{:<22} {:<8} {}", "Router", "", router));
+        lines.push(format!("  {:<22} {:<8} {}", "Router", "", router));
     }
 
-    ToolOutcome::copied(primary, lines.join("\n"))
+    ToolOutcome::copied(primary.address.clone(), lines.join("\n"))
 }
 
 /// This machine's address as the internet sees it.
