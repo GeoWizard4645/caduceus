@@ -1071,3 +1071,237 @@ pub fn open_extensions_folder<R: Runtime>(app: AppHandle<R>) -> Res<()> {
 pub fn extension_permissions() -> Vec<String> {
     extensions::PERMISSIONS.iter().map(|s| s.to_string()).collect()
 }
+
+// ---------------------------------------------------------------------------
+// Window management
+// ---------------------------------------------------------------------------
+//
+// Moving another application's window needs the Accessibility permission, which
+// macOS grants per code signature. That is why these run in Caduceus itself
+// rather than in a helper: one grant, with Caduceus's name on it, that survives
+// an update.
+
+/// Snap, move or resize the frontmost window of the frontmost application.
+#[tauri::command]
+pub fn window_action<R: Runtime>(
+    app: AppHandle<R>,
+    verb: window::manage::Verb,
+) -> window::manage::WindowOutcome {
+    window::manage::apply(&app, verb)
+}
+
+/// Whether window management is usable right now. Never prompts.
+#[tauri::command]
+pub fn window_permission() -> bool {
+    window::manage::permission_granted()
+}
+
+/// The text selected in the frontmost app, or `null` if there is none.
+#[tauri::command]
+pub fn selected_text() -> Option<String> {
+    window::manage::selected_text()
+}
+
+// ---------------------------------------------------------------------------
+// Developer toolbox
+// ---------------------------------------------------------------------------
+
+/// Run one of the developer tools.
+///
+/// A single entry point with a closed `ToolId` enum, rather than sixty commands:
+/// the webview can name a tool that exists and nothing else.
+#[tauri::command]
+pub fn run_tool(id: tools::dev::ToolId, input: String) -> tools::dev::ToolResult {
+    tools::dev::run(id, &input)
+}
+
+// ---------------------------------------------------------------------------
+// System controls
+// ---------------------------------------------------------------------------
+
+#[tauri::command]
+pub fn system_action(action: tools::system::SystemAction) -> tools::ToolOutcome {
+    tools::system::run(action)
+}
+
+#[tauri::command]
+pub fn system_permissions() -> tools::system::PermissionReport {
+    tools::system::permissions()
+}
+
+#[tauri::command]
+pub fn machine_summary() -> tools::ToolOutcome {
+    tools::system::machine_summary()
+}
+
+#[tauri::command]
+pub fn wifi_summary() -> tools::ToolOutcome {
+    tools::system::wifi_summary()
+}
+
+#[tauri::command]
+pub fn media_action(action: tools::media::MediaAction) -> tools::ToolOutcome {
+    tools::media::run(action)
+}
+
+// ---------------------------------------------------------------------------
+// Vision and audio (the native helper)
+// ---------------------------------------------------------------------------
+
+/// Drag a region of the screen and copy the text inside it.
+#[tauri::command]
+pub fn ocr_screen() -> tools::ToolOutcome {
+    tools::native::ocr_screen_selection()
+}
+
+/// Read the text out of an image file.
+#[tauri::command]
+pub fn ocr_image(path: String) -> tools::ToolOutcome {
+    match tools::native::ocr_image(&path) {
+        Ok(text) if !text.trim().is_empty() => {
+            tools::ToolOutcome::copied(text, "Copied the recognised text")
+        }
+        Ok(_) => tools::ToolOutcome::err("No text was found in that image."),
+        Err(e) => tools::ToolOutcome::err(e),
+    }
+}
+
+#[tauri::command]
+pub fn audio_devices() -> Res<Vec<tools::native::AudioDevice>> {
+    tools::native::audio_devices()
+}
+
+#[tauri::command]
+pub fn set_audio_device(uid: String, input: bool) -> tools::ToolOutcome {
+    tools::native::set_audio_device(&uid, input)
+}
+
+// ---------------------------------------------------------------------------
+// Developer environment
+// ---------------------------------------------------------------------------
+
+#[tauri::command]
+pub fn listening_ports(port: Option<u16>) -> Vec<tools::devenv::PortUser> {
+    tools::devenv::listening_ports(port)
+}
+
+#[tauri::command]
+pub fn free_port(port: u16) -> tools::ToolOutcome {
+    tools::devenv::free_port(port)
+}
+
+#[tauri::command]
+pub fn git_repos(limit: Option<usize>) -> Vec<tools::devenv::GitRepo> {
+    tools::devenv::git_repos(limit.unwrap_or(60))
+}
+
+#[tauri::command]
+pub fn git_status(path: String) -> Option<usize> {
+    tools::devenv::git_status(&path)
+}
+
+#[tauri::command]
+pub fn ssh_hosts() -> Vec<tools::devenv::SshHost> {
+    tools::devenv::ssh_hosts()
+}
+
+#[tauri::command]
+pub fn docker_containers() -> Res<Vec<tools::devenv::Container>> {
+    tools::devenv::containers()
+}
+
+#[tauri::command]
+pub fn docker_action(id: String, action: String) -> tools::ToolOutcome {
+    tools::devenv::container_action(&id, &action)
+}
+
+// ---------------------------------------------------------------------------
+// Files
+// ---------------------------------------------------------------------------
+
+#[tauri::command]
+pub fn compress_selection() -> tools::ToolOutcome {
+    tools::files::compress_selection()
+}
+
+#[tauri::command]
+pub fn expand_selection() -> tools::ToolOutcome {
+    tools::files::expand_selection()
+}
+
+#[tauri::command]
+pub fn trash_selection() -> tools::ToolOutcome {
+    tools::files::trash_selection()
+}
+
+#[tauri::command]
+pub fn quick_look_selection() -> tools::ToolOutcome {
+    tools::files::quick_look_selection()
+}
+
+#[tauri::command]
+pub fn open_selection_in_terminal() -> tools::ToolOutcome {
+    tools::files::open_selection_in_terminal()
+}
+
+#[tauri::command]
+pub fn largest_files(directory: Option<String>, limit: Option<usize>) -> Vec<tools::files::BigFile> {
+    tools::files::largest_files(&directory.unwrap_or_default(), limit.unwrap_or(40))
+}
+
+/// Support files an application has left behind. Reports only; removing is
+/// `trash_paths`, called with the list the user was shown.
+#[tauri::command]
+pub fn app_leftovers(app_path: String) -> Vec<tools::files::Leftover> {
+    match tools::files::bundle_id(&app_path) {
+        Some(id) => tools::files::app_leftovers(&id),
+        None => Vec::new(),
+    }
+}
+
+#[tauri::command]
+pub fn trash_paths(paths: Vec<String>) -> tools::ToolOutcome {
+    tools::files::trash_paths(&paths)
+}
+
+// ---------------------------------------------------------------------------
+// Network
+// ---------------------------------------------------------------------------
+
+#[tauri::command]
+pub fn network_summary() -> tools::ToolOutcome {
+    tools::net::local_summary()
+}
+
+#[tauri::command]
+pub async fn public_address() -> tools::ToolOutcome {
+    tools::net::public_address().await
+}
+
+#[tauri::command]
+pub fn dns_lookup(host: String) -> tools::ToolOutcome {
+    tools::net::dns_lookup(&host)
+}
+
+#[tauri::command]
+pub fn ping_host(host: String) -> tools::ToolOutcome {
+    tools::net::ping(&host)
+}
+
+/// Reveal a path in Finder. Only ever called with a path Caduceus itself listed.
+#[tauri::command]
+pub fn reveal_path(path: String) -> tools::ToolOutcome {
+    tools::files::reveal(&path)
+}
+
+/// Open a folder in Terminal.
+#[tauri::command]
+pub fn open_path_in_terminal(path: String) -> tools::ToolOutcome {
+    tools::files::open_in_terminal(&path)
+}
+
+/// Connect to a host from `~/.ssh/config`.
+#[tauri::command]
+pub fn ssh_connect(alias: String) -> tools::ToolOutcome {
+    tools::devenv::ssh_connect(&alias)
+}

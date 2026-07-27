@@ -32,6 +32,10 @@ use crate::settings::{Settings, SettingsManager, StaffEdge, Point};
 #[cfg(target_os = "macos")]
 mod macos;
 
+#[cfg(target_os = "macos")]
+pub mod accessibility;
+pub mod manage;
+
 pub const STAFF_WINDOW: &str = "staff";
 pub const COMMAND_CENTER_WINDOW: &str = "command-center";
 pub const SETTINGS_WINDOW: &str = "settings";

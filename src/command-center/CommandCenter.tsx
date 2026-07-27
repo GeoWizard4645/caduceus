@@ -19,6 +19,7 @@ import {
   type PaletteActions,
   type ResultItem,
 } from "@/shared/providers";
+import type { CommandOutput } from "@/shared/commands";
 import type {
   ChatMessage,
   ClipboardEntry,
@@ -52,6 +53,13 @@ export function CommandCenter() {
   const [session, setSession] = useState<{ id: string; task: string } | null>(null);
   const [voice, setVoice] = useState<VoiceState>("idle");
   const [clipboardCount, setClipboardCount] = useState(0);
+  const [output, setOutput] = useState<CommandOutput | null>(null);
+  // The row that has been chosen once and is waiting for a second Enter. Held
+  // by id rather than by index, so moving the selection cancels it instead of
+  // silently re-aiming the confirmation at a different row.
+  const [pendingConfirm, setPendingConfirm] = useState<{ id: string; message: string } | null>(
+    null,
+  );
 
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
@@ -72,6 +80,7 @@ export function CommandCenter() {
       },
       setMode: (next) => setMode(next),
       notify,
+      showOutput: (next) => setOutput(next),
     }),
     [notify],
   );
@@ -84,6 +93,8 @@ export function CommandCenter() {
     setInput(payload.prefill);
     setChat(null);
     setSelected(0);
+    setOutput(null);
+    setPendingConfirm(null);
     // The webview needs a tick to become focusable after the window is shown.
     setTimeout(() => {
       inputRef.current?.focus();
@@ -218,16 +229,21 @@ export function CommandCenter() {
     switch (e.key) {
       case "ArrowDown":
         e.preventDefault();
+        setPendingConfirm(null);
         setSelected((i) => (count === 0 ? 0 : (i + 1) % count));
         break;
 
       case "ArrowUp":
         e.preventDefault();
+        setPendingConfirm(null);
         setSelected((i) => (count === 0 ? 0 : (i - 1 + count) % count));
         break;
 
       case "Enter": {
         e.preventDefault();
+        // While an output panel is up, Enter must not silently re-run the row
+        // that produced it. Escape is the way back.
+        if (output) return;
         if (mode === "clipboard") {
           activateClipboard.current();
           return;
@@ -242,7 +258,9 @@ export function CommandCenter() {
 
       case "Escape":
         e.preventDefault();
-        if (session) setSession(null);
+        if (pendingConfirm) setPendingConfirm(null);
+        else if (output) setOutput(null);
+        else if (session) setSession(null);
         else if (chat) setChat(null);
         else if (mode === "clipboard" || mode === "system") {
           setMode("default");
@@ -263,6 +281,15 @@ export function CommandCenter() {
   };
 
   const runItem = async (item: ResultItem) => {
+    // Anything that ends the session or deletes something asks once. In a fuzzy
+    // list "Shut down" sits a keystroke away from "Sleep", and an undo for that
+    // does not exist.
+    if (item.confirm && pendingConfirm?.id !== item.id) {
+      setPendingConfirm({ id: item.id, message: item.confirm });
+      return;
+    }
+    setPendingConfirm(null);
+
     setBusy(true);
     try {
       const keepOpen = (await item.run()) === false;
@@ -317,6 +344,7 @@ export function CommandCenter() {
           onChange={(e) => {
             setInput(e.target.value);
             setSelected(0);
+            setPendingConfirm(null);
           }}
           onKeyDown={onKeyDown}
           placeholder={placeholder}
@@ -387,8 +415,21 @@ export function CommandCenter() {
 
       <div className="hairline shrink-0" />
 
+      {/* Confirmation: the second Enter runs it, Escape or a keystroke cancels. */}
+      {pendingConfirm && (
+        <div className="row shrink-0 gap-2 px-5 pb-2">
+          <span className="rounded-md border border-danger/40 bg-danger/12 px-2 py-0.5 text-2xs font-medium text-danger">
+            Confirm
+          </span>
+          <span className="truncate text-2xs text-ink-soft">{pendingConfirm.message}</span>
+          <span className="ml-auto shrink-0 text-2xs text-ink-faint">↵ again · esc cancels</span>
+        </div>
+      )}
+
       {/* --- body -------------------------------------------------------- */}
-      {session ? (
+      {output ? (
+        <OutputPanel output={output} onDismiss={() => setOutput(null)} onNotify={notify} />
+      ) : session ? (
         <AgentPanel
           sessionId={session.id}
           task={session.task}
@@ -549,6 +590,72 @@ function ResultRow({
       {item.accessory && (
         <span className="shrink-0 text-2xs text-ink-faint">{item.accessory}</span>
       )}
+    </div>
+  );
+}
+
+/**
+ * Text a command produced, shown in the palette rather than in a toast.
+ *
+ * Anything longer than a few words — a formatted JSON document, a decoded JWT,
+ * a machine summary — is unreadable as a toast that disappears. This keeps it on
+ * screen, scrollable and selectable, until it is dismissed.
+ */
+function OutputPanel({
+  output,
+  onDismiss,
+  onNotify,
+}: {
+  output: CommandOutput;
+  onDismiss: () => void;
+  onNotify: (message: string, tone?: "info" | "error") => void;
+}) {
+  return (
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="row shrink-0 gap-2 px-5 pb-1 pt-2">
+        <span className="text-[13px] font-medium text-ink">{output.title}</span>
+        {output.message && (
+          <span className="truncate text-2xs text-ink-faint">{output.message}</span>
+        )}
+      </div>
+
+      <pre className="min-h-0 flex-1 overflow-auto whitespace-pre-wrap break-words px-5 py-2 font-mono text-2xs leading-relaxed text-ink-soft">
+        {output.text}
+      </pre>
+
+      <div className="row shrink-0 gap-1 px-5 pb-3">
+        <button
+          type="button"
+          onClick={() => {
+            navigator.clipboard
+              .writeText(output.text)
+              .then(() => onNotify("Copied"))
+              .catch(() => onNotify("Could not copy", "error"));
+          }}
+          className="rounded-md border border-line bg-raised px-2.5 py-1 text-2xs text-ink-soft transition-colors hover:bg-overlay hover:text-ink"
+        >
+          Copy
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            api
+              .addToNotes(output.text, output.title)
+              .then((result) => onNotify(result.message))
+              .catch((error) => onNotify(api.errorMessage(error), "error"));
+          }}
+          className="rounded-md px-2.5 py-1 text-2xs text-ink-faint transition-colors hover:text-ink"
+        >
+          Save to Notes
+        </button>
+        <button
+          type="button"
+          onClick={onDismiss}
+          className="ml-auto rounded-md px-2.5 py-1 text-2xs text-ink-faint transition-colors hover:text-ink"
+        >
+          Back · Esc
+        </button>
+      </div>
     </div>
   );
 }

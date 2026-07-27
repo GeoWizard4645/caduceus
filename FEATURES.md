@@ -1,109 +1,121 @@
-# Feature requests: what is free, what is not, what is impossible
+# Features: what is built, what is not, and why
 
-The **complete shipped list** and **planned roadmap** live in
-[`website/features-catalog.json`](website/features-catalog.json) — rendered on
-[All features](https://caduceus.vivaanshahani.com/features) and in the app under
-**Settings → Features**.
+The **complete catalogue** lives in one place and is generated, not written
+twice:
 
-The rule for Caduceus is that a built-in feature must work for free, with no
-account, no API key and no subscription. This is the triage of the requested
-list against that rule. Anything in the "costs money" or "cannot be done"
-sections is **not** built, deliberately.
+- commands come from [`src/shared/commands.ts`](src/shared/commands.ts) — the
+  registry the palette itself searches, so the explanation you read in the
+  catalogue is the same string the palette shows as a subtitle;
+- everything that is a *capability* rather than a runnable command lives in
+  [`website/features-catalog.json`](website/features-catalog.json);
+- `npm run catalog` merges the two into that JSON for the website. It runs as
+  part of `npm run build`, so a command cannot ship without the website
+  knowing about it.
 
-## Shipped in 1.1.0
+Rendered on [All features](https://caduceus.vivaanshahani.com/features) and in
+the app under **Settings → Features**.
 
-| Feature | How |
-|---|---|
-| Change case | 8 cases, pure-Rust transforms, camelCase humps handled |
-| Paste as plain text | Same path, `Plain` case |
-| Copy path | Finder selection via AppleScript |
-| Download manager (`cdown` / `odown`) | Newest file in `~/Downloads`, part-files skipped |
-| Eject mounted disks | `diskutil` |
-| Keep the computer awake | `caffeinate -w <pid>`, so it dies with the app |
-| Search files | `mdfind` (Spotlight) |
-| Define word | `dict://`, the built-in Dictionary |
-| Compress / resize / convert images | `sips`, never overwrites the original |
-| Add to Apple Notes | AppleScript, with the automation prompt explained |
-| Saved AI chats | SQLite, inline in the palette and in a full window |
-| Clipboard history | Already shipped before this release |
-| Kill process | Already shipped, in the system monitor |
+The rule for Caduceus is unchanged: **a built-in must work for free, offline,
+with no account and no API key.** Anything that cannot is named in the "not
+built" section rather than half-shipped.
 
-All of the above use tools macOS already has. Nothing was added to the
-dependency list to make them work.
+## What 2.0 added
 
-## Free, not yet built — no blockers, just time
+124 commands, all of them in the same ranked list as your apps, shortcuts and
+clipboard — there is no separate menu to go and find.
 
-Ordered roughly by value per hour of work.
+| Area | Commands | What it needs |
+|---|---|---|
+| Window management | 22 | Accessibility permission |
+| Developer tools | 28 | nothing |
+| Text | 20 | nothing |
+| System | 16 | Automation permission for a few |
+| Files & Finder | 11 | Automation permission for Finder |
+| Sound & media | 9 | nothing |
+| Network | 6 | nothing (one command is deliberately online) |
+| Utilities | 6 | nothing |
+| Developer environment | 4 | Docker only for the Docker list |
+| Screen & text | 2 | Screen Recording permission |
 
-- **Snippets** — storage plus expansion; the settings schema already has a
-  shape to copy from the prefix rules
-- **Quicklinks** — mostly present already as `OpenUrlTemplate` prefixes; needs
-  a nicer editor rather than new machinery
-- **Emoji picker** — needs a bundled emoji dataset (free, CLDR)
-- **QR code generator** — one crate (`qrcode`, MIT), renders to PNG
-- **Sticky notes** — a small window plus the storage pattern from chats
-- **Incognito clone** — per-browser AppleScript; Arc, Chrome, Safari all support it
-- **Set audio device (`/i`, `/o`)** — needs a small Swift CoreAudio helper; the
-  Swift build infrastructure already exists for the dictation helpers
-- **Screen OCR** — Vision framework via a Swift helper; free and on-device
-- **Window management** — Accessibility API; the biggest of these, and the one
-  most worth doing properly
-- **Typing practice** — a self-contained mini-app
-- **Apple Music control** — AppleScript
-- **Hide apps from search results** — a settings list the app index filters on
-- **Auto-quit inactive apps** — needs a background watcher and careful defaults
-- **Hyper Key** — a `CGEventTap`; doable, but it is a keyboard driver and
-  deserves its own review
-- **Dictate anywhere (double-click staff / F1)** — the dictation fixes in this
-  release are the prerequisite
+### Window management
 
-## Needs something the user installs
+Halves, quarters, thirds, two-thirds, maximize, almost-maximize, centre,
+grow/shrink, move between displays, and native full screen. Built on the
+Accessibility API in the **main binary**, not in a helper: macOS grants
+Accessibility per code signature, so a separately-signed helper would need its
+own entry in System Settings and would lose it on every rebuild. One switch,
+with Caduceus's name on it.
 
-These work, but only if a third-party tool is present. Caduceus should detect
-and use it, never silently fail.
+The geometry is pure arithmetic with no macOS types in it, and has 19 unit tests
+covering the things that are actually easy to get wrong — thirds that do not add
+up, a window moved to a differently-shaped display, and a window dragged
+entirely off-screen.
 
-- **Bluetooth management (Toothpick)** — needs `blueutil` (Homebrew). macOS has
-  no supported CLI or public API for toggling connections.
-- **Download videos from a website** — needs `yt-dlp`. Also carries obvious
-  terms-of-service questions per site.
-- **Keyboard brightness** — no public API. Requires a private framework or a
-  helper binary, and Apple has broken both across releases.
-- **Amphetamine UI** — only if Amphetamine is installed. `caffeinate` is the
-  free fallback and is what shipped.
+### On-device OCR
 
-## Costs money — deliberately not built
+`Copy text from the screen` drags a box over anything on screen and copies the
+text inside it. Recognition runs through Apple's Vision framework in a small
+Swift helper; the capture is written to a temporary file and deleted before the
+command returns, whether or not recognition succeeded.
 
-Per your rule, these are excluded and should be called out on the website
-rather than half-built.
+### Sound device switching
 
-- **Google Translate** — the Cloud Translation API is billed per character.
-  There is a free unofficial endpoint; it is undocumented, rate-limited and
-  against Google's terms. Not worth shipping.
-- **Jira / Linear** — the APIs are free to call, but both products require a
-  paid plan for any real team use. Better as community extensions.
-- **Internet speed test** — needs a bandwidth-serving endpoint. Cloudflare's is
-  free to use but is someone else's bandwidth; worth asking before depending
-  on it.
+Lists every connected input and output and switches the system default.
+Devices are tracked by their CoreAudio UID, which survives a reboot — the
+numeric device id macOS also exposes is reassigned freely and must never be
+persisted.
 
-## Cannot be done
+### The developer toolbox
 
-- **Authy** — Authy has no public API, and Twilio shut down its desktop apps in
-  2024. Reading its token store would mean reverse-engineering an encrypted
-  database, which is both fragile and a bad idea for a 2FA secret. If you want
-  TOTP in Caduceus, the honest version is a built-in TOTP generator where *you*
-  paste the seed — free, offline, and not pretending to be Authy.
-- **Starting a macOS Focus session** — Focus cannot be set programmatically.
-  The only supported route is a Shortcuts action the user triggers, which
-  Caduceus can call, but it cannot flip Focus directly.
+Encoders, hashes, identifiers, formatters and inspectors, reached through one
+IPC command with a closed `ToolId` enum rather than sixty entry points. The
+point of having these locally is that a JWT or an API payload should never be
+pasted into a website to be read.
+
+Hashes shell out to `shasum` and `md5`, which macOS already ships, rather than
+linking three crypto crates into the binary for a feature most people use twice
+a year.
+
+### The 1.1 utilities, now reachable
+
+Change case, copy path, the download manager, eject, keep-awake, file search,
+define word and image conversion all shipped as Rust commands in 1.1.0 — and
+none of them had a caller. The release notes listed them and nothing in the UI
+could run them. They are wired into the palette in 2.0.
+
+## Needs something you install
+
+Detected and used when present; never a silent failure.
+
+- **Docker** — the container list says plainly whether Docker is missing or
+  installed-but-not-running.
+- **`yt-dlp`** for downloading media from a website. Not bundled, and the
+  per-site terms-of-service question belongs to the person running it.
+
+## Deliberately not built
+
+The reasons, in full, are in the last section of the in-app catalogue and on the
+website. In short: Google Translate (billed per character), Jira and Linear
+(free API, paid product), speed test (somebody else's bandwidth), Authy import
+(no API, and the data is 2FA secrets), macOS Focus (not settable
+programmatically), Bluetooth device switching and keyboard backlight (no public
+API, private ones break every release), and per-application volume (needs an
+audio driver, not a palette command).
+
+### Text expansion that types for you
+
+Called out separately because it is the one people ask for most. Expanding a
+trigger as you type anywhere in macOS needs a system-wide keyboard event tap —
+a keylogger by any technical definition. That deserves its own release, its own
+security review and its own opt-in, not a line in a feature list. Snippets you
+pick from the palette and paste are a smaller, honest version of the same idea
+and are the likely next step.
 
 ## Better as extensions than built-ins
 
 Each of these is a thin wrapper over one product's API or CLI. Building them in
 means shipping and maintaining integrations most users will never enable — which
-is exactly the argument for the extension system in `EXTENSIONS.md`.
+is the argument for the extension system in [`EXTENSIONS.md`](EXTENSIONS.md).
 
-VS Code · Homebrew · GitHub · Arc · Tailwind CSS docs · Warp / iTerm2 / Alacritty
-/ Terminal · Apple Music
-
-The right order is: build the extension host, port these as extensions, and let
-people write the ones nobody thought of.
+VS Code · Homebrew · GitHub · Arc · Tailwind CSS docs · Warp / iTerm2 /
+Alacritty · Apple Music beyond play/pause/next

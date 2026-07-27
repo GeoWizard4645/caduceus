@@ -86,6 +86,12 @@ eats a click meant for something behind it.
 | `figma` | launches Figma — every app on your Mac is searchable |
 | `1920/16*9` | shows `1,080`, Enter copies it |
 | `18% of 240` | shows `43.2` |
+| `left half` | snaps the frontmost window to the left half of its display |
+| `sha256 hunter2` | hashes it and copies the digest |
+| `jwt eyJhbGci…` | decodes the token's header and payload, locally |
+| `port 3000` | shows what is holding the port; Enter stops it |
+| `dark` | toggles macOS dark mode |
+| `repo` | lists your git repositories with their branches |
 | `flights to lisbon` | searches the web |
 | `/ explain OAuth` | asks Hermes |
 | `/c open my email and find the invoice` | Hermes drives your Mac |
@@ -93,6 +99,19 @@ eats a click meant for something behind it.
 
 Arrow keys to move, Enter to run, Esc to close. Prefixes are configurable — add
 your own in Settings, or delete the ones you don't use.
+
+### 124 built-in commands
+
+Window management, on-device screen OCR, sound-device switching, encoders,
+hashes, JSON and JWT inspection, text surgery, Finder actions, ports,
+repositories, SSH hosts and containers — all in the *same* ranked list as your
+apps and shortcuts, with no submenu to go and find. Every one of them is listed
+and explained in **Settings → Features** and on
+[the website](https://caduceus.vivaanshahani.com/features).
+
+The registry is one file. Adding a command means appending an entry to
+`src/shared/commands.ts`; it then appears in search, in the in-app catalogue and
+on the website with no further wiring.
 
 ### Clipboard history
 
@@ -204,18 +223,24 @@ npm run typecheck
 src/                     React — three webviews
   staff/                 the floating staff + radial pop-out
   command-center/        the palette, agent panel, clipboard view
-  settings/              seven settings tabs
-  shared/                IPC bindings, result providers, design system
+  settings/              settings tabs, including the feature catalogue
+  shared/                IPC bindings, result providers, command registry
+  shared/commands.ts     every built-in command and its explanation
 src-tauri/src/           Rust
   agent/                 AgentBackend trait; Hermes + OpenAI-compatible impls
   apps.rs                installed-application index (the launcher)
   calc.rs                the calculator's expression parser
   clipboard/             watcher, SQLite store, encryption
   shortcuts/             the Shortcut primitive and how each kind executes
+  tools/                 the built-in commands: dev, system, files, net, media
   voice/                 push-to-talk capture, speech-to-text, keyword routing
   palette.rs             prefix parsing and dispatch
   window/                staff placement, cursor tracking, window management
+  window/accessibility.rs  hand-written AXUIElement + Core Foundation bindings
+  window/manage.rs       window snapping; the geometry is pure and unit-tested
+src-tauri/macos/         Swift helpers (speech, and Vision OCR + CoreAudio)
 scripts/make-icons.py    generates every icon from one pixel grid
+scripts/build-features-catalog.mjs   merges the registry into the website JSON
 ```
 
 Two design rules worth knowing before you change things:
@@ -225,6 +250,31 @@ Two design rules worth knowing before you change things:
    saved settings — the frontend never hands Rust a command string to execute.
 2. **Secrets only ever go in the keychain.** There is no command that reads an
    API key back out, so a compromised webview cannot exfiltrate one.
+3. **Wide surfaces are closed enums, not strings.** The 40-odd developer tools
+   are one command taking a `ToolId`; the system controls are one command taking
+   a `SystemAction`. The webview can name a tool that exists and nothing else.
+
+### Adding a command
+
+Append one entry to `COMMANDS` in `src/shared/commands.ts`:
+
+```ts
+{
+  id: "utility.example",
+  title: "Do the thing",
+  detail: "One or two sentences saying what happens and what you get back.",
+  group: "utilities",
+  icon: "◇",
+  keywords: ["thing", "example"],
+  trigger: "thing",              // optional: `thing some input`
+  argument: "text to use",       // optional: shown as a placeholder
+  run: ({ input, actions }) => outcome(actions, "Thing", () => api.doTheThing(input)),
+}
+```
+
+It is now searchable, documented in Settings → Features, and on the website
+after the next `npm run build`. `detail` is the only description that exists —
+there is no second copy to keep in sync.
 
 ### Adding a result source
 

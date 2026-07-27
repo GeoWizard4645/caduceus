@@ -31,6 +31,22 @@ import type {
   RuntimeInfo,
   Settings,
   SettingsApplyReport,
+  AudioDevice,
+  BigFile,
+  Container,
+  FileHit,
+  GitRepo,
+  Leftover,
+  MediaAction,
+  PermissionReport,
+  PortUser,
+  SshHost,
+  SystemAction,
+  ToolId,
+  ToolOutcome,
+  ToolResult,
+  WindowOutcome,
+  WindowVerb,
 } from "./types";
 
 // --- settings --------------------------------------------------------------
@@ -325,3 +341,140 @@ export const removeExtension = (id: string) => invoke<void>("remove_extension", 
 export const openExtensionsFolder = () => invoke<void>("open_extensions_folder");
 
 export const extensionPermissions = () => invoke<string[]>("extension_permissions");
+
+// --- window management -------------------------------------------------------
+// Needs the Accessibility permission. `windowPermission` never prompts, so the
+// UI can say what is missing instead of firing a system dialog at a keystroke.
+
+export const windowAction = (verb: WindowVerb) =>
+  invoke<WindowOutcome>("window_action", { verb });
+
+export const windowPermission = () => invoke<boolean>("window_permission");
+
+/** The text selected in the frontmost app, or `null`. */
+export const selectedText = () => invoke<string | null>("selected_text");
+
+// --- developer toolbox -------------------------------------------------------
+
+/** Run one of the built-in tools. `id` is a closed set; see `ToolId`. */
+export const runTool = (id: ToolId, input = "") =>
+  invoke<ToolResult>("run_tool", { id, input });
+
+// --- system controls ---------------------------------------------------------
+
+export const systemAction = (action: SystemAction) =>
+  invoke<ToolOutcome>("system_action", { action });
+
+export const systemPermissions = () => invoke<PermissionReport>("system_permissions");
+
+export const machineSummary = () => invoke<ToolOutcome>("machine_summary");
+
+export const wifiSummary = () => invoke<ToolOutcome>("wifi_summary");
+
+export const mediaAction = (action: MediaAction) =>
+  invoke<ToolOutcome>("media_action", { action });
+
+// --- vision + audio devices --------------------------------------------------
+
+/** Drag a region of the screen; the text inside it comes back copied. */
+export const ocrScreen = () => invoke<ToolOutcome>("ocr_screen");
+
+export const ocrImage = (path: string) => invoke<ToolOutcome>("ocr_image", { path });
+
+export const audioDevices = () => invoke<AudioDevice[]>("audio_devices");
+
+export const setAudioDevice = (uid: string, input: boolean) =>
+  invoke<ToolOutcome>("set_audio_device", { uid, input });
+
+// --- developer environment ---------------------------------------------------
+
+export const listeningPorts = (port?: number) =>
+  invoke<PortUser[]>("listening_ports", { port: port ?? null });
+
+export const freePort = (port: number) => invoke<ToolOutcome>("free_port", { port });
+
+export const gitRepos = (limit = 60) => invoke<GitRepo[]>("git_repos", { limit });
+
+export const gitStatus = (path: string) => invoke<number | null>("git_status", { path });
+
+export const sshHosts = () => invoke<SshHost[]>("ssh_hosts");
+
+export const dockerContainers = () => invoke<Container[]>("docker_containers");
+
+export const dockerAction = (id: string, action: "start" | "stop" | "restart") =>
+  invoke<ToolOutcome>("docker_action", { id, action });
+
+// --- files -------------------------------------------------------------------
+// All of these act on the current Finder selection, so there is never a path
+// string crossing IPC that the user did not select themselves.
+
+export const compressSelection = () => invoke<ToolOutcome>("compress_selection");
+
+export const expandSelection = () => invoke<ToolOutcome>("expand_selection");
+
+export const trashSelection = () => invoke<ToolOutcome>("trash_selection");
+
+export const quickLookSelection = () => invoke<ToolOutcome>("quick_look_selection");
+
+export const openSelectionInTerminal = () =>
+  invoke<ToolOutcome>("open_selection_in_terminal");
+
+export const largestFiles = (directory?: string, limit = 40) =>
+  invoke<BigFile[]>("largest_files", { directory: directory ?? null, limit });
+
+/** Support files an app left behind. Reports only — removing is `trashPaths`. */
+export const appLeftovers = (appPath: string) =>
+  invoke<Leftover[]>("app_leftovers", { appPath });
+
+export const trashPaths = (paths: string[]) => invoke<ToolOutcome>("trash_paths", { paths });
+
+// --- network -----------------------------------------------------------------
+
+export const networkSummary = () => invoke<ToolOutcome>("network_summary");
+
+/** Leaves the machine. Only ever called from the row that says so. */
+export const publicAddress = () => invoke<ToolOutcome>("public_address");
+
+export const dnsLookup = (host: string) => invoke<ToolOutcome>("dns_lookup", { host });
+
+export const pingHost = (host: string) => invoke<ToolOutcome>("ping_host", { host });
+
+// --- the 1.1 utilities, now reachable from the palette -----------------------
+// These commands shipped in 1.1.0 but had no caller: the release notes listed
+// them and nothing in the UI could run them. They are wired up in 2.0.
+
+export const changeCase = (text: string, kase: string) =>
+  invoke<string>("change_case", { text, case: kase });
+
+export const caseOptions = () => invoke<[string, string][]>("case_options");
+
+export const copyLatestDownload = () => invoke<ToolOutcome>("copy_latest_download");
+
+export const openLatestDownload = () => invoke<ToolOutcome>("open_latest_download");
+
+export const copyFinderPath = () => invoke<ToolOutcome>("copy_finder_path");
+
+export const ejectDisks = () => invoke<ToolOutcome>("eject_disks");
+
+export const stayAwake = (on: boolean) => invoke<ToolOutcome>("stay_awake", { on });
+
+export const stayAwakeState = () => invoke<boolean>("stay_awake_state");
+
+export const searchFiles = (query: string, limit = 40) =>
+  invoke<FileHit[]>("search_files", { query, limit });
+
+export const defineWord = (word: string) => invoke<ToolOutcome>("define_word", { word });
+
+export const convertImage = (path: string, width?: number, format?: string) =>
+  invoke<ToolOutcome>("convert_image", {
+    path,
+    width: width ?? null,
+    format: format ?? null,
+  });
+
+export const revealPath = (path: string) => invoke<ToolOutcome>("reveal_path", { path });
+
+export const openPathInTerminal = (path: string) =>
+  invoke<ToolOutcome>("open_path_in_terminal", { path });
+
+export const sshConnect = (alias: string) => invoke<ToolOutcome>("ssh_connect", { alias });

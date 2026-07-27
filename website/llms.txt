@@ -1,6 +1,6 @@
 # Caduceus
 
-> Caduceus is a free, open-source, local-first command centre for macOS. It provides a floating staff shortcut bar, a Raycast-style command palette (apps, maths, clipboard history, snippets), optional voice dictation, and AI chat plus computer-use when you configure a backend. Offline features work without an account or API key.
+> Caduceus is a free, open-source, local-first command centre for macOS. It provides a floating staff shortcut bar, a command palette (apps, maths, clipboard history, and 124 built-in commands covering window management, developer tools, on-device screen OCR, system control, files, network and sound), optional voice dictation, and AI chat plus computer-use when you configure a backend. Offline features work without an account or API key.
 
 Important notes:
 

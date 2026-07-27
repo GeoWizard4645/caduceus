@@ -1,237 +1,1178 @@
 {
-  "version": 1,
-  "shipped": [
+  "version": 2,
+  "groups": [
     {
       "id": "app-shell",
       "title": "App & menu bar",
+      "blurb": "How Caduceus sits in macOS: a menu-bar utility with no Dock icon, and the windows it opens when you ask for them.",
       "items": [
-        { "name": "Menu-bar utility (no Dock icon)", "detail": "Accessory app; tray icon is the main entry when the staff is hidden" },
-        { "name": "Launch at login", "detail": "Optional autostart via Launch Agent" },
-        { "name": "Open from Spotlight / Applications", "detail": "Search Caduceus like any other app" },
-        { "name": "Tray menu", "detail": "Command Center, Settings, show/hide staff, Quit" },
-        { "name": "Settings window", "detail": "Ten tabs; changes save automatically" },
-        { "name": "Chat window", "detail": "Full-screen reading for saved / threads" },
-        { "name": "First-run walkthrough", "detail": "On the staff; replay from Help" },
-        { "name": "Learn tab", "detail": "Guided tasks that open the right settings panes" },
-        { "name": "Help tab", "detail": "Long-form reference plus doc links" },
-        { "name": "Factory reset", "detail": "Restore defaults from Settings" },
-        { "name": "Runtime info", "detail": "Version and platform in Help" }
+        {
+          "name": "Menu-bar utility (no Dock icon)",
+          "detail": "Accessory app; tray icon is the main entry when the staff is hidden"
+        },
+        {
+          "name": "Launch at login",
+          "detail": "Optional autostart via Launch Agent"
+        },
+        {
+          "name": "Open from Spotlight / Applications",
+          "detail": "Search Caduceus like any other app"
+        },
+        {
+          "name": "Tray menu",
+          "detail": "Command Center, Settings, show/hide staff, Quit"
+        },
+        {
+          "name": "Settings window",
+          "detail": "Ten tabs; changes save automatically"
+        },
+        {
+          "name": "Chat window",
+          "detail": "Full-screen reading for saved / threads"
+        },
+        {
+          "name": "First-run walkthrough",
+          "detail": "On the staff; replay from Help"
+        },
+        {
+          "name": "Learn tab",
+          "detail": "Guided tasks that open the right settings panes"
+        },
+        {
+          "name": "Help tab",
+          "detail": "Long-form reference plus doc links"
+        },
+        {
+          "name": "Factory reset",
+          "detail": "Restore defaults from Settings"
+        },
+        {
+          "name": "Runtime info",
+          "detail": "Version and platform in Help"
+        }
       ]
     },
     {
       "id": "staff",
       "title": "Floating staff",
+      "blurb": "The floating mark. Click-through everywhere except itself, visible over full-screen apps, and draggable anywhere.",
       "items": [
-        { "name": "Always-on-top staff mark", "detail": "Click-through window; only the mark and UI capture clicks" },
-        { "name": "Visible over full-screen apps", "detail": "Joins all Spaces at overlay window level" },
-        { "name": "Resize 28–160 px", "detail": "Corner handles on hover" },
-        { "name": "Custom staff mark", "detail": "Upload PNG pixel art" },
-        { "name": "Hover pop-out ring", "detail": "Up to six shortcuts on an arc" },
-        { "name": "Click → Command Center", "detail": "Single click opens the palette" },
-        { "name": "Double-click → dictation", "detail": "Same as F1 toggle" },
-        { "name": "Right-click → Settings", "detail": "" },
-        { "name": "Drag to reposition", "detail": "Position persisted across restarts" },
-        { "name": "Default dock left/right edge", "detail": "Arc direction follows screen half" },
-        { "name": "F12 toggle visibility", "detail": "Rebindable via function-key table" },
-        { "name": "Idle opacity & pulse", "detail": "Appearance settings" },
-        { "name": "Cursor polling tiers", "detail": "Saves CPU when pointer is far away" },
-        { "name": "Expand delay & auto-collapse", "detail": "General settings" },
-        { "name": "Recording indicator on staff", "detail": "Red dot while microphone is live" }
+        {
+          "name": "Always-on-top staff mark",
+          "detail": "Click-through window; only the mark and UI capture clicks"
+        },
+        {
+          "name": "Visible over full-screen apps",
+          "detail": "Joins all Spaces at overlay window level"
+        },
+        {
+          "name": "Resize 28–160 px",
+          "detail": "Corner handles on hover"
+        },
+        {
+          "name": "Custom staff mark",
+          "detail": "Upload PNG pixel art"
+        },
+        {
+          "name": "Hover pop-out ring",
+          "detail": "Up to six shortcuts on an arc"
+        },
+        {
+          "name": "Click → Command Center",
+          "detail": "Single click opens the palette"
+        },
+        {
+          "name": "Double-click → dictation",
+          "detail": "Same as F1 toggle"
+        },
+        {
+          "name": "Right-click → Settings",
+          "detail": "Opens the Settings window straight from the staff, without going via the tray."
+        },
+        {
+          "name": "Drag to reposition",
+          "detail": "Position persisted across restarts"
+        },
+        {
+          "name": "Default dock left/right edge",
+          "detail": "Arc direction follows screen half"
+        },
+        {
+          "name": "F12 toggle visibility",
+          "detail": "Rebindable via function-key table"
+        },
+        {
+          "name": "Idle opacity & pulse",
+          "detail": "Appearance settings"
+        },
+        {
+          "name": "Cursor polling tiers",
+          "detail": "Saves CPU when pointer is far away"
+        },
+        {
+          "name": "Expand delay & auto-collapse",
+          "detail": "General settings"
+        },
+        {
+          "name": "Recording indicator on staff",
+          "detail": "Red dot while microphone is live"
+        }
       ]
     },
     {
       "id": "command-center",
       "title": "Command Center (palette)",
+      "blurb": "The palette: one input, one ranked list, and everything in this catalogue reachable from it.",
       "items": [
-        { "name": "Global hotkey (default Alt+Space)", "detail": "Rebindable; conflict fallback at startup" },
-        { "name": "Keyboard navigation", "detail": "Arrows, Enter, Escape" },
-        { "name": "Click-away dismiss", "detail": "Like Spotlight" },
-        { "name": "Resizable window", "detail": "Drag corner; double-click grip to hide" },
-        { "name": "Prefix badge", "detail": "Shows which route Enter will take" },
-        { "name": "App launcher", "detail": "Fuzzy search over installed applications" },
-        { "name": "Calculator", "detail": "Arithmetic, %, functions; Enter copies result" },
-        { "name": "Configured shortcuts", "detail": "Same list as the staff ring" },
-        { "name": "Web search fallback", "detail": "Configurable search engine URL" },
-        { "name": "Empty-state prefix hints", "detail": "Shows common routes when input is blank" },
-        { "name": "Capture keywords", "detail": "Screenshot display; open Screenshot.app to record" },
-        { "name": "System monitor keyword", "detail": "Type system for live stats" },
-        { "name": "Visible over full-screen", "detail": "Same overlay treatment as the staff" }
+        {
+          "name": "Global hotkey (default Alt+Space)",
+          "detail": "Rebindable; conflict fallback at startup"
+        },
+        {
+          "name": "Keyboard navigation",
+          "detail": "Arrows, Enter, Escape"
+        },
+        {
+          "name": "Click-away dismiss",
+          "detail": "Like Spotlight"
+        },
+        {
+          "name": "Resizable window",
+          "detail": "Drag corner; double-click grip to hide"
+        },
+        {
+          "name": "Prefix badge",
+          "detail": "Shows which route Enter will take"
+        },
+        {
+          "name": "App launcher",
+          "detail": "Fuzzy search over installed applications"
+        },
+        {
+          "name": "Calculator",
+          "detail": "Arithmetic, %, functions; Enter copies result"
+        },
+        {
+          "name": "Configured shortcuts",
+          "detail": "Same list as the staff ring"
+        },
+        {
+          "name": "Web search fallback",
+          "detail": "Configurable search engine URL"
+        },
+        {
+          "name": "Empty-state prefix hints",
+          "detail": "Shows common routes when input is blank"
+        },
+        {
+          "name": "Capture keywords",
+          "detail": "Screenshot display; open Screenshot.app to record"
+        },
+        {
+          "name": "System monitor keyword",
+          "detail": "Type system for live stats"
+        },
+        {
+          "name": "Visible over full-screen",
+          "detail": "Same overlay treatment as the staff"
+        }
       ]
     },
     {
       "id": "prefixes",
       "title": "Prefix routing",
+      "blurb": "Prefixes are data, not code. Every one of them can be renamed, retargeted or deleted, including the defaults.",
       "items": [
-        { "name": "/ → primary AI chat", "detail": "Inline in palette; threads saved in SQLite" },
-        { "name": "/c → computer use", "detail": "Hermes agent session with on-screen steps" },
-        { "name": "/v → clipboard search", "detail": "Filter history in the palette" },
-        { "name": "Custom prefix rules", "detail": "URL templates, shell, AppleScript, built-in routes" },
-        { "name": "Longest prefix wins", "detail": "/c beats /" },
-        { "name": "Alphanumeric prefix boundaries", "detail": "/computer is not /c + omputer" }
+        {
+          "name": "/ → primary AI chat",
+          "detail": "Inline in palette; threads saved in SQLite"
+        },
+        {
+          "name": "/c → computer use",
+          "detail": "Hermes agent session with on-screen steps"
+        },
+        {
+          "name": "/v → clipboard search",
+          "detail": "Filter history in the palette"
+        },
+        {
+          "name": "Custom prefix rules",
+          "detail": "URL templates, shell, AppleScript, built-in routes"
+        },
+        {
+          "name": "Longest prefix wins",
+          "detail": "/c beats /"
+        },
+        {
+          "name": "Alphanumeric prefix boundaries",
+          "detail": "/computer is not /c + omputer"
+        }
       ]
     },
     {
       "id": "shortcuts",
       "title": "Shortcuts & automation",
+      "blurb": "Your own entries in the palette and on the staff ring: URLs, applications, shell commands and AppleScript.",
       "items": [
-        { "name": "Open URL", "detail": "{query} substitution; optional browser profile" },
-        { "name": "Launch app", "detail": "Bundle ID or path" },
-        { "name": "Run shell command", "detail": "Quoted {query}; $CADUCEUS_QUERY env" },
-        { "name": "Run AppleScript", "detail": "macOS; triggers Automation permission" },
-        { "name": "Open clipboard view", "detail": "Shortcut action" },
-        { "name": "Staff ring + palette", "detail": "One list powers both surfaces" },
-        { "name": "Custom icons", "detail": "Brand icons or uploaded images per shortcut" },
-        { "name": "Default shortcuts", "detail": "Gemini, Gmail, Chrome, Claude, Clipboard — all editable" },
-        { "name": "Browser picker", "detail": "Chrome profiles, Arc, Safari, Firefox, etc." }
+        {
+          "name": "Open URL",
+          "detail": "{query} substitution; optional browser profile"
+        },
+        {
+          "name": "Launch app",
+          "detail": "Bundle ID or path"
+        },
+        {
+          "name": "Run shell command",
+          "detail": "Quoted {query}; $CADUCEUS_QUERY env"
+        },
+        {
+          "name": "Run AppleScript",
+          "detail": "macOS; triggers Automation permission"
+        },
+        {
+          "name": "Open clipboard view",
+          "detail": "Shortcut action"
+        },
+        {
+          "name": "Staff ring + palette",
+          "detail": "One list powers both surfaces"
+        },
+        {
+          "name": "Custom icons",
+          "detail": "Brand icons or uploaded images per shortcut"
+        },
+        {
+          "name": "Default shortcuts",
+          "detail": "Gemini, Gmail, Chrome, Claude, Clipboard — all editable"
+        },
+        {
+          "name": "Browser picker",
+          "detail": "Chrome profiles, Arc, Safari, Firefox, etc."
+        }
       ]
     },
     {
       "id": "tools",
       "title": "Built-in utilities (macOS)",
+      "blurb": "One-shot utilities built on what macOS already ships, so none of them need an account or an API key.",
       "items": [
-        { "name": "Change case", "detail": "Eight cases including camelCase and snake_case" },
-        { "name": "Paste as plain text", "detail": "Strip formatting via case transform" },
-        { "name": "Copy Finder selection path", "detail": "AppleScript" },
-        { "name": "Latest download — copy path", "detail": "Newest file in ~/Downloads" },
-        { "name": "Latest download — open", "detail": "Skips .part partial downloads" },
-        { "name": "Eject removable volumes", "detail": "diskutil" },
-        { "name": "Stay awake", "detail": "caffeinate tied to app lifetime" },
-        { "name": "File search", "detail": "Spotlight mdfind" },
-        { "name": "Define word", "detail": "Opens Dictionary.app (dict://)" },
-        { "name": "Resize / convert image", "detail": "sips; never overwrites original" },
-        { "name": "Add to Apple Notes", "detail": "AppleScript; automation prompt on first use" }
+        {
+          "name": "Change case",
+          "detail": "Eight cases including camelCase and snake_case"
+        },
+        {
+          "name": "Paste as plain text",
+          "detail": "Strip formatting via case transform"
+        },
+        {
+          "name": "Copy Finder selection path",
+          "detail": "AppleScript"
+        },
+        {
+          "name": "Latest download — copy path",
+          "detail": "Newest file in ~/Downloads"
+        },
+        {
+          "name": "Latest download — open",
+          "detail": "Skips .part partial downloads"
+        },
+        {
+          "name": "Eject removable volumes",
+          "detail": "diskutil"
+        },
+        {
+          "name": "Stay awake",
+          "detail": "caffeinate tied to app lifetime"
+        },
+        {
+          "name": "File search",
+          "detail": "Spotlight mdfind"
+        },
+        {
+          "name": "Define word",
+          "detail": "Opens Dictionary.app (dict://)"
+        },
+        {
+          "name": "Resize / convert image",
+          "detail": "sips; never overwrites original"
+        },
+        {
+          "name": "Add to Apple Notes",
+          "detail": "AppleScript; automation prompt on first use"
+        }
       ]
     },
     {
       "id": "clipboard",
       "title": "Clipboard history",
+      "blurb": "Local history in SQLite, optionally encrypted at rest, with nothing leaving the machine.",
       "items": [
-        { "name": "Watch system clipboard", "detail": "Text, images, file paths" },
-        { "name": "Skip concealed copies", "detail": "Password managers" },
-        { "name": "Per-app exclusion list", "detail": "" },
-        { "name": "SQLite storage", "detail": "Max items and max age" },
-        { "name": "Optional encryption at rest", "detail": "ChaCha20-Poly1305; key in Keychain" },
-        { "name": "Search, pin, delete, clear", "detail": "Option to keep pinned when clearing" },
-        { "name": "Copy entry back to clipboard", "detail": "" },
-        { "name": "Image thumbnails", "detail": "" },
-        { "name": "Dedicated /v mode", "detail": "In Command Center" }
+        {
+          "name": "Watch system clipboard",
+          "detail": "Text, images, file paths"
+        },
+        {
+          "name": "Skip concealed copies",
+          "detail": "Password managers"
+        },
+        {
+          "name": "Per-app exclusion list",
+          "detail": "Applications whose copies are never recorded. Password managers that mark their clipboard as concealed are skipped automatically; this is for the ones that do not."
+        },
+        {
+          "name": "SQLite storage",
+          "detail": "Max items and max age"
+        },
+        {
+          "name": "Optional encryption at rest",
+          "detail": "ChaCha20-Poly1305; key in Keychain"
+        },
+        {
+          "name": "Search, pin, delete, clear",
+          "detail": "Option to keep pinned when clearing"
+        },
+        {
+          "name": "Copy entry back to clipboard",
+          "detail": "Enter on any history row puts it back on the clipboard, ready to paste."
+        },
+        {
+          "name": "Image thumbnails",
+          "detail": "Copied images are downsampled to a small PNG on a background thread and loaded lazily, so scrolling a long history stays smooth."
+        },
+        {
+          "name": "Dedicated /v mode",
+          "detail": "In Command Center"
+        }
       ]
     },
     {
       "id": "voice",
       "title": "Voice & dictation",
+      "blurb": "Push-to-talk and live dictation through Apple's on-device speech recognition.",
       "items": [
-        { "name": "Push-to-talk hotkey", "detail": "Default Alt+Shift+V; rebindable" },
-        { "name": "F1 or double-click staff", "detail": "Toggle dictation" },
-        { "name": "Live partial transcripts", "detail": "On-device Speech framework" },
-        { "name": "Keyword routing after STT", "detail": "Search, AI, clipboard, insert-only, etc." },
-        { "name": "Auto-submit vs wait for Enter", "detail": "Voice settings" },
-        { "name": "Max recording length cap", "detail": "Safety limit" },
-        { "name": "Optional cloud STT backend", "detail": "API key in Keychain" }
+        {
+          "name": "Push-to-talk hotkey",
+          "detail": "Default Alt+Shift+V; rebindable"
+        },
+        {
+          "name": "F1 or double-click staff",
+          "detail": "Toggle dictation"
+        },
+        {
+          "name": "Live partial transcripts",
+          "detail": "On-device Speech framework"
+        },
+        {
+          "name": "Keyword routing after STT",
+          "detail": "Search, AI, clipboard, insert-only, etc."
+        },
+        {
+          "name": "Auto-submit vs wait for Enter",
+          "detail": "Voice settings"
+        },
+        {
+          "name": "Max recording length cap",
+          "detail": "Safety limit"
+        },
+        {
+          "name": "Optional cloud STT backend",
+          "detail": "API key in Keychain"
+        }
       ]
     },
     {
       "id": "capture",
       "title": "Screenshots & recording",
+      "blurb": "Screenshots and screen recording, saved where you can find them.",
       "items": [
-        { "name": "Full-display screenshot", "detail": "To clipboard + Downloads PNG" },
-        { "name": "Open Screenshot.app", "detail": "Record screen with Apple’s UI" },
-        { "name": "Screen Recording permission", "detail": "Required for captures" }
+        {
+          "name": "Full-display screenshot",
+          "detail": "To clipboard + Downloads PNG"
+        },
+        {
+          "name": "Open Screenshot.app",
+          "detail": "Record screen with Apple’s UI"
+        },
+        {
+          "name": "Screen Recording permission",
+          "detail": "Required for captures"
+        }
       ]
     },
     {
       "id": "system",
       "title": "System monitor",
+      "blurb": "A live view of what this Mac is doing, and the ability to end a process that has stopped behaving.",
       "items": [
-        { "name": "CPU & memory summary", "detail": "Live in palette view" },
-        { "name": "Per-disk free space", "detail": "" },
-        { "name": "Network throughput", "detail": "" },
-        { "name": "Uptime & load average", "detail": "" },
-        { "name": "Top processes", "detail": "Sort by CPU or memory" },
-        { "name": "Quit / force quit", "detail": "Own processes only; others show system" },
-        { "name": "Kill process from palette", "detail": "When permitted" }
+        {
+          "name": "CPU & memory summary",
+          "detail": "Live in palette view"
+        },
+        {
+          "name": "Per-disk free space",
+          "detail": "Capacity and free space for every mounted volume, refreshed live."
+        },
+        {
+          "name": "Network throughput",
+          "detail": "Bytes in and out per second across all interfaces."
+        },
+        {
+          "name": "Uptime & load average",
+          "detail": "How long this Mac has been up, and the one-, five- and fifteen-minute load averages."
+        },
+        {
+          "name": "Top processes",
+          "detail": "Sort by CPU or memory"
+        },
+        {
+          "name": "Quit / force quit",
+          "detail": "Own processes only; others show system"
+        },
+        {
+          "name": "Kill process from palette",
+          "detail": "When permitted"
+        }
       ]
     },
     {
       "id": "ai",
       "title": "AI & agents (optional)",
+      "blurb": "Optional, and off until you configure it. Local models are first-class; cloud keys live in the Keychain.",
       "items": [
-        { "name": "Hermes Agent backend", "detail": "Primary / and /c path when configured" },
-        { "name": "OpenAI-compatible HTTP backends", "detail": "Ollama, LM Studio, cloud APIs" },
-        { "name": "Scan this Mac", "detail": "Discover local servers and Hermes" },
-        { "name": "API keys in Keychain", "detail": "Never written to settings JSON" },
-        { "name": "Saved chat threads", "detail": "SQLite; inline + Chat window" },
-        { "name": "Agent step stream", "detail": "Progress UI for computer use" },
-        { "name": "Confirm before first agent action", "detail": "Settings toggle" },
-        { "name": "Null backend default", "detail": "Everything else works offline without a model" }
+        {
+          "name": "Hermes Agent backend",
+          "detail": "Primary / and /c path when configured"
+        },
+        {
+          "name": "OpenAI-compatible HTTP backends",
+          "detail": "Ollama, LM Studio, cloud APIs"
+        },
+        {
+          "name": "Scan this Mac",
+          "detail": "Discover local servers and Hermes"
+        },
+        {
+          "name": "API keys in Keychain",
+          "detail": "Never written to settings JSON"
+        },
+        {
+          "name": "Saved chat threads",
+          "detail": "SQLite; inline + Chat window"
+        },
+        {
+          "name": "Agent step stream",
+          "detail": "Progress UI for computer use"
+        },
+        {
+          "name": "Confirm before first agent action",
+          "detail": "Settings toggle"
+        },
+        {
+          "name": "Null backend default",
+          "detail": "Everything else works offline without a model"
+        }
       ]
     },
     {
       "id": "extensions",
       "title": "Extensions",
+      "blurb": "One JavaScript file per extension, with its permissions declared in a header Caduceus reads without running the code.",
       "items": [
-        { "name": "Drop-in .js extensions", "detail": "Header comment declares permissions before run" },
-        { "name": "Extensions settings tab", "detail": "Install, list, remove; AI prompt starter" },
-        { "name": "Open extensions folder", "detail": "" }
+        {
+          "name": "Drop-in .js extensions",
+          "detail": "Header comment declares permissions before run"
+        },
+        {
+          "name": "Extensions settings tab",
+          "detail": "Install, list, remove; AI prompt starter"
+        },
+        {
+          "name": "Open extensions folder",
+          "detail": "Reveals ~/Library/Application Support/com.caduceus.desktop/extensions in Finder, for editing an extension in place."
+        }
       ]
     },
     {
       "id": "appearance",
       "title": "Appearance & hotkeys",
+      "blurb": "How Caduceus looks and what keys reach it.",
       "items": [
-        { "name": "Light / dark / system theme", "detail": "" },
-        { "name": "Accent colour", "detail": "All windows" },
-        { "name": "Staff pop-out radius & icon size", "detail": "" },
-        { "name": "Glass / vibrancy windows", "detail": "macOS" },
-        { "name": "Function keys F1–F20 table", "detail": "Staff toggle, dictation, custom actions" },
-        { "name": "Hotkey validation", "detail": "Live check before save" },
-        { "name": "Hotkey conflict relocation", "detail": "Saved alternative if key is taken" }
+        {
+          "name": "Light / dark / system theme",
+          "detail": "Caduceus's own appearance, either pinned or following macOS."
+        },
+        {
+          "name": "Accent colour",
+          "detail": "All windows"
+        },
+        {
+          "name": "Staff pop-out radius & icon size",
+          "detail": "How far the hover ring reaches from the mark, and how large the shortcut icons on it are drawn."
+        },
+        {
+          "name": "Glass / vibrancy windows",
+          "detail": "macOS"
+        },
+        {
+          "name": "Function keys F1–F20 table",
+          "detail": "Staff toggle, dictation, custom actions"
+        },
+        {
+          "name": "Hotkey validation",
+          "detail": "Live check before save"
+        },
+        {
+          "name": "Hotkey conflict relocation",
+          "detail": "Saved alternative if key is taken"
+        }
       ]
     },
     {
       "id": "privacy",
       "title": "Privacy & permissions (macOS)",
+      "blurb": "What Caduceus asks macOS for, why, and what it does not ask for at all.",
       "items": [
-        { "name": "Microphone", "detail": "Only while dictating" },
-        { "name": "Speech Recognition", "detail": "On-device transcription" },
-        { "name": "Screen Recording", "detail": "Screenshots and recording flow" },
-        { "name": "Accessibility", "detail": "Not required for core launcher; future window tools" },
-        { "name": "Apple Events", "detail": "User-defined AppleScript shortcuts only" },
-        { "name": "Local-first default", "detail": "No account; network only when you configure AI" }
+        {
+          "name": "Microphone",
+          "detail": "Only while dictating"
+        },
+        {
+          "name": "Speech Recognition",
+          "detail": "On-device transcription"
+        },
+        {
+          "name": "Screen Recording",
+          "detail": "Screenshots and recording flow"
+        },
+        {
+          "name": "Accessibility",
+          "detail": "Not required for core launcher; future window tools"
+        },
+        {
+          "name": "Apple Events",
+          "detail": "User-defined AppleScript shortcuts only"
+        },
+        {
+          "name": "Local-first default",
+          "detail": "No account; network only when you configure AI"
+        }
+      ]
+    },
+    {
+      "id": "not-built",
+      "title": "Deliberately not built",
+      "blurb": "A built-in has to work for free, offline, with no account and no API key. These do not, so they are named here rather than half-shipped.",
+      "items": [
+        {
+          "name": "Google Translate",
+          "detail": "The Cloud Translation API is billed per character. The free endpoint is undocumented, rate-limited and against Google's terms, so it is not something to depend on."
+        },
+        {
+          "name": "Jira and Linear",
+          "detail": "The APIs are free to call, but both products need a paid plan for any real team use. Better as community extensions than as built-ins most people cannot use."
+        },
+        {
+          "name": "Internet speed test",
+          "detail": "Needs somebody's bandwidth to measure against. Cloudflare's endpoint is free to use, but silently depending on it is not a decision to make on a user's behalf."
+        },
+        {
+          "name": "Authy import",
+          "detail": "Authy has no public API and Twilio shut its desktop apps down in 2024. Reading its store would mean reverse-engineering an encrypted database holding 2FA secrets."
+        },
+        {
+          "name": "Starting a macOS Focus session",
+          "detail": "Focus cannot be set programmatically. The only supported route is a Shortcuts action you trigger, which Caduceus can call — but it cannot flip Focus itself."
+        },
+        {
+          "name": "Bluetooth device switching",
+          "detail": "macOS has no supported CLI or public API for connecting a specific device. Every tool that does this ships a private-framework helper Apple has broken repeatedly."
+        },
+        {
+          "name": "Keyboard backlight control",
+          "detail": "No public API. Requires a private framework or a kernel helper, both of which have broken across releases."
+        },
+        {
+          "name": "Per-application volume",
+          "detail": "Needs a CoreAudio process tap and, in practice, an audio driver. That is a system extension, not a palette command."
+        },
+        {
+          "name": "Downloading video from a website",
+          "detail": "Needs yt-dlp, which Caduceus does not bundle, and carries per-site terms-of-service questions that belong to the person running it."
+        },
+        {
+          "name": "Text expansion that types for you",
+          "detail": "Expanding a trigger as you type anywhere in macOS needs a system-wide keyboard event tap — a keylogger by any technical definition. It deserves its own release and its own review, not a line in a feature list."
+        }
       ]
     }
   ],
-  "planned": [
-    { "name": "Text snippets & expansion", "detail": "Raycast-style snippets triggered by keywords or prefixes", "tag": "raycast" },
-    { "name": "Quicklinks editor", "detail": "Visual editor for URL-template prefixes (machinery mostly exists)", "tag": "raycast" },
-    { "name": "Emoji & symbol picker", "detail": "Search and paste; bundled CLDR data", "tag": "raycast" },
-    { "name": "QR code generator", "detail": "Render URL or text to PNG in clipboard", "tag": "raycast" },
-    { "name": "Sticky notes", "detail": "Small always-on-top note windows with persistence", "tag": "raycast" },
-    { "name": "Window management", "detail": "Snap halves, thirds, maximize — Accessibility API", "tag": "raycast" },
-    { "name": "Window switcher", "detail": "Fuzzy list of open windows; focus or close", "tag": "raycast" },
-    { "name": "Clipboard stack paste", "detail": "Paste previous items in order without opening history", "tag": "raycast" },
-    { "name": "Screen OCR", "detail": "Copy text from a screen region via Vision", "tag": "raycast" },
-    { "name": "Color picker", "detail": "Loupe anywhere; copy HEX/RGB to clipboard", "tag": "raycast" },
-    { "name": "Switch audio input / output", "detail": "CoreAudio helper for mic and speakers", "tag": "raycast" },
-    { "name": "Apple Music control", "detail": "Play/pause, next, current track via AppleScript", "tag": "raycast" },
-    { "name": "Incognito browser window", "detail": "Per-browser private window shortcuts", "tag": "raycast" },
-    { "name": "Hide apps from launcher results", "detail": "Blocklist in settings", "tag": "raycast" },
-    { "name": "Hyper Key", "detail": "Map Caps Lock to ⌃⌥⌘ for one-handed shortcuts", "tag": "raycast" },
-    { "name": "Homebrew search & install", "detail": "Search formulae; open install command", "tag": "raycast" },
-    { "name": "GitHub search", "detail": "Repos, issues, PRs from palette", "tag": "raycast" },
-    { "name": "SSH hosts", "detail": "Open Terminal/iTerm/Warp to saved hosts", "tag": "raycast" },
-    { "name": "Empty Trash", "detail": "One action with confirmation", "tag": "raycast" },
-    { "name": "Lock screen / sleep display", "detail": "Instant actions without digging in menus", "tag": "raycast" },
-    { "name": "Unit & currency converter", "detail": "Beyond the calculator; offline rates file", "tag": "raycast" },
-    { "name": "Natural language dates", "detail": "“next friday 3pm” → ISO or clipboard", "tag": "raycast" },
-    { "name": "Password generator", "detail": "Length and charset; copy once", "tag": "caduceus" },
-    { "name": "TOTP codes (paste seed)", "detail": "Offline 2FA — not Authy impersonation", "tag": "caduceus" },
-    { "name": "Workflow chains", "detail": "Run several shortcuts or commands in sequence", "tag": "caduceus" },
-    { "name": "Semantic file search", "detail": "Find files by meaning using a local embedding model", "tag": "caduceus" },
-    { "name": "Meeting join helper", "detail": "Parse calendar clipboards for Zoom/Meet links", "tag": "caduceus" },
-    { "name": "Pomodoro / focus timer", "detail": "Menu-bar timer tied to stay-awake", "tag": "caduceus" },
-    { "name": "Bluetooth device toggle", "detail": "Via blueutil when installed", "tag": "raycast" },
-    { "name": "Auto-quit idle apps", "detail": "Optional background watcher with safelist", "tag": "caduceus" },
-    { "name": "Extension gallery", "detail": "Curated install links once the host stabilises", "tag": "caduceus" }
+  "commandGroups": [
+    {
+      "id": "windows",
+      "title": "Window management",
+      "blurb": "Snap, resize and move the frontmost window of any application. Needs the Accessibility permission, which Caduceus asks for once and never prompts for again.",
+      "items": [
+        {
+          "name": "Window: left half",
+          "detail": "Fills the left half of the display the window is currently on, stopping at the menu bar and the Dock rather than sliding under them."
+        },
+        {
+          "name": "Window: right half",
+          "detail": "Fills the right half of the current display. Pairs exactly with the left half — no gap, no overlap."
+        },
+        {
+          "name": "Window: top half",
+          "detail": "Fills the upper half of the current display."
+        },
+        {
+          "name": "Window: bottom half",
+          "detail": "Fills the lower half of the current display."
+        },
+        {
+          "name": "Window: top-left quarter",
+          "detail": "One of four quarters that tile the usable screen area exactly."
+        },
+        {
+          "name": "Window: top-right quarter",
+          "detail": "One of four quarters that tile the usable screen area exactly."
+        },
+        {
+          "name": "Window: bottom-left quarter",
+          "detail": "One of four quarters that tile the usable screen area exactly."
+        },
+        {
+          "name": "Window: bottom-right quarter",
+          "detail": "One of four quarters that tile the usable screen area exactly."
+        },
+        {
+          "name": "Window: first third",
+          "detail": "The left third of the display. Thirds are computed to add up exactly, so three windows leave no seam."
+        },
+        {
+          "name": "Window: middle third",
+          "detail": "The middle third of the display."
+        },
+        {
+          "name": "Window: last third",
+          "detail": "The right third of the display."
+        },
+        {
+          "name": "Window: first two-thirds",
+          "detail": "The left two-thirds — the wide half of a two-thirds/one-third split."
+        },
+        {
+          "name": "Window: last two-thirds",
+          "detail": "The right two-thirds."
+        },
+        {
+          "name": "Window: maximize",
+          "detail": "Fills the whole usable area of the display. Not macOS full screen — the window keeps its title bar and stays in the current Space."
+        },
+        {
+          "name": "Window: almost maximize",
+          "detail": "92% of the display, centred — large without hiding what is behind it."
+        },
+        {
+          "name": "Window: reasonable size",
+          "detail": "Two-thirds of the display, centred. The size to put a window back to after it has been dragged somewhere odd."
+        },
+        {
+          "name": "Window: center",
+          "detail": "Centres the window without changing its size — a move, not a resize."
+        },
+        {
+          "name": "Window: make bigger",
+          "detail": "Grows the window by 10% around its own centre, stopping at the edges of the display."
+        },
+        {
+          "name": "Window: make smaller",
+          "detail": "Shrinks the window by 10% around its own centre, stopping before it becomes too small to use."
+        },
+        {
+          "name": "Window: move to next display",
+          "detail": "Moves the window to the next display, keeping where it sat proportionally — so a window in the top-right corner arrives in the top-right corner, whatever size the other screen is."
+        },
+        {
+          "name": "Window: move to previous display",
+          "detail": "The same, in the other direction."
+        },
+        {
+          "name": "Window: toggle full screen",
+          "detail": "Enters or leaves macOS full screen — the green-button behaviour, with its own Space."
+        }
+      ]
+    },
+    {
+      "id": "system",
+      "title": "System",
+      "blurb": "macOS settings, the Finder, power and the session — driven by the tools macOS already ships, so none of it needs anything installed.",
+      "items": [
+        {
+          "name": "Toggle dark mode",
+          "detail": "Switches macOS between light and dark appearance. Needs permission to control System Events, which macOS asks for the first time."
+        },
+        {
+          "name": "Toggle Stage Manager",
+          "detail": "Turns Stage Manager on or off and restarts the window manager so the change takes effect immediately."
+        },
+        {
+          "name": "Toggle hidden files in Finder",
+          "detail": "Shows or hides dotfiles, then restarts Finder."
+        },
+        {
+          "name": "Toggle desktop icons",
+          "detail": "Hides everything on the desktop, or brings it back. Nothing is moved or deleted — Finder just stops drawing it."
+        },
+        {
+          "name": "Restart Finder",
+          "detail": "Relaunches Finder. The usual fix when a mounted volume will not go away."
+        },
+        {
+          "name": "Restart the Dock",
+          "detail": "Relaunches the Dock, which also resets Mission Control and Stage Manager."
+        },
+        {
+          "name": "Restart the menu bar",
+          "detail": "Relaunches SystemUIServer, which redraws the menu bar extras when one gets stuck."
+        },
+        {
+          "name": "Lock the screen",
+          "detail": "Locks immediately, the same as the Apple menu's Lock Screen — regardless of the password delay set for sleep."
+        },
+        {
+          "name": "Turn the display off",
+          "detail": "Puts the display to sleep without sleeping the machine, so anything running keeps running."
+        },
+        {
+          "name": "Sleep",
+          "detail": "Puts the Mac to sleep."
+        },
+        {
+          "name": "Start the screen saver",
+          "detail": "Starts the screen saver straight away."
+        },
+        {
+          "name": "Log out",
+          "detail": "Ends the session. Applications are asked to save first, as they would be from the Apple menu."
+        },
+        {
+          "name": "Restart",
+          "detail": "Restarts the Mac."
+        },
+        {
+          "name": "Shut down",
+          "detail": "Shuts the Mac down."
+        },
+        {
+          "name": "Brightness up",
+          "detail": "Raises display brightness by synthesising the hardware key, which is the only route Apple has not broken. Needs the Accessibility permission."
+        },
+        {
+          "name": "Brightness down",
+          "detail": "Lowers display brightness. Needs the Accessibility permission."
+        }
+      ]
+    },
+    {
+      "id": "sound",
+      "title": "Sound & media",
+      "blurb": "Volume, input and output devices, and whatever is playing in Music or Spotify.",
+      "items": [
+        {
+          "name": "Volume up",
+          "detail": "Raises the output volume by 10% and unmutes, the way the hardware key does."
+        },
+        {
+          "name": "Volume down",
+          "detail": "Lowers the output volume by 10%."
+        },
+        {
+          "name": "Mute / unmute",
+          "detail": "Toggles output mute and says which state it landed in."
+        },
+        {
+          "name": "Change the sound output",
+          "detail": "Every connected output device, with the current one marked. Switching is immediate and system-wide. Devices are tracked by their CoreAudio UID, which survives a reboot — unlike the numeric id macOS reassigns freely."
+        },
+        {
+          "name": "Change the microphone",
+          "detail": "Every connected input device, with the current one marked."
+        },
+        {
+          "name": "Play / pause",
+          "detail": "Plays or pauses whichever of Music or Spotify is actually running, preferring the one already playing."
+        },
+        {
+          "name": "Next track",
+          "detail": "Skips forward and shows what started."
+        },
+        {
+          "name": "Previous track",
+          "detail": "Goes back a track."
+        },
+        {
+          "name": "What is playing",
+          "detail": "Copies the current track and artist."
+        }
+      ]
+    },
+    {
+      "id": "screen",
+      "title": "Screen & text",
+      "blurb": "Capture the screen and read text off it. Recognition runs on-device through Apple's Vision framework; no image leaves the machine.",
+      "items": [
+        {
+          "name": "Copy text from the screen",
+          "detail": "Drag a box over anything on screen — a screenshot, a video still, an error dialog — and the text inside it is recognised and copied. Recognition runs on-device through Apple's Vision framework, and the capture is deleted as soon as it has been read."
+        },
+        {
+          "name": "Read text from the selected image",
+          "detail": "The same recognition, run over the image files selected in Finder."
+        }
+      ]
+    },
+    {
+      "id": "developer",
+      "title": "Developer tools",
+      "blurb": "Encoders, hashes, identifiers, formatters and inspectors. Every one of these runs locally, which is the point — a JWT or an API payload should never be pasted into a website to be read.",
+      "items": [
+        {
+          "name": "Generate a UUID",
+          "detail": "A random version-4 UUID, copied as soon as it appears."
+        },
+        {
+          "name": "Generate ten UUIDs",
+          "detail": "Ten version-4 UUIDs, one per line, for seeding fixtures."
+        },
+        {
+          "name": "Generate a ULID",
+          "detail": "A ULID: a 48-bit millisecond timestamp followed by 80 random bits, in Crockford base32. Sorts by creation time, which is why you would use one instead of a UUID as a database key."
+        },
+        {
+          "name": "Generate a Nano ID",
+          "detail": "A 21-character URL-safe identifier — shorter than a UUID and safe to put in a path."
+        },
+        {
+          "name": "Generate a password",
+          "detail": "24 characters from the system's cryptographic random source, guaranteed to contain every character class. Leaves out l, I, O, 0 and 1, because a password nobody can read off a screen gets written down somewhere worse."
+        },
+        {
+          "name": "Base64 encode  ·  base64 …",
+          "detail": "Encodes what you type to standard base64, with padding."
+        },
+        {
+          "name": "Base64 decode  ·  unbase64 …",
+          "detail": "Decodes base64 back to text. Tolerates missing padding, embedded newlines and either alphabet, because pasted tokens rarely arrive clean."
+        },
+        {
+          "name": "Base64 encode (URL-safe)",
+          "detail": "The URL-safe alphabet with no padding — what JWTs and data URLs use."
+        },
+        {
+          "name": "Base64 decode (URL-safe)",
+          "detail": "Decodes the URL-safe alphabet back to text."
+        },
+        {
+          "name": "Hex encode  ·  hex …",
+          "detail": "Each byte of the input as two lowercase hex digits."
+        },
+        {
+          "name": "Hex decode  ·  unhex …",
+          "detail": "Hex back to text. Accepts `0x` prefixes and colon- or dash-separated bytes."
+        },
+        {
+          "name": "URL encode  ·  urlencode …",
+          "detail": "Percent-encodes everything outside the unreserved set, so the result is safe anywhere in a URL."
+        },
+        {
+          "name": "URL decode  ·  urldecode …",
+          "detail": "Reverses percent-encoding, and reads `+` as a space the way a query string means it."
+        },
+        {
+          "name": "HTML escape  ·  htmlescape …",
+          "detail": "Escapes the five characters that change the meaning of markup."
+        },
+        {
+          "name": "HTML unescape",
+          "detail": "Turns entities back into characters, resolving `&amp;` last so `&amp;lt;` comes back as `&lt;` rather than `<`."
+        },
+        {
+          "name": "Decode a JWT  ·  jwt …",
+          "detail": "Shows a token's header and payload, formatted, and says whether it has expired. The signature is *not* verified — that needs the key, and a tool that showed a tick without one would be worse than none. Nothing is sent anywhere."
+        },
+        {
+          "name": "Format JSON  ·  json …",
+          "detail": "Pretty-prints JSON with two-space indentation, and names the parse error if it is not valid."
+        },
+        {
+          "name": "Minify JSON",
+          "detail": "Strips every byte of whitespace and reports how many that saved."
+        },
+        {
+          "name": "Escape as a JSON string",
+          "detail": "Wraps the input in quotes and escapes it, ready to paste into a JSON document."
+        },
+        {
+          "name": "Current timestamp",
+          "detail": "The Unix time now, in seconds and milliseconds, with the ISO 8601 form alongside."
+        },
+        {
+          "name": "Convert a timestamp  ·  epoch …",
+          "detail": "Reads an epoch number or a date and shows the other. Ten digits are treated as seconds and thirteen as milliseconds, which stays unambiguous until the year 2286."
+        },
+        {
+          "name": "Convert a colour  ·  color …",
+          "detail": "Reads a colour in any notation people paste and shows hex, RGB and HSL — plus the WCAG contrast against white and black, so you know which one the text can be."
+        },
+        {
+          "name": "Convert number bases  ·  base …",
+          "detail": "Shows one number in decimal, hex, octal and binary at once. Reads `0x`, `0b` and `0o` prefixes."
+        },
+        {
+          "name": "Random number  ·  random …",
+          "detail": "A number in a range you give — `5-10`, `5 10` or a bare `100` meaning 1 to 100."
+        },
+        {
+          "name": "SHA-256 hash  ·  sha256 …",
+          "detail": "Hashes the input with SHA-256 and copies the digest."
+        },
+        {
+          "name": "SHA-512 hash  ·  sha512 …",
+          "detail": "Hashes the input with SHA-512."
+        },
+        {
+          "name": "SHA-1 hash  ·  sha1 …",
+          "detail": "Hashes the input with SHA-1. Broken for signatures; still what git object ids use."
+        },
+        {
+          "name": "MD5 hash  ·  md5 …",
+          "detail": "Hashes the input with MD5. Fine for checking a download, never for a password."
+        }
+      ]
+    },
+    {
+      "id": "text",
+      "title": "Text",
+      "blurb": "Reshape whatever you type or paste: case, line order, counts and cleanup.",
+      "items": [
+        {
+          "name": "Lorem ipsum",
+          "detail": "Three sentences of placeholder text."
+        },
+        {
+          "name": "Slugify  ·  slug …",
+          "detail": "Lowercases and dashes the input into something safe for a URL, keeping accented letters intact."
+        },
+        {
+          "name": "Count words and characters  ·  count …",
+          "detail": "Words, characters, lines, paragraphs, sentences and an estimated reading time."
+        },
+        {
+          "name": "Sort lines A→Z  ·  sort …",
+          "detail": "Sorts the lines you paste, ignoring case."
+        },
+        {
+          "name": "Sort lines Z→A",
+          "detail": "The same, reversed."
+        },
+        {
+          "name": "Remove duplicate lines  ·  dedupe …",
+          "detail": "Keeps the first occurrence of each line and says how many went."
+        },
+        {
+          "name": "Reverse line order",
+          "detail": "Last line first."
+        },
+        {
+          "name": "Shuffle lines",
+          "detail": "Randomises line order with a Fisher-Yates shuffle over the system random source."
+        },
+        {
+          "name": "Number lines",
+          "detail": "Prefixes each line with `1.`, `2.` and so on."
+        },
+        {
+          "name": "Join lines",
+          "detail": "Collapses lines into one comma-separated line, dropping blanks."
+        },
+        {
+          "name": "Trim whitespace",
+          "detail": "Removes leading and trailing whitespace from every line."
+        },
+        {
+          "name": "Count repeated lines",
+          "detail": "How often each line appears, most frequent first — a `sort | uniq -c` you do not have to remember."
+        },
+        {
+          "name": "Change case: UPPER CASE  ·  upper …",
+          "detail": "Everything uppercased. Handles camelCase humps, so an identifier converts the way you meant."
+        },
+        {
+          "name": "Change case: lower case  ·  lower …",
+          "detail": "Everything lowercased. Handles camelCase humps, so an identifier converts the way you meant."
+        },
+        {
+          "name": "Change case: Title Case  ·  title …",
+          "detail": "Each word capitalised, punctuation and spacing untouched. Handles camelCase humps, so an identifier converts the way you meant."
+        },
+        {
+          "name": "Change case: Sentence case  ·  sentence …",
+          "detail": "Capitalises the first letter after every sentence terminator. Handles camelCase humps, so an identifier converts the way you meant."
+        },
+        {
+          "name": "Change case: snake_case  ·  snake …",
+          "detail": "Words joined with underscores. Handles camelCase humps, so an identifier converts the way you meant."
+        },
+        {
+          "name": "Change case: kebab-case  ·  kebab …",
+          "detail": "Words joined with dashes. Handles camelCase humps, so an identifier converts the way you meant."
+        },
+        {
+          "name": "Change case: camelCase  ·  camel …",
+          "detail": "First word lowercase, the rest capitalised and joined. Handles camelCase humps, so an identifier converts the way you meant."
+        },
+        {
+          "name": "Change case: PascalCase  ·  pascal …",
+          "detail": "Every word capitalised and joined. Handles camelCase humps, so an identifier converts the way you meant."
+        }
+      ]
+    },
+    {
+      "id": "files",
+      "title": "Files & Finder",
+      "blurb": "Actions on the current Finder selection. Deletion always means the Trash, never an unrecoverable remove.",
+      "items": [
+        {
+          "name": "Empty the Trash",
+          "detail": "Empties the Trash through Finder, so the usual warnings about locked items still apply."
+        },
+        {
+          "name": "Find a file",
+          "detail": "Searches file names through Spotlight, so it answers from an index that already exists rather than walking the disk. Choosing a result reveals it in Finder."
+        },
+        {
+          "name": "Largest files",
+          "detail": "The biggest files in your home folder, over 100 MB, newest measurement first. Also answered from the Spotlight index, so it returns immediately instead of spinning the disk. Choosing one reveals it in Finder."
+        },
+        {
+          "name": "Compress the Finder selection",
+          "detail": "Zips what is selected in Finder into an archive beside it, using the same tool Finder's own Compress uses — so resource forks and extended attributes survive. Never overwrites an existing archive."
+        },
+        {
+          "name": "Expand the selected archive",
+          "detail": "Unpacks the selected archives into folders beside them."
+        },
+        {
+          "name": "Move the Finder selection to the Trash",
+          "detail": "Deletes through Finder, so it lands in the Trash and Cmd-Z puts it back."
+        },
+        {
+          "name": "Quick Look the Finder selection",
+          "detail": "Opens the macOS preview panel for what is selected, without switching to Finder."
+        },
+        {
+          "name": "Open the Finder selection in Terminal",
+          "detail": "Opens Terminal at the selected folder, or at the folder containing the selected file."
+        },
+        {
+          "name": "Copy the path of the Finder selection",
+          "detail": "Copies the POSIX path of everything selected, one per line."
+        },
+        {
+          "name": "Open the latest download",
+          "detail": "Opens the newest file in ~/Downloads, skipping the part-files browsers leave behind mid-download."
+        },
+        {
+          "name": "Copy the path of the latest download",
+          "detail": "The same file, as a path on the clipboard."
+        }
+      ]
+    },
+    {
+      "id": "network",
+      "title": "Network",
+      "blurb": "Addresses, name resolution and reachability.",
+      "items": [
+        {
+          "name": "Toggle Wi-Fi",
+          "detail": "Turns Wi-Fi on or off on whichever interface is actually the Wi-Fi one — not a hardcoded en0."
+        },
+        {
+          "name": "Local IP addresses",
+          "detail": "Every interface that has an address, labelled the way Network settings labels it, plus the default router."
+        },
+        {
+          "name": "Public IP address",
+          "detail": "This machine's address as the internet sees it. The one command in Caduceus that deliberately leaves the machine — it runs only when you pick this row."
+        },
+        {
+          "name": "Wi-Fi details",
+          "detail": "The network you are on, the address it gave you, the router and the interface name."
+        },
+        {
+          "name": "Look up a hostname  ·  dns …",
+          "detail": "Resolves a hostname to its addresses using the system resolver."
+        },
+        {
+          "name": "Ping a host  ·  ping …",
+          "detail": "Five packets, summarised as loss and round-trip time."
+        }
+      ]
+    },
+    {
+      "id": "devenv",
+      "title": "Developer environment",
+      "blurb": "What is running on this machine: ports, repositories, SSH hosts and containers.",
+      "items": [
+        {
+          "name": "Listening ports",
+          "detail": "Every process holding a TCP port open, with its pid. Choosing one stops it with SIGTERM, so a dev server flushes its logs and removes its socket rather than being killed outright. Type a number after the keyword to narrow to one port."
+        },
+        {
+          "name": "Git repositories",
+          "detail": "Repositories under the usual project folders — Developer, Projects, Code, src, dev, repos and Documents/GitHub — with the branch each one is on. Choosing one opens it in Terminal. Only two levels deep, so it stays instant."
+        },
+        {
+          "name": "SSH hosts",
+          "detail": "The hosts defined in ~/.ssh/config, with their hostname and user. Choosing one opens Terminal and connects. Wildcard patterns are skipped, because they are rules rather than machines you can reach."
+        },
+        {
+          "name": "Docker containers",
+          "detail": "Every container, running or not, with its image and status. Choosing one starts or stops it. Says plainly whether Docker is missing or simply not running."
+        }
+      ]
+    },
+    {
+      "id": "utilities",
+      "title": "Utilities",
+      "blurb": "The small things that are faster to type than to go and find.",
+      "items": [
+        {
+          "name": "Eject all disks",
+          "detail": "Ejects every removable volume under /Volumes, and says which ones refused."
+        },
+        {
+          "name": "Keep this Mac awake",
+          "detail": "Blocks sleep and display dimming until you turn it off. Tied to Caduceus's own process, so quitting the app releases it — a stray assertion outliving the app that made it is how laptops cook in bags."
+        },
+        {
+          "name": "Allow this Mac to sleep",
+          "detail": "Releases the keep-awake assertion."
+        },
+        {
+          "name": "Define a word  ·  define …",
+          "detail": "Looks a word up in the Dictionary app that ships with macOS. No network involved."
+        },
+        {
+          "name": "About this Mac",
+          "detail": "Model, chip, cores, memory, macOS version, battery and uptime, on one screen and ready to paste into a bug report."
+        },
+        {
+          "name": "Check Caduceus's permissions",
+          "detail": "Shows which of Accessibility and Screen Recording Caduceus currently holds, and whether the native helper is installed. Reads the state without prompting."
+        }
+      ]
+    }
   ]
 }

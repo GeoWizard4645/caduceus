@@ -164,6 +164,48 @@ pub fn run() {
             commands::capture_record_start,
             commands::capture_record_stop,
             commands::capture_recording_state,
+            // window management
+            commands::window_action,
+            commands::window_permission,
+            commands::selected_text,
+            // developer toolbox
+            commands::run_tool,
+            // system controls
+            commands::system_action,
+            commands::system_permissions,
+            commands::machine_summary,
+            commands::wifi_summary,
+            commands::media_action,
+            // vision + audio devices
+            commands::ocr_screen,
+            commands::ocr_image,
+            commands::audio_devices,
+            commands::set_audio_device,
+            // developer environment
+            commands::listening_ports,
+            commands::free_port,
+            commands::git_repos,
+            commands::git_status,
+            commands::ssh_hosts,
+            commands::ssh_connect,
+            commands::docker_containers,
+            commands::docker_action,
+            // files
+            commands::compress_selection,
+            commands::expand_selection,
+            commands::trash_selection,
+            commands::quick_look_selection,
+            commands::open_selection_in_terminal,
+            commands::largest_files,
+            commands::app_leftovers,
+            commands::trash_paths,
+            commands::reveal_path,
+            commands::open_path_in_terminal,
+            // network
+            commands::network_summary,
+            commands::public_address,
+            commands::dns_lookup,
+            commands::ping_host,
             // misc
             commands::quit_app,
         ])

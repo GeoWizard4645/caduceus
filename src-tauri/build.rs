@@ -25,7 +25,7 @@ fn build_macos_helpers() {
         b"Helper executables bundled with Caduceus.\n\n\
          caduceus-stt       Transcribe a WAV (batch).\n\
          caduceus-stt-live  Live mic + partial transcripts.\n\
-         caduceus-record    Screen recording (ReplayKit).\n",
+         caduceus-native    Vision OCR and CoreAudio device switching.\n",
     );
 
     if std::env::var("CARGO_CFG_TARGET_OS").as_deref() != Ok("macos") {
@@ -37,16 +37,39 @@ fn build_macos_helpers() {
         "macos/CaduceusSTT.swift",
         "caduceus-stt",
         "speech-to-text helper",
+        SPEECH_HELPER_ID,
     );
     compile_swift(
         &bin_dir,
         "macos/CaduceusSTTLive.swift",
         "caduceus-stt-live",
         "live speech helper",
+        SPEECH_HELPER_ID,
+    );
+    // Vision and CoreAudio need no TCC grant of their own, so this one carries
+    // its own identifier and no usage-description strings.
+    compile_swift(
+        &bin_dir,
+        "macos/CaduceusNative.swift",
+        "caduceus-native",
+        "OCR and audio helper",
+        "com.caduceus.desktop.native-helper",
     );
 }
 
-fn compile_swift(bin_dir: &Path, source_rel: &str, output_name: &str, label: &str) {
+/// Signing identifier for the helpers that ask for microphone and speech access.
+///
+/// Shared between both speech helpers because TCC keys its grant on this string:
+/// giving them separate identifiers would mean two prompts for one capability.
+const SPEECH_HELPER_ID: &str = "com.caduceus.desktop.speech-helper";
+
+fn compile_swift(
+    bin_dir: &Path,
+    source_rel: &str,
+    output_name: &str,
+    label: &str,
+    identifier: &str,
+) {
     let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR");
     let source = Path::new(&manifest_dir).join(source_rel);
     println!("cargo:rerun-if-changed={source_rel}");
@@ -101,7 +124,7 @@ fn compile_swift(bin_dir: &Path, source_rel: &str, output_name: &str, label: &st
     match cmd.output() {
         Ok(out) if out.status.success() => {
             println!("cargo:warning=built macOS {label} ({output_name})");
-            seal_helper_signature(&output, label);
+            seal_helper_signature(&output, label, identifier);
         }
         Ok(out) => {
             println!(
@@ -128,10 +151,10 @@ fn compile_swift(bin_dir: &Path, source_rel: &str, output_name: &str, label: &st
 /// under `Resources`, so this has to happen here. Ad-hoc is all that is
 /// available without a Developer ID, and it is enough — binding the plist is
 /// what matters, not who signed it.
-fn seal_helper_signature(output: &Path, label: &str) {
+fn seal_helper_signature(output: &Path, label: &str, identifier: &str) {
     let signed = Command::new("codesign")
         .args(["--force", "--sign", "-", "--identifier"])
-        .arg("com.caduceus.desktop.speech-helper")
+        .arg(identifier)
         .arg(output)
         .output();
 

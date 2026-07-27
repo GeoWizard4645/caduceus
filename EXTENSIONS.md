@@ -87,7 +87,7 @@ signing, no review.
 ## Status
 
 **Installing works now.** Dropping a file, parsing its header, validating its
-permissions, listing what is installed and removing it all ship in 1.1.1.
+permissions, listing what is installed and removing it all ship in 2.0.0.
 
 **Executing does not.** The sandbox that actually runs extensions is not built
 yet, so an installed extension currently does nothing. The format is settled and

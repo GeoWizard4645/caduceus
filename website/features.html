@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Caduceus — every feature</title>
-<meta name="description" content="Complete list of what Caduceus can do: staff, palette, clipboard, voice, capture, AI, and settings.">
+<meta name="description" content="Every Caduceus capability, grouped and explained: window management, developer tools, clipboard, voice, screen OCR, system control and more.">
 <link rel="icon" href="caduceus-mark.png">
 <script>
 (function () {
@@ -56,24 +56,55 @@
   .sub { margin: 0 auto; max-width: 42ch; color: var(--ink-mute); }
   section { padding: 40px 0; border-top: 1px solid var(--line); }
   h2 { margin: 0 0 20px; font-size: 1.25rem; }
-  .feat-list { list-style: none; padding: 0; margin: 0; }
-  .feat-list > li {
+  /* One collapsible section per group. <details> gives keyboard support,
+     find-in-page expansion and deep links for free — no script involved. */
+  .group {
     background: var(--surface);
     border: 1px solid var(--line);
     border-radius: var(--radius);
-    padding: 18px 20px;
-    margin-bottom: 14px;
+    margin-bottom: 12px;
+    overflow: hidden;
   }
-  .feat-list h3 { margin: 0 0 10px; font-size: 1rem; color: var(--ink-soft); }
-  .feat-list ul { margin: 0; padding-left: 1.15rem; color: var(--ink-mute); font-size: 0.92rem; }
-  .feat-list li { margin: 5px 0; }
-  .planned-list > li {
-    border-style: dashed;
-    opacity: 0.95;
+  .group[data-excluded="true"] { border-style: dashed; background: transparent; }
+  .group > summary {
+    display: flex;
+    gap: 14px;
+    align-items: flex-start;
+    padding: 16px 20px;
+    cursor: pointer;
+    list-style: none;
+  }
+  .group > summary::-webkit-details-marker { display: none; }
+  .group > summary:hover { background: var(--raised); }
+  .group .chev {
+    flex: none;
+    color: var(--ink-faint);
+    transition: transform 0.15s ease;
+    line-height: 1.4;
+  }
+  .group[open] .chev { transform: rotate(90deg); }
+  .group .head { flex: 1; min-width: 0; }
+  .group .head h2 {
+    margin: 0;
+    font-size: 1rem;
+    color: var(--ink);
+    display: inline;
+  }
+  .group .head p {
+    margin: 4px 0 0;
+    font-size: 0.85rem;
+    line-height: 1.5;
+    color: var(--ink-mute);
+  }
+  .group .count {
+    flex: none;
+    font-size: 0.8rem;
+    color: var(--ink-faint);
+    font-variant-numeric: tabular-nums;
   }
   .tag {
     display: inline-block;
-    font-size: 0.65rem;
+    font-size: 0.62rem;
     font-weight: 600;
     letter-spacing: 0.06em;
     text-transform: uppercase;
@@ -81,10 +112,15 @@
     border-radius: 4px;
     margin-left: 8px;
     vertical-align: middle;
-    background: var(--raised);
-    color: var(--ink-faint);
+    background: rgb(var(--accent-rgb, 99 102 241) / 0.15);
+    color: var(--accent);
   }
-  .tag.caduceus { background: rgb(var(--accent-rgb, 99 102 241) / 0.15); color: var(--accent); }
+  .items { list-style: none; margin: 0; padding: 0 20px 8px; border-top: 1px solid var(--line); }
+  .items > li { padding: 12px 0; border-bottom: 1px solid var(--line); }
+  .items > li:last-child { border-bottom: 0; }
+  .items h3 { margin: 0; font-size: 0.92rem; font-weight: 600; color: var(--ink-soft); }
+  .items p { margin: 4px 0 0; font-size: 0.88rem; line-height: 1.55; color: var(--ink-mute); }
+  section { padding: 32px 0; }
   #catalog-loading { text-align: center; color: var(--ink-faint); padding: 48px 0; }
   .filter-row {
     display: flex;
@@ -147,7 +183,7 @@
 
   <header>
     <h1>Everything Caduceus does</h1>
-    <p class="sub">Complete checklist of shipped behaviour plus planned ideas. Offline features work without Hermes, an API key, or an account.</p>
+    <p class="sub">Every capability, grouped and explained. All of it works offline, with no account and no API key, unless a description says otherwise.</p>
     <p class="sub" id="catalog-stats" style="margin-top:12px;font-size:0.85rem"></p>
   </header>
 
@@ -176,57 +212,86 @@
   var stats = document.getElementById("catalog-stats");
   var catalog = null;
 
-  function tagLabel(tag) {
-    if (tag === "raycast") return '<span class="tag">Raycast-class</span>';
-    if (tag === "caduceus") return '<span class="tag caduceus">Caduceus idea</span>';
-    return "";
+  function escapeHtml(text) {
+    return String(text).replace(/[&<>"]/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c];
+    });
   }
 
   function matches(q, text) {
-    return !q || text.toLowerCase().indexOf(q) !== -1;
+    return !q || String(text).toLowerCase().indexOf(q) !== -1;
+  }
+
+  /* Capabilities first, then the runnable commands, then what is deliberately
+     absent — the order the questions actually arrive in. */
+  function allGroups() {
+    var capabilities = catalog.groups || [];
+    var commands = (catalog.commandGroups || []).map(function (group) {
+      var copy = {};
+      for (var key in group) copy[key] = group[key];
+      copy.runnable = true;
+      return copy;
+    });
+    return capabilities
+      .filter(function (g) { return g.id !== "not-built"; })
+      .concat(commands)
+      .concat(capabilities.filter(function (g) { return g.id === "not-built"; }));
   }
 
   function render() {
     if (!catalog || !root) return;
-    var q = (filterEl && filterEl.value || "").trim().toLowerCase();
+    var q = ((filterEl && filterEl.value) || "").trim().toLowerCase();
     var html = "";
+    var shown = 0;
 
-    catalog.shipped.forEach(function (section) {
-      var items = section.items.filter(function (item) {
-        return matches(q, item.name) || matches(q, item.detail || "");
-      });
+    allGroups().forEach(function (group) {
+      /* A group whose own title matches keeps every item: searching "window"
+         should show the window section, not the two entries repeating the word. */
+      var items = matches(q, group.title)
+        ? group.items
+        : group.items.filter(function (item) {
+            return matches(q, item.name) || matches(q, item.detail || "");
+          });
       if (!items.length) return;
-      html += "<section><h2>" + section.title + "</h2><ul class=\"feat-list\">";
+      shown += items.length;
+
+      var excluded = group.id === "not-built";
+      /* Filtering forces every matching group open: a hit inside a collapsed
+         section is the same as no hit at all. */
+      html +=
+        '<details class="group" data-excluded="' + excluded + '"' + (q ? " open" : "") + ">" +
+        "<summary>" +
+        '<span class="chev" aria-hidden="true">&rsaquo;</span>' +
+        '<span class="head"><h2>' + escapeHtml(group.title) + "</h2>" +
+        (group.runnable ? '<span class="tag">Commands</span>' : "") +
+        (group.blurb ? "<p>" + escapeHtml(group.blurb) + "</p>" : "") +
+        "</span>" +
+        '<span class="count">' + items.length + "</span>" +
+        "</summary><ul class=\"items\">";
+
       items.forEach(function (item) {
-        html += "<li><h3>" + item.name + "</h3>";
-        if (item.detail) html += "<ul><li>" + item.detail + "</li></ul>";
-        html += "</li>";
+        html +=
+          "<li><h3>" + escapeHtml(item.name) + "</h3>" +
+          (item.detail ? "<p>" + escapeHtml(item.detail) + "</p>" : "") +
+          "</li>";
       });
-      html += "</ul></section>";
+      html += "</ul></details>";
     });
 
-    var planned = catalog.planned.filter(function (item) {
-      return matches(q, item.name) || matches(q, item.detail);
-    });
-    if (planned.length) {
-      html += "<section><h2>Planned &amp; inspired</h2><p class=\"sub\" style=\"text-align:left;margin:0 0 16px\">Not built yet — roadmap ideas, many familiar from Raycast.</p>";
-      html += "<ul class=\"feat-list planned-list\">";
-      planned.forEach(function (item) {
-        html += "<li><h3>" + item.name + tagLabel(item.tag) + "</h3><ul><li>" + item.detail + "</li></ul></li>";
-      });
-      html += "</ul></section>";
-    }
-
-    root.innerHTML = html;
+    root.innerHTML =
+      html || '<p style="text-align:center;color:var(--ink-faint);padding:48px 0">Nothing matches that.</p>';
+    if (q && stats) stats.textContent = shown + " matching";
   }
 
   fetch("features-catalog.json")
     .then(function (r) { return r.json(); })
     .then(function (data) {
       catalog = data;
-      var shippedCount = data.shipped.reduce(function (n, s) { return n + s.items.length; }, 0);
+      var capabilities = (data.groups || []).filter(function (g) { return g.id !== "not-built"; });
+      var total = capabilities.reduce(function (n, g) { return n + g.items.length; }, 0);
+      var commands = (data.commandGroups || []).reduce(function (n, g) { return n + g.items.length; }, 0);
       if (stats) {
-        stats.textContent = shippedCount + " shipped capabilities · " + data.planned.length + " planned ideas";
+        stats.textContent = total + commands + " capabilities · " + commands + " of them commands you can run";
       }
       if (loading) loading.hidden = true;
       if (root) root.hidden = false;

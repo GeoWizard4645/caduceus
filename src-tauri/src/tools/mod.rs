@@ -6,6 +6,13 @@
 //! cannot work for free does not belong in the app, it belongs on the website's
 //! list of things Caduceus deliberately does not do.
 
+pub mod dev;
+pub mod devenv;
+pub mod files;
+pub mod media;
+pub mod native;
+pub mod net;
+pub mod system;
 pub mod text;
 
 use std::path::PathBuf;

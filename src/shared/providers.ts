@@ -10,6 +10,7 @@
  */
 
 import * as api from "./api";
+import { COMMANDS, matchTrigger, type CommandOutput } from "./commands";
 import { fuzzyMatch, fuzzyScore } from "./fuzzy";
 import type {
   CalcResult,
@@ -36,6 +37,13 @@ export interface ResultItem {
   accessory?: string;
   /** Character indices in `title` to highlight. */
   positions?: number[];
+  /**
+   * Ask before running, showing this sentence. Enter a second time confirms.
+   *
+   * Used for the handful of rows that end the session or delete something: in a
+   * fuzzy list, "Shut down" is one keystroke away from "Sleep".
+   */
+  confirm?: string;
   /** Runs when the row is chosen. Return `false` to keep the palette open. */
   run: () => void | boolean | Promise<void | boolean>;
 }
@@ -60,6 +68,8 @@ export interface PaletteActions {
   setInput: (value: string) => void;
   setMode: (mode: "default" | "clipboard" | "system") => void;
   notify: (message: string, tone?: "info" | "error") => void;
+  /** Show text in the palette's output panel, with a copy button. */
+  showOutput: (output: CommandOutput) => void;
 }
 
 export interface ResultProvider {
@@ -556,8 +566,297 @@ export const captureProvider: ResultProvider = {
   },
 };
 
+
+// ---------------------------------------------------------------------------
+// Built-in commands
+// ---------------------------------------------------------------------------
+
+/**
+ * Every entry in the command registry, ranked alongside apps and shortcuts.
+ *
+ * The registry is deliberately searched with the *same* fuzzy scorer the
+ * shortcut provider uses, over the same three fields (title, description,
+ * keywords). That is what makes "half" find the window snap, "hash" find
+ * SHA-256, and a command sit in one ranked list with everything else rather
+ * than in a submenu you have to know exists.
+ */
+export const commandProvider: ResultProvider = {
+  id: "commands",
+  title: "Commands",
+  search({ query, raw, parsed, actions }) {
+    // A prefixed input has its own destination; "/c open mail" is a task.
+    if (parsed?.rule) return [];
+
+    // `sha256 hello` — the first word names a command, the rest is its input.
+    const triggered = matchTrigger(raw);
+    if (triggered) {
+      const { command, input } = triggered;
+      const row: ResultItem = {
+        id: `command:${command.id}`,
+        title: command.title,
+        subtitle: input
+          ? `${command.detail.split(".")[0]} — on “${truncate(input, 48)}”`
+          : command.argument
+            ? `Type ${command.argument} after ${command.trigger}`
+            : command.detail,
+        icon: command.icon,
+        group: "Commands",
+        // Above everything: naming a command by its trigger word is
+        // unambiguous, and outranking the calculator here is the point.
+        score: 950,
+        accessory: "↵",
+        confirm: command.confirm,
+        run: () => command.run({ input, actions }),
+      };
+      return [row];
+    }
+
+    if (!query) return [];
+
+    return COMMANDS.map((command): ResultItem | null => {
+      const match = fuzzyMatch(query, command.title);
+      const score = fuzzyScore(query, [command.title, command.detail, ...command.keywords]);
+      if (score === null) return null;
+
+      return {
+        id: `command:${command.id}`,
+        title: command.title,
+        subtitle: command.detail,
+        icon: command.icon,
+        group: "Commands",
+        // Just under a shortcut the user configured themselves, and under an
+        // exact app-name match, but above a web search.
+        score: score - 10,
+        positions: match?.positions,
+        accessory: command.trigger ? `${command.trigger} …` : "↵",
+        confirm: command.confirm,
+        run: () => command.run({ input: "", actions }),
+      };
+    }).filter((item): item is ResultItem => item !== null);
+  },
+};
+
+function truncate(text: string, max: number): string {
+  return text.length <= max ? text : `${text.slice(0, max - 1)}…`;
+}
+
+// ---------------------------------------------------------------------------
+// Live lists
+// ---------------------------------------------------------------------------
+
+/**
+ * Sources that have to ask the system what exists before they can answer.
+ *
+ * Each one is gated behind a leading keyword, so the cost — an `lsof`, a
+ * directory scan, a `docker ps` — is only ever paid when the query actually
+ * begins with the word that asks for it. Typing "safari" runs none of them.
+ */
+type LiveKind = "ports" | "repos" | "ssh" | "docker" | "audio" | "files" | "big";
+
+const LIVE_TRIGGERS: { kind: LiveKind; words: string[] }[] = [
+  { kind: "ports", words: ["port", "ports", "listening"] },
+  { kind: "repos", words: ["repo", "repos", "git", "project"] },
+  { kind: "ssh", words: ["ssh", "host"] },
+  { kind: "docker", words: ["docker", "container", "containers"] },
+  { kind: "audio", words: ["audio", "output", "input", "speaker", "mic", "microphone"] },
+  { kind: "files", words: ["file", "files", "find"] },
+  { kind: "big", words: ["large", "big", "biggest", "space"] },
+];
+
+function liveKind(raw: string): { kind: LiveKind; rest: string } | null {
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+  const space = trimmed.search(/\s/);
+  const head = (space === -1 ? trimmed : trimmed.slice(0, space)).toLowerCase();
+  const rest = space === -1 ? "" : trimmed.slice(space + 1).trim();
+
+  const entry = LIVE_TRIGGERS.find((candidate) => candidate.words.includes(head));
+  return entry ? { kind: entry.kind, rest } : null;
+}
+
+export const liveListProvider: ResultProvider = {
+  id: "live",
+  title: "System",
+  async search({ raw, parsed, settings, actions }) {
+    if (parsed?.rule) return [];
+    const matched = liveKind(raw);
+    if (!matched) return [];
+
+    const limit = settings.commandCenter.maxResultsPerSource;
+
+    try {
+      switch (matched.kind) {
+        case "ports":
+          return await portRows(matched.rest, limit, actions);
+        case "repos":
+          return await repoRows(matched.rest, limit, actions);
+        case "ssh":
+          return await sshRows(matched.rest, limit, actions);
+        case "docker":
+          return await dockerRows(matched.rest, limit, actions);
+        case "audio":
+          return await audioRows(matched.rest, limit, actions);
+        case "files":
+          return await fileRows(matched.rest, limit, actions);
+        case "big":
+          return await bigFileRows(limit, actions);
+      }
+    } catch (error) {
+      // A live source that cannot answer must not empty the palette.
+      console.error("live list failed:", error);
+      return [];
+    }
+  },
+};
+
+/** Run a `ToolOutcome` call from a row and report what happened. */
+async function rowOutcome(
+  actions: PaletteActions,
+  call: () => Promise<{ ok: boolean; message: string; copied: string | null }>,
+): Promise<boolean> {
+  try {
+    const result = await call();
+    actions.notify(result.message, result.ok ? "info" : "error");
+    return false;
+  } catch (error) {
+    actions.notify(api.errorMessage(error), "error");
+    return false;
+  }
+}
+
+async function portRows(rest: string, limit: number, actions: PaletteActions) {
+  const wanted = Number.parseInt(rest, 10);
+  const ports = await api.listeningPorts(Number.isFinite(wanted) ? wanted : undefined);
+
+  return ports.slice(0, limit).map((entry, index) => ({
+    id: `port:${entry.port}:${entry.pid}`,
+    title: `Port ${entry.port} — ${entry.process}`,
+    subtitle: `pid ${entry.pid} · ↵ stops it with SIGTERM`,
+    icon: "◈",
+    group: "Ports",
+    score: 700 - index,
+    accessory: "↵ free",
+    confirm: `Stop ${entry.process} (pid ${entry.pid}) on port ${entry.port}?`,
+    run: () => rowOutcome(actions, () => api.freePort(entry.port)),
+  }));
+}
+
+async function repoRows(rest: string, limit: number, actions: PaletteActions) {
+  const repos = await api.gitRepos(80);
+  const filtered = rest
+    ? repos.filter((repo) => fuzzyMatch(rest, repo.name) !== null)
+    : repos;
+
+  return filtered.slice(0, limit).map((repo, index) => ({
+    id: `repo:${repo.path}`,
+    title: repo.name,
+    subtitle: `${repo.branch} · ${repo.path.replace(/^\/Users\/[^/]+/, "~")}`,
+    icon: "⑂",
+    group: "Repositories",
+    score: 700 - index,
+    positions: rest ? (fuzzyMatch(rest, repo.name)?.positions ?? undefined) : undefined,
+    accessory: "↵ terminal",
+    run: () => rowOutcome(actions, () => api.openPathInTerminal(repo.path)),
+  }));
+}
+
+async function sshRows(rest: string, limit: number, actions: PaletteActions) {
+  const hosts = await api.sshHosts();
+  const filtered = rest ? hosts.filter((host) => fuzzyMatch(rest, host.alias) !== null) : hosts;
+
+  return filtered.slice(0, limit).map((host, index) => ({
+    id: `ssh:${host.alias}`,
+    title: host.alias,
+    subtitle: host.user ? `${host.user}@${host.hostname}` : host.hostname,
+    icon: "⌁",
+    group: "SSH hosts",
+    score: 700 - index,
+    positions: rest ? (fuzzyMatch(rest, host.alias)?.positions ?? undefined) : undefined,
+    accessory: "↵ connect",
+    run: () => rowOutcome(actions, () => api.sshConnect(host.alias)),
+  }));
+}
+
+async function dockerRows(rest: string, limit: number, actions: PaletteActions) {
+  const containers = await api.dockerContainers();
+  const filtered = rest
+    ? containers.filter((container) => fuzzyMatch(rest, container.name) !== null)
+    : containers;
+
+  return filtered.slice(0, limit).map((container, index) => ({
+    id: `docker:${container.id}`,
+    title: container.name,
+    subtitle: `${container.image} · ${container.status}`,
+    icon: container.running ? "◉" : "◌",
+    group: "Containers",
+    score: 700 - index,
+    accessory: container.running ? "↵ stop" : "↵ start",
+    run: () =>
+      rowOutcome(actions, () =>
+        api.dockerAction(container.id, container.running ? "stop" : "start"),
+      ),
+  }));
+}
+
+async function audioRows(rest: string, limit: number, actions: PaletteActions) {
+  const devices = await api.audioDevices();
+  // "mic"/"input" asks about the input side; everything else means output.
+  const wantsInput = /^(in|input|mic|microphone)/i.test(rest) || false;
+  const relevant = devices.filter((device) => (wantsInput ? device.isInput : device.isOutput));
+
+  return relevant.slice(0, limit).map((device, index) => {
+    const current = wantsInput ? device.isDefaultInput : device.isDefaultOutput;
+    return {
+      id: `audio:${device.uid}`,
+      title: device.name,
+      subtitle: current
+        ? `Current ${wantsInput ? "microphone" : "sound output"}`
+        : `Make this the ${wantsInput ? "microphone" : "sound output"}`,
+      icon: wantsInput ? "◍" : "◐",
+      group: wantsInput ? "Microphones" : "Sound output",
+      score: (current ? 720 : 700) - index,
+      accessory: current ? "✓" : "↵",
+      run: () => rowOutcome(actions, () => api.setAudioDevice(device.uid, wantsInput)),
+    };
+  });
+}
+
+async function fileRows(rest: string, limit: number, actions: PaletteActions) {
+  if (!rest) return [];
+  const hits = await api.searchFiles(rest, limit);
+
+  return hits.map((hit, index) => ({
+    id: `file:${hit.path}`,
+    title: hit.name,
+    subtitle: hit.path.replace(/^\/Users\/[^/]+/, "~"),
+    icon: "▤",
+    group: "Files",
+    score: 700 - index,
+    positions: fuzzyMatch(rest, hit.name)?.positions ?? undefined,
+    accessory: "↵ reveal",
+    run: () => rowOutcome(actions, () => api.revealPath(hit.path)),
+  }));
+}
+
+async function bigFileRows(limit: number, actions: PaletteActions) {
+  const files = await api.largestFiles(undefined, limit);
+
+  return files.map((file, index) => ({
+    id: `big:${file.path}`,
+    title: `${file.size} — ${file.name}`,
+    subtitle: file.path.replace(/^\/Users\/[^/]+/, "~"),
+    icon: "▣",
+    group: "Largest files",
+    score: 700 - index,
+    accessory: "↵ reveal",
+    run: () => rowOutcome(actions, () => api.revealPath(file.path)),
+  }));
+}
+
 export const defaultProviders: ResultProvider[] = [
   calculatorProvider,
+  commandProvider,
+  liveListProvider,
   shortcutProvider,
   appLauncherProvider,
   captureProvider,

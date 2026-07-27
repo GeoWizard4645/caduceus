@@ -63,7 +63,7 @@ Output: `src-tauri/target/x86_64-apple-darwin/release/bundle/macos/Caduceus.app`
 Run from the repo root (adjust `VERSION` if needed):
 
 ```bash
-VERSION=1.0.2   # match package.json
+VERSION=2.0.0   # match package.json
 
 ROOT="src-tauri/target"
 APP_A="$ROOT/release/bundle/macos/Caduceus.app"
@@ -93,7 +93,9 @@ ls -lh "$DMG"
 
 **Asset name:** `Caduceus_<version>_universal.dmg` (e.g. `Caduceus_1.0.2_universal.dmg`). The install script prefers filenames containing `universal`.
 
-**Note:** Swift speech helpers under `Contents/Resources/bin/` are built for the host arch only; only the main `Caduceus` binary is fat. That matches how prior releases were assembled.
+**Note:** the Swift helpers under `Contents/Resources/bin/` — `caduceus-stt`, `caduceus-stt-live` and `caduceus-native` — are built for the host arch only; only the main `Caduceus` binary is fat. That matches how prior releases were assembled.
+
+`caduceus-native` (Vision OCR and CoreAudio device switching) is compiled by `build.rs` like the speech helpers, and is signed with its own identifier because it needs no privacy grant of its own. If `swiftc` is unavailable at build time, the build still succeeds and those two features report that the helper is missing rather than failing silently.
 
 ### Shortcut: single-arch DMG (not for public release)
 
@@ -103,10 +105,10 @@ If `npm run bundle` fails once on the DMG step, retry `npm run tauri -- build --
 
 ## 4. Create the GitHub release
 
-Tag format: **`v` + semver** (e.g. `v1.0.2`), pointing at the commit that contains the version bump.
+Tag format: **`v` + semver** (e.g. `v2.0.0`), pointing at the commit that contains the version bump.
 
 ```bash
-VERSION=1.0.2
+VERSION=2.0.0
 TAG="v${VERSION}"
 DMG="src-tauri/target/release/bundle/dmg/Caduceus_${VERSION}_universal.dmg"
 

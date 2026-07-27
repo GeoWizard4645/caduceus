@@ -548,3 +548,201 @@ export interface InstallReport {
   message: string;
   extension: Extension | null;
 }
+
+// ---------------------------------------------------------------------------
+// Window management
+// ---------------------------------------------------------------------------
+
+/** Every arrangement `window_action` accepts. Mirrors `window::manage::Verb`. */
+export type WindowVerb =
+  | "left_half"
+  | "right_half"
+  | "top_half"
+  | "bottom_half"
+  | "top_left_quarter"
+  | "top_right_quarter"
+  | "bottom_left_quarter"
+  | "bottom_right_quarter"
+  | "first_third"
+  | "center_third"
+  | "last_third"
+  | "first_two_thirds"
+  | "last_two_thirds"
+  | "maximize"
+  | "almost_maximize"
+  | "reasonable_size"
+  | "center"
+  | "larger"
+  | "smaller"
+  | "next_display"
+  | "previous_display"
+  | "toggle_full_screen";
+
+export interface WindowOutcome {
+  ok: boolean;
+  message: string;
+  /** Set when the only thing missing is the Accessibility grant. */
+  needsPermission: boolean;
+}
+
+// ---------------------------------------------------------------------------
+// Developer toolbox
+// ---------------------------------------------------------------------------
+
+/** Mirrors `tools::dev::ToolId`. */
+export type ToolId =
+  | "uuid"
+  | "uuid_batch"
+  | "ulid"
+  | "nano_id"
+  | "password"
+  | "base64_encode"
+  | "base64_decode"
+  | "base64_url_encode"
+  | "base64_url_decode"
+  | "hex_encode"
+  | "hex_decode"
+  | "url_encode"
+  | "url_decode"
+  | "html_encode"
+  | "html_decode"
+  | "jwt_decode"
+  | "json_format"
+  | "json_minify"
+  | "json_escape"
+  | "timestamp_now"
+  | "timestamp_convert"
+  | "lorem"
+  | "slugify"
+  | "text_stats"
+  | "sort_lines"
+  | "sort_lines_descending"
+  | "dedupe_lines"
+  | "reverse_lines"
+  | "shuffle_lines"
+  | "number_lines"
+  | "join_lines"
+  | "trim_lines"
+  | "count_occurrences"
+  | "color_convert"
+  | "number_base"
+  | "random_number"
+  | "md5"
+  | "sha1"
+  | "sha256"
+  | "sha512";
+
+export interface ToolResult {
+  ok: boolean;
+  title: string;
+  output: string;
+  message: string;
+  /** Whether the palette should copy `output` without being asked. */
+  autoCopy: boolean;
+}
+
+/** The shape every one-shot utility returns. Mirrors `tools::ToolOutcome`. */
+export interface ToolOutcome {
+  ok: boolean;
+  message: string;
+  /** Text the caller should put on the clipboard, if any. */
+  copied: string | null;
+}
+
+// ---------------------------------------------------------------------------
+// System controls
+// ---------------------------------------------------------------------------
+
+/** Mirrors `tools::system::SystemAction`. */
+export type SystemAction =
+  | "toggle_dark_mode"
+  | "toggle_stage_manager"
+  | "toggle_hidden_files"
+  | "toggle_desktop_icons"
+  | "restart_finder"
+  | "restart_dock"
+  | "restart_menu_bar"
+  | "empty_trash"
+  | "lock_screen"
+  | "sleep_display"
+  | "sleep_computer"
+  | "start_screen_saver"
+  | "log_out"
+  | "restart_computer"
+  | "shut_down"
+  | "volume_up"
+  | "volume_down"
+  | "toggle_mute"
+  | "brightness_up"
+  | "brightness_down"
+  | "toggle_wifi";
+
+export type MediaAction = "play_pause" | "next" | "previous" | "now_playing";
+
+export interface PermissionReport {
+  accessibility: boolean;
+  screenRecording: boolean;
+  nativeHelper: boolean;
+}
+
+export interface AudioDevice {
+  uid: string;
+  name: string;
+  isInput: boolean;
+  isOutput: boolean;
+  isDefaultInput: boolean;
+  isDefaultOutput: boolean;
+}
+
+// ---------------------------------------------------------------------------
+// Developer environment
+// ---------------------------------------------------------------------------
+
+export interface PortUser {
+  port: number;
+  pid: number;
+  process: string;
+}
+
+export interface GitRepo {
+  name: string;
+  path: string;
+  branch: string;
+  dirty: number | null;
+}
+
+export interface SshHost {
+  alias: string;
+  hostname: string;
+  user: string;
+}
+
+export interface Container {
+  id: string;
+  name: string;
+  image: string;
+  status: string;
+  running: boolean;
+}
+
+// ---------------------------------------------------------------------------
+// Files
+// ---------------------------------------------------------------------------
+
+export interface BigFile {
+  path: string;
+  name: string;
+  bytes: number;
+  size: string;
+}
+
+export interface Leftover {
+  path: string;
+  bytes: number;
+  size: string;
+}
+
+export interface FileHit {
+  path: string;
+  name: string;
+}
