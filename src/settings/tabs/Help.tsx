@@ -25,6 +25,7 @@ import {
 } from "@/shared/docsUrls";
 import { commandCenterKey, hotkeyLabel, toggleStaffKey } from "@/shared/hotkeyLabel";
 import type { RuntimeInfo } from "@/shared/types";
+import { countShippedFeatures } from "@/shared/featuresCatalog";
 import { Button, Callout, Kbd, Section, cx } from "@/shared/ui";
 
 import type { Draft } from "../useDraft";
@@ -52,6 +53,27 @@ export function HelpTab({
 
   return (
     <>
+      <Section
+        title="Feature checklist"
+        description="Every shipped capability and the planned roadmap — same list as on the website."
+      >
+        <div className="rounded-lg border border-line bg-base/20 px-3.5 py-3">
+          <p className="text-[13px] font-medium text-ink">All features</p>
+          <p className="mt-1 text-2xs leading-relaxed text-ink-mute">
+            {countShippedFeatures()} things Caduceus does today, plus 30+ planned ideas (Raycast-class
+            and Caduceus-only). Searchable, works offline.
+          </p>
+          <Button
+            size="sm"
+            tone="primary"
+            className="mt-3"
+            onClick={() => onNavigate("features")}
+          >
+            Open Features tab
+          </Button>
+        </div>
+      </Section>
+
       <Section
         title="Walkthroughs"
         description="Two of them: a two-minute tour on the staff itself, and a full reference below."

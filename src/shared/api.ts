@@ -23,6 +23,8 @@ import type {
   ExecOutcome,
   ChatMessage,
   ChatReply,
+  Extension,
+  InstallReport,
   Conversation,
   ParsedInput,
   RoutedText,
@@ -306,3 +308,20 @@ export const openChatWindow = (conversationId: number | null = null) =>
 /** Append text to Apple Notes as a new note. */
 export const addToNotes = (body: string, title: string | null = null) =>
   invoke<ExecOutcome>("add_to_notes", { body, title });
+
+// --- extensions --------------------------------------------------------------
+
+/** Read a candidate file's header without installing or running it. */
+export const inspectExtension = (path: string) =>
+  invoke<Extension>("inspect_extension", { path });
+
+export const installExtension = (path: string) =>
+  invoke<InstallReport>("install_extension", { path });
+
+export const listExtensions = () => invoke<Extension[]>("list_extensions");
+
+export const removeExtension = (id: string) => invoke<void>("remove_extension", { id });
+
+export const openExtensionsFolder = () => invoke<void>("open_extensions_folder");
+
+export const extensionPermissions = () => invoke<string[]>("extension_permissions");

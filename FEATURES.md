@@ -1,5 +1,10 @@
 # Feature requests: what is free, what is not, what is impossible
 
+The **complete shipped list** and **planned roadmap** live in
+[`website/features-catalog.json`](website/features-catalog.json) — rendered on
+[All features](https://caduceus.vivaanshahani.com/features) and in the app under
+**Settings → Features**.
+
 The rule for Caduceus is that a built-in feature must work for free, with no
 account, no API key and no subscription. This is the triage of the requested
 list against that rule. Anything in the "costs money" or "cannot be done"

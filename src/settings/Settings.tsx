@@ -17,6 +17,8 @@ import { AppearanceTab } from "./tabs/Appearance";
 import { AiTab } from "./tabs/Ai";
 import { ClipboardTab } from "./tabs/Clipboard";
 import { CommandCenterTab } from "./tabs/CommandCenterTab";
+import { ExtensionsTab } from "./tabs/Extensions";
+import { FeaturesCatalogTab } from "./tabs/FeaturesCatalog";
 import { GeneralTab } from "./tabs/General";
 import { HelpTab } from "./tabs/Help";
 import { LearnTab, type TutorialId } from "./tabs/Learn";
@@ -32,6 +34,8 @@ const TABS = [
   { id: "ai", label: "AI", icon: "✳" },
   { id: "clipboard", label: "Clipboard", icon: "❐" },
   { id: "appearance", label: "Appearance", icon: "◑" },
+  { id: "extensions", label: "Extensions", icon: "⊞" },
+  { id: "features", label: "Features", icon: "☰" },
   { id: "learn", label: "Learn", icon: "◆" },
   { id: "help", label: "Help", icon: "?" },
 ] as const;
@@ -146,6 +150,8 @@ export function Settings() {
           {tab === "ai" && <AiTab {...shared} onReloadInfo={info.reload} />}
           {tab === "clipboard" && <ClipboardTab {...shared} onReloadInfo={info.reload} />}
           {tab === "appearance" && <AppearanceTab draft={draft} />}
+          {tab === "extensions" && <ExtensionsTab />}
+          {tab === "features" && <FeaturesCatalogTab />}
           {tab === "learn" && (
             <LearnTab draft={draft} focus={learnFocus} onNavigate={goToTab} />
           )}

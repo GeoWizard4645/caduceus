@@ -945,30 +945,50 @@
 <section id="extensions">
   <div class="wrap">
     <h2>Write your own extension</h2>
-    <p class="sub">A folder, a manifest, and a script. No build step.</p>
+    <p class="sub">One file. Drag it in. That is the whole install.</p>
 
     <p>
-      An extension adds commands to the Command Center. It declares what it is allowed to
-      touch up front, so you can read what it can do before you run it — there is no
-      ambient filesystem, no shell, and no network unless the manifest asks for it.
+      An extension is a single JavaScript file. No folder to lay out, no separate manifest,
+      no build step, nothing to <code>npm install</code>. Its metadata lives in a header
+      comment at the top of the same file, so what an extension is and what it claims it
+      wants can never drift apart.
     </p>
 
-    <pre>my-extension/
-  caduceus.json      # id, commands, permissions
-  main.js            # export one function per command
-  icon.png           # optional</pre>
+    <pre>/**
+ * @caduceus 1
+ * name: Word Count
+ * description: Count the words on your clipboard
+ * permissions: clipboard
+ */
+export default async function (input, ctx) {
+  const text = await ctx.clipboard.read();
+  return `${text.trim().split(/\s+/).length} words`;
+}</pre>
 
     <p>
-      Drop the folder in
-      <code>~/Library/Application&nbsp;Support/com.caduceus.desktop/extensions/</code>
-      and it shows up in the palette. No store, no signing, no review.
+      Caduceus reads that header <strong>without running your code</strong>, so you can see an
+      extension's name and every permission it asks for before a line of it has executed.
+      Permissions are a closed set — <code>clipboard</code>, <code>network</code>,
+      <code>selection</code>, <code>notifications</code> — and there is no filesystem, no
+      shell and no ambient <code>fetch</code> to reach around them.
+    </p>
+
+    <h3>Don't want to write it?</h3>
+    <p>
+      Settings → Extensions has a prompt starter. Type one sentence about what the extension
+      should do, hit <strong>Copy prompt</strong>, and paste it into any assistant. The prompt
+      already carries the header format, the full <code>ctx</code> API, the permission list and
+      the rules — including that it has to work for free — so the reply is a finished file.
+      Save it as <code>.js</code> and drag it in.
     </p>
 
     <div class="note">
-      <strong>Not shipped yet.</strong> The format is settled and written down in
-      <a href="https://github.com/GeoWizard4645/caduceus/blob/main/EXTENSIONS.md">EXTENSIONS.md</a>,
-      but the extension host does not load anything in 1.1.0. It is published now so the
-      format can be argued with before code depends on it.
+      <strong>Installing works; running does not yet.</strong> Dropping a file, reading its
+      header, checking its permissions, listing and removing all ship today. The sandbox that
+      executes extensions is still to come, so an installed extension does nothing for now.
+      The format is published so you can write against it — and argue with it — before code
+      depends on it. Full reference:
+      <a href="https://github.com/GeoWizard4645/caduceus/blob/main/EXTENSIONS.md">EXTENSIONS.md</a>.
     </div>
   </div>
 </section>

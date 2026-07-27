@@ -67,6 +67,41 @@
   .feat-list h3 { margin: 0 0 10px; font-size: 1rem; color: var(--ink-soft); }
   .feat-list ul { margin: 0; padding-left: 1.15rem; color: var(--ink-mute); font-size: 0.92rem; }
   .feat-list li { margin: 5px 0; }
+  .planned-list > li {
+    border-style: dashed;
+    opacity: 0.95;
+  }
+  .tag {
+    display: inline-block;
+    font-size: 0.65rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 2px 6px;
+    border-radius: 4px;
+    margin-left: 8px;
+    vertical-align: middle;
+    background: var(--raised);
+    color: var(--ink-faint);
+  }
+  .tag.caduceus { background: rgb(var(--accent-rgb, 99 102 241) / 0.15); color: var(--accent); }
+  #catalog-loading { text-align: center; color: var(--ink-faint); padding: 48px 0; }
+  .filter-row {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 24px;
+  }
+  .filter-row input {
+    flex: 1;
+    min-width: 200px;
+    padding: 10px 12px;
+    border-radius: 10px;
+    border: 1px solid var(--line);
+    background: var(--base);
+    color: var(--ink);
+    font: inherit;
+  }
   footer {
     border-top: 1px solid var(--line);
     padding: 32px 0 48px;
@@ -112,227 +147,16 @@
 
   <header>
     <h1>Everything Caduceus does</h1>
-    <p class="sub">A complete checklist of built-in behaviour. All of the offline features work without Hermes, an API key, or an account.</p>
+    <p class="sub">Complete checklist of shipped behaviour plus planned ideas. Offline features work without Hermes, an API key, or an account.</p>
+    <p class="sub" id="catalog-stats" style="margin-top:12px;font-size:0.85rem"></p>
   </header>
 
-  <section>
-    <h2>Menu bar &amp; windows</h2>
-    <ul class="feat-list">
-      <li>
-        <h3>Menu bar presence</h3>
-        <ul>
-          <li>Lives in the menu bar (no Dock icon)</li>
-          <li>Open from Spotlight or Applications like any app — search <strong>Caduceus</strong></li>
-          <li>Show or hide the floating staff from the tray</li>
-          <li>Quit, open Settings, open Command Center from the tray</li>
-          <li>Optional launch at login</li>
-        </ul>
-      </li>
-      <li>
-        <h3>Settings window</h3>
-        <ul>
-          <li>General, Appearance, Shortcuts, Command Center, Clipboard, Voice, AI, Learn tabs</li>
-          <li>Live preview of staff size, custom mark, colours, and idle opacity</li>
-          <li>Validate and rebind global hotkeys without restart</li>
-          <li>Reset to factory defaults</li>
-        </ul>
-      </li>
-    </ul>
-  </section>
+  <div class="filter-row wrap">
+    <input type="search" id="feature-filter" placeholder="Filter features…" aria-label="Filter features">
+  </div>
 
-  <section>
-    <h2>The floating staff</h2>
-    <ul class="feat-list">
-      <li>
-        <h3>Interaction</h3>
-        <ul>
-          <li>Always-on-top pixel Caduceus staff on a click-through window</li>
-          <li>Stays visible over other apps’ full-screen mode (MacParakeet-style)</li>
-          <li>Resizable staff (28–160 px) and optional custom pixel-art upload</li>
-          <li>Hover to fan out up to six shortcut icons (configurable order)</li>
-          <li>Click the staff to open the Command Center</li>
-          <li>Right-click for Settings</li>
-          <li>Drag to reposition; position persists across restarts</li>
-          <li>Dock to left or right edge by default; custom drag position overrides</li>
-          <li><kbd>F12</kbd> toggle show / hide</li>
-          <li>Adaptive cursor polling (saves CPU when the pointer is far away)</li>
-          <li>Configurable expand delay and auto-collapse timing</li>
-        </ul>
-      </li>
-      <li>
-        <h3>Shortcut icons on the staff</h3>
-        <ul>
-          <li>User-defined shortcuts (URLs, apps, shell, AppleScript, clipboard view)</li>
-          <li>Brand icons or uploaded PNG/JPEG/WebP/GIF per shortcut</li>
-          <li>Instant collapse with in-place fade after a shortcut click</li>
-        </ul>
-      </li>
-    </ul>
-  </section>
-
-  <section>
-    <h2>Command Center (palette)</h2>
-    <ul class="feat-list">
-      <li>
-        <h3>Opening &amp; navigation</h3>
-        <ul>
-          <li><kbd>Alt+Space</kbd> from anywhere (rebindable)</li>
-          <li>Keyboard: arrows, Enter to run, Esc to close</li>
-          <li>Click-away dismisses (like Spotlight)</li>
-          <li>Prefix badge shows which route Enter will take</li>
-        </ul>
-      </li>
-      <li>
-        <h3>Built-in result sources</h3>
-        <ul>
-          <li>Calculator — arithmetic, precedence, %, functions, constants; Enter copies</li>
-          <li>App launcher — fuzzy search over every installed application</li>
-          <li>Shortcuts — your configured actions from Settings</li>
-          <li>Capture — screenshot display; open Screenshot.app to record screen</li>
-          <li>Web search fallback when nothing else matches (engine URL is configurable)</li>
-          <li>Clipboard history rows when enabled</li>
-          <li>Prefix hints when the input is empty</li>
-        </ul>
-      </li>
-      <li>
-        <h3>Prefix routing (examples)</h3>
-        <ul>
-          <li>Plain text → web search URL template</li>
-          <li><code>/</code> → primary AI (Hermes) chat in-window</li>
-          <li><code>/c</code> → computer-use agent session (Hermes)</li>
-          <li><code>/v</code> → clipboard search mode</li>
-          <li>Custom prefix rules: URL templates, commands, AppleScript, etc.</li>
-        </ul>
-      </li>
-    </ul>
-  </section>
-
-  <section>
-    <h2>Clipboard history</h2>
-    <ul class="feat-list">
-      <li>
-        <h3>Capture &amp; storage</h3>
-        <ul>
-          <li>Watches the system clipboard (text, images, file paths)</li>
-          <li>Skips concealed copies (password managers)</li>
-          <li>Per-app exclusion list</li>
-          <li>SQLite history with configurable max items and poll interval</li>
-          <li>Optional ChaCha20-Poly1305 encryption at rest (key in Keychain)</li>
-        </ul>
-      </li>
-      <li>
-        <h3>Using history</h3>
-        <ul>
-          <li>Search, pin, delete, clear (optionally keep pinned)</li>
-          <li>Copy any entry back to the clipboard</li>
-          <li>Image thumbnails and preview</li>
-          <li>Dedicated clipboard mode in the Command Center</li>
-        </ul>
-      </li>
-    </ul>
-  </section>
-
-  <section>
-    <h2>Voice &amp; dictation</h2>
-    <ul class="feat-list">
-      <li>
-        <h3>Dictation</h3>
-        <ul>
-          <li><kbd>F1</kbd> or <strong>double-click the staff</strong> — tap again to stop (no dictation button in the UI)</li>
-          <li><kbd>Alt+Shift+V</kbd> hold-to-talk alternative (rebindable)</li>
-          <li>Microphone via <strong>AVAudioEngine</strong> at the macOS audio layer; standard Microphone privacy prompt on first use</li>
-          <li>On-device <strong>Speech Recognition</strong> for live text in the Command Center</li>
-          <li><strong>ScreenCaptureKit</strong> for system audio on screen recordings (palette capture), not during dictation</li>
-          <li>No wake word — mic is only active while you are dictating</li>
-          <li>Keyword routing after transcription (search, AI, computer use, clipboard, insert-only)</li>
-          <li>Optional auto-submit vs. wait for Enter</li>
-          <li>Maximum recording length safety cap</li>
-        </ul>
-      </li>
-    </ul>
-  </section>
-
-  <section>
-    <h2>Screenshots &amp; screen recording</h2>
-    <ul class="feat-list">
-      <li>
-        <h3>From the Command Center</h3>
-        <ul>
-          <li>Type “screenshot” or “capture” — full display to clipboard + Downloads PNG</li>
-          <li>Record options open Apple’s Screenshot app (same flow as macOS)</li>
-          <li>Choose mic on/off and system audio via Screenshot toolbar / Options</li>
-          <li>Requires Screen Recording permission for captures</li>
-        </ul>
-      </li>
-    </ul>
-  </section>
-
-  <section>
-    <h2>Shortcuts &amp; automation</h2>
-    <ul class="feat-list">
-      <li>
-        <h3>Shortcut kinds</h3>
-        <ul>
-          <li>Open URL (with <code>{query}</code> substitution and optional Chrome profile)</li>
-          <li>Launch app (bundle id or path)</li>
-          <li>Run shell command (quoted <code>{query}</code>, <code>$CADUCEUS_QUERY</code> env)</li>
-          <li>Run AppleScript (macOS)</li>
-          <li>Open clipboard history view</li>
-        </ul>
-      </li>
-      <li>
-        <h3>Defaults include</h3>
-        <ul>
-          <li>Gemini, Gmail, Chrome, Claude Desktop, Clipboard — all editable</li>
-        </ul>
-      </li>
-    </ul>
-  </section>
-
-  <section>
-    <h2>AI &amp; agents (optional Hermes)</h2>
-    <ul class="feat-list">
-      <li>
-        <h3>Hermes Agent integration</h3>
-        <ul>
-          <li>Primary chat via Hermes CLI</li>
-          <li>Computer-use tasks with on-screen agent panel</li>
-          <li>Install / status checks and setup commands in Settings</li>
-          <li>OpenAI-compatible backend for local models or proxy</li>
-        </ul>
-      </li>
-      <li>
-        <h3>What Caduceus does not do itself</h3>
-        <ul>
-          <li>No bundled LLM — Hermes (or your HTTP backend) provides models</li>
-          <li>Computer-use screen control is delegated to Hermes, not an in-app loop</li>
-        </ul>
-      </li>
-    </ul>
-  </section>
-
-  <section>
-    <h2>Appearance &amp; privacy</h2>
-    <ul class="feat-list">
-      <li>
-        <h3>Look &amp; feel</h3>
-        <ul>
-          <li>Accent colour, light/dark/system theme</li>
-          <li>Staff size, pop-out radius, icon size, idle opacity, pulse animation</li>
-          <li>Glass-style windows with vibrancy on macOS</li>
-        </ul>
-      </li>
-      <li>
-        <h3>Permissions (macOS)</h3>
-        <ul>
-          <li>Microphone — push-to-talk only</li>
-          <li>Speech Recognition — on-device transcription</li>
-          <li>Screen Recording — screenshots and Screenshot.app recording</li>
-          <li>Apple Events — only for user-defined AppleScript shortcuts</li>
-        </ul>
-      </li>
-    </ul>
-  </section>
+  <div id="catalog-loading">Loading feature list…</div>
+  <div id="catalog-root" hidden></div>
 
   <footer>
     <p>
@@ -344,6 +168,76 @@
   </footer>
 </div>
 
+<script>
+(function () {
+  var filterEl = document.getElementById("feature-filter");
+  var root = document.getElementById("catalog-root");
+  var loading = document.getElementById("catalog-loading");
+  var stats = document.getElementById("catalog-stats");
+  var catalog = null;
+
+  function tagLabel(tag) {
+    if (tag === "raycast") return '<span class="tag">Raycast-class</span>';
+    if (tag === "caduceus") return '<span class="tag caduceus">Caduceus idea</span>';
+    return "";
+  }
+
+  function matches(q, text) {
+    return !q || text.toLowerCase().indexOf(q) !== -1;
+  }
+
+  function render() {
+    if (!catalog || !root) return;
+    var q = (filterEl && filterEl.value || "").trim().toLowerCase();
+    var html = "";
+
+    catalog.shipped.forEach(function (section) {
+      var items = section.items.filter(function (item) {
+        return matches(q, item.name) || matches(q, item.detail || "");
+      });
+      if (!items.length) return;
+      html += "<section><h2>" + section.title + "</h2><ul class=\"feat-list\">";
+      items.forEach(function (item) {
+        html += "<li><h3>" + item.name + "</h3>";
+        if (item.detail) html += "<ul><li>" + item.detail + "</li></ul>";
+        html += "</li>";
+      });
+      html += "</ul></section>";
+    });
+
+    var planned = catalog.planned.filter(function (item) {
+      return matches(q, item.name) || matches(q, item.detail);
+    });
+    if (planned.length) {
+      html += "<section><h2>Planned &amp; inspired</h2><p class=\"sub\" style=\"text-align:left;margin:0 0 16px\">Not built yet — roadmap ideas, many familiar from Raycast.</p>";
+      html += "<ul class=\"feat-list planned-list\">";
+      planned.forEach(function (item) {
+        html += "<li><h3>" + item.name + tagLabel(item.tag) + "</h3><ul><li>" + item.detail + "</li></ul></li>";
+      });
+      html += "</ul></section>";
+    }
+
+    root.innerHTML = html;
+  }
+
+  fetch("features-catalog.json")
+    .then(function (r) { return r.json(); })
+    .then(function (data) {
+      catalog = data;
+      var shippedCount = data.shipped.reduce(function (n, s) { return n + s.items.length; }, 0);
+      if (stats) {
+        stats.textContent = shippedCount + " shipped capabilities · " + data.planned.length + " planned ideas";
+      }
+      if (loading) loading.hidden = true;
+      if (root) root.hidden = false;
+      render();
+      if (filterEl) filterEl.addEventListener("input", render);
+    })
+    .catch(function () {
+      if (loading) loading.textContent = "Could not load the feature catalog.";
+    });
+})();
+</script>
 <script src="theme.js"></script>
 </body>
 </html>

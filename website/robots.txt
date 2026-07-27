@@ -1,0 +1,5 @@
+# https://caduceus.vivaanshahani.com/
+# LLM-oriented summary: https://caduceus.vivaanshahani.com/llms.txt
+
+User-agent: *
+Allow: /

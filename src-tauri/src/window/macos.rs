@@ -10,6 +10,9 @@
 //!    full-screen app occupies, so the window follows into the Space and is then
 //!    drawn under it.
 
+use std::sync::mpsc;
+use std::time::Duration;
+
 use objc2_app_kit::{NSWindow, NSWindowCollectionBehavior, NSWindowLevel};
 use tauri::{Runtime, WebviewWindow};
 
@@ -21,37 +24,49 @@ use tauri::{Runtime, WebviewWindow};
 /// any business above a password prompt.
 const OVERLAY_WINDOW_LEVEL: NSWindowLevel = 101;
 
+/// How long to wait for the main thread to finish window configuration.
+const MAIN_THREAD_TIMEOUT: Duration = Duration::from_secs(5);
+
 /// Make a window follow the user into full-screen Spaces and draw above them.
 ///
-/// The `NSWindow` calls are marshalled onto the main thread. AppKit permits
-/// window mutation from nowhere else, and every caller here arrives on a Tauri
-/// command handler, which runs on a worker thread — `setLevel:` from there trips
-/// an assertion inside `WindowManagement` and takes the process down with
-/// `EXC_BREAKPOINT`. Tauri's own `set_always_on_top` and
-/// `set_visible_on_all_workspaces` already hop threads internally, which is why
-/// only the raw calls need this.
+/// Every AppKit and Tauri window call here runs on the main thread. Tauri
+/// command handlers run on Tokio worker threads; on recent macOS, touching
+/// window level from a worker trips `Must only be used from the main thread`
+/// inside WindowManagement and kills the process with `EXC_BREAKPOINT`.
 fn configure_overlay<R: Runtime>(window: &WebviewWindow<R>, level: NSWindowLevel) {
-    let _ = window.set_visible_on_all_workspaces(true);
-    let _ = window.set_always_on_top(true);
-
     let handle = window.clone();
-    let _ = window.run_on_main_thread(move || {
-        let Ok(raw) = handle.ns_window() else {
-            return;
-        };
-        unsafe {
-            let ns_window: &NSWindow = &*raw.cast();
-            // `Stationary` keeps it put during Exposé instead of being swept
-            // aside with ordinary windows. `IgnoresCycle` keeps it out of Cmd-`
-            // rotation, which it has no business appearing in.
-            let behavior = NSWindowCollectionBehavior::CanJoinAllSpaces
-                | NSWindowCollectionBehavior::FullScreenAuxiliary
-                | NSWindowCollectionBehavior::Stationary
-                | NSWindowCollectionBehavior::IgnoresCycle;
-            ns_window.setCollectionBehavior(behavior);
-            ns_window.setLevel(level);
+    let (done_tx, done_rx) = mpsc::sync_channel(1);
+
+    let scheduled = window.run_on_main_thread(move || {
+        let _ = handle.set_visible_on_all_workspaces(true);
+        let _ = handle.set_always_on_top(true);
+
+        if let Ok(raw) = handle.ns_window() {
+            unsafe {
+                let ns_window: &NSWindow = &*raw.cast();
+                // `Stationary` keeps it put during Exposé instead of being swept
+                // aside with ordinary windows. `IgnoresCycle` keeps it out of Cmd-`
+                // rotation, which it has no business appearing in.
+                let behavior = NSWindowCollectionBehavior::CanJoinAllSpaces
+                    | NSWindowCollectionBehavior::FullScreenAuxiliary
+                    | NSWindowCollectionBehavior::Stationary
+                    | NSWindowCollectionBehavior::IgnoresCycle;
+                ns_window.setCollectionBehavior(behavior);
+                ns_window.setLevel(level);
+            }
         }
+
+        let _ = done_tx.send(());
     });
+
+    if scheduled.is_err() {
+        log::warn!("could not schedule overlay window configuration on the main thread");
+        return;
+    }
+
+    if done_rx.recv_timeout(MAIN_THREAD_TIMEOUT).is_err() {
+        log::warn!("timed out waiting for overlay window configuration on the main thread");
+    }
 }
 
 pub fn configure_staff_window<R: Runtime>(window: &WebviewWindow<R>) {

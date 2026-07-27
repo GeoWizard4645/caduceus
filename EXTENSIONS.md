@@ -1,92 +1,104 @@
 # Writing a Caduceus extension
 
-> **Status: design, not yet implemented.** This document is the agreed shape of
-> the extension system so that work can start against a fixed target. Nothing
-> below loads in Caduceus 1.1.0 yet. It is checked in rather than kept in a
-> ticket because the format is the part worth arguing about *before* anything
-> depends on it.
+An extension is **one JavaScript file**. You drop it on Settings → Extensions
+and it is installed. There is no folder to lay out, no separate manifest, no
+build step, and nothing to `npm install`.
 
-An extension adds commands to the Command Center. It is a folder with a
-manifest and a script, and it does not need to be compiled.
+If you would rather not write it yourself, the Extensions tab has a prompt
+starter: type one sentence about what you want, copy the prompt, paste it into
+any assistant, and save the reply as a `.js` file.
 
-```
-my-extension/
-  caduceus.json      # manifest
-  main.js            # the commands
-  icon.png           # optional, 128×128
-```
-
-## The manifest
-
-```json
-{
-  "id": "com.example.my-extension",
-  "name": "My Extension",
-  "version": "1.0.0",
-  "author": "you",
-  "description": "One line, shown in the extension list.",
-  "license": "MIT",
-  "commands": [
-    {
-      "id": "greet",
-      "title": "Greet Someone",
-      "subtitle": "Says hello",
-      "mode": "view",
-      "arguments": [{ "name": "who", "placeholder": "name", "required": true }]
-    }
-  ],
-  "permissions": ["clipboard", "network"]
-}
-```
-
-`mode` is either `view` (renders a list of results) or `action` (runs and shows
-a toast). `permissions` is a closed set — an extension that does not ask for
-`network` is not given it.
-
-## The script
+## The file
 
 ```js
-export async function greet({ who }, ctx) {
-  await ctx.clipboard.write(`Hello, ${who}`);
-  return ctx.toast(`Copied a greeting for ${who}`);
+/**
+ * @caduceus 1
+ * name: Word Count
+ * description: Count the words on your clipboard
+ * author: you
+ * permissions: clipboard
+ */
+export default async function (input, ctx) {
+  const text = await ctx.clipboard.read();
+  return `${text.trim().split(/\s+/).length} words`;
 }
 ```
 
-`ctx` is the only way out of the sandbox. There is no `require`, no `fs`, no
-`child_process`, and no ambient `fetch` — a command that wants the network asks
-for it in the manifest and receives `ctx.fetch`, which is restricted to the
-hosts the manifest declares.
+That is the whole extension. Drop it in and it appears in the Command Center.
 
-| API | Needs permission | Does |
+`input` is whatever the user typed after the command name. Return a string to
+show a message, or an array of `{ title, subtitle?, action? }` to show a list.
+
+## The header
+
+The `@caduceus` block must be the **first** comment in the file. Caduceus parses
+it *without running your code*, which is the point: the app can show what an
+extension is called and everything it wants access to before a line of it has
+executed.
+
+| Key | Required | Meaning |
 |---|---|---|
-| `ctx.toast(msg)` | — | Shows a message in the palette |
-| `ctx.list(items)` | — | Returns rows to display |
-| `ctx.clipboard.read()` / `.write(text)` | `clipboard` | The system clipboard |
-| `ctx.fetch(url, init)` | `network` | HTTP to declared hosts only |
-| `ctx.storage.get/set(key, value)` | — | Per-extension key/value store |
-| `ctx.open(url)` | — | Opens a URL in the default browser |
-| `ctx.selection()` | `selection` | Current Finder selection |
+| `@caduceus 1` | yes | Marks the file as an extension and names the format version |
+| `name` | no | Shown in the palette; defaults to the filename |
+| `description` | no | One line, shown under the name |
+| `author` | no | Shown in the installed list |
+| `permissions` | no | Comma-separated; omit the line for none |
+
+Only the first comment block is read. A `@caduceus` line further down the file
+cannot redefine what an extension claims to be — a permission list you have to
+scroll to verify is not one you can trust.
+
+## Permissions
+
+A closed set. Anything not on this list cannot be granted, so a typo fails at
+install time instead of quietly widening what a script can reach.
+
+| Permission | Gives you |
+|---|---|
+| `clipboard` | `ctx.clipboard.read()`, `ctx.clipboard.write(text)` |
+| `network` | `ctx.fetch(url, init)` |
+| `selection` | `ctx.selection()` — the current Finder selection |
+| `notifications` | `ctx.notify(text)` |
+
+## The `ctx` API
+
+This is the complete list. There is no `require`, no `import`, no filesystem, no
+shell, no process access, and no ambient `fetch`.
+
+```
+ctx.clipboard.read()          -> Promise<string>
+ctx.clipboard.write(text)     -> Promise<void>
+ctx.fetch(url, init)          -> Promise<Response>
+ctx.selection()               -> Promise<string[]>
+ctx.notify(text)              -> void
+ctx.storage.get(key)          -> Promise<any>
+ctx.storage.set(key, value)   -> Promise<void>
+ctx.open(url)                 -> Promise<void>
+```
+
+`ctx.storage` is per-extension, so two extensions cannot read each other's keys.
 
 ## Installing
 
-Drop the folder in `~/Library/Application Support/com.caduceus.desktop/extensions/`
-and it appears in the Command Center. There is no store, no signing, and no
-review — but also no sandbox escape hatch, which is the trade.
+Drag the file onto Settings → Extensions, or put it in
+`~/Library/Application Support/com.caduceus.desktop/extensions/`. No store, no
+signing, no review.
 
-## Why this shape
+## Status
 
-**No build step.** An extension you can write in one file and drop in a folder
-is one people actually write. A toolchain is a reason not to start.
+**Installing works now.** Dropping a file, parsing its header, validating its
+permissions, listing what is installed and removing it all ship in 1.1.1.
 
-**Permissions in the manifest, not at runtime.** You can read what an extension
-is allowed to do before you run it, from a file, without executing anything.
+**Executing does not.** The sandbox that actually runs extensions is not built
+yet, so an installed extension currently does nothing. The format is settled and
+documented so extensions can be written against it in the meantime — and so the
+format can be argued with before any code depends on it.
 
-**No ambient capability.** The sandbox denies by default. Everything an
-extension can reach arrives through `ctx`, so the list above is the complete
-answer to "what can this thing do to my machine".
+## Why one file
 
-## Contributing one
-
-Open a PR against `extensions/` in this repo and it ships with Caduceus, or host
-the folder anywhere and let people download it. Both are first-class; there is
-no blessed channel.
+A folder with a manifest is what every other extension system does, and it is
+also the reason most people never write one. The moment a contribution needs a
+directory layout and two files kept in sync, it stops being something you do in
+five minutes. One file with its metadata at the top cannot drift out of sync
+with itself, and it fits in a single chat reply — which is what makes the prompt
+starter work at all.

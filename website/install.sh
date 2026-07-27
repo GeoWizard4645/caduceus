@@ -416,7 +416,6 @@ replace_installed_app() {
   fi
 
   seal_signature "$target"
-  request_onboarding
 }
 
 # macOS hangs privacy permissions — microphone, automation — off an app's code
@@ -443,15 +442,6 @@ seal_signature() {
     sudo codesign --force --sign - --identifier "$BUNDLE_ID" "$target" 2>/dev/null || \
     warn "Could not seal the signature. Caduceus still runs, but macOS may ask for
 the microphone every time you dictate."
-}
-
-# Ask the app to run its walkthrough on next launch. A marker file rather than an
-# edit to the settings JSON: rewriting that safely needs a real parser, and the
-# plain download path deliberately does not require python3.
-request_onboarding() {
-  local dir="$HOME/Library/Application Support/${BUNDLE_ID}"
-  mkdir -p "$dir" 2>/dev/null || return 0
-  : > "$dir/.run-onboarding" 2>/dev/null || true
 }
 
 install_caduceus() {

@@ -1,0 +1,237 @@
+{
+  "version": 1,
+  "shipped": [
+    {
+      "id": "app-shell",
+      "title": "App & menu bar",
+      "items": [
+        { "name": "Menu-bar utility (no Dock icon)", "detail": "Accessory app; tray icon is the main entry when the staff is hidden" },
+        { "name": "Launch at login", "detail": "Optional autostart via Launch Agent" },
+        { "name": "Open from Spotlight / Applications", "detail": "Search Caduceus like any other app" },
+        { "name": "Tray menu", "detail": "Command Center, Settings, show/hide staff, Quit" },
+        { "name": "Settings window", "detail": "Ten tabs; changes save automatically" },
+        { "name": "Chat window", "detail": "Full-screen reading for saved / threads" },
+        { "name": "First-run walkthrough", "detail": "On the staff; replay from Help" },
+        { "name": "Learn tab", "detail": "Guided tasks that open the right settings panes" },
+        { "name": "Help tab", "detail": "Long-form reference plus doc links" },
+        { "name": "Factory reset", "detail": "Restore defaults from Settings" },
+        { "name": "Runtime info", "detail": "Version and platform in Help" }
+      ]
+    },
+    {
+      "id": "staff",
+      "title": "Floating staff",
+      "items": [
+        { "name": "Always-on-top staff mark", "detail": "Click-through window; only the mark and UI capture clicks" },
+        { "name": "Visible over full-screen apps", "detail": "Joins all Spaces at overlay window level" },
+        { "name": "Resize 28–160 px", "detail": "Corner handles on hover" },
+        { "name": "Custom staff mark", "detail": "Upload PNG pixel art" },
+        { "name": "Hover pop-out ring", "detail": "Up to six shortcuts on an arc" },
+        { "name": "Click → Command Center", "detail": "Single click opens the palette" },
+        { "name": "Double-click → dictation", "detail": "Same as F1 toggle" },
+        { "name": "Right-click → Settings", "detail": "" },
+        { "name": "Drag to reposition", "detail": "Position persisted across restarts" },
+        { "name": "Default dock left/right edge", "detail": "Arc direction follows screen half" },
+        { "name": "F12 toggle visibility", "detail": "Rebindable via function-key table" },
+        { "name": "Idle opacity & pulse", "detail": "Appearance settings" },
+        { "name": "Cursor polling tiers", "detail": "Saves CPU when pointer is far away" },
+        { "name": "Expand delay & auto-collapse", "detail": "General settings" },
+        { "name": "Recording indicator on staff", "detail": "Red dot while microphone is live" }
+      ]
+    },
+    {
+      "id": "command-center",
+      "title": "Command Center (palette)",
+      "items": [
+        { "name": "Global hotkey (default Alt+Space)", "detail": "Rebindable; conflict fallback at startup" },
+        { "name": "Keyboard navigation", "detail": "Arrows, Enter, Escape" },
+        { "name": "Click-away dismiss", "detail": "Like Spotlight" },
+        { "name": "Resizable window", "detail": "Drag corner; double-click grip to hide" },
+        { "name": "Prefix badge", "detail": "Shows which route Enter will take" },
+        { "name": "App launcher", "detail": "Fuzzy search over installed applications" },
+        { "name": "Calculator", "detail": "Arithmetic, %, functions; Enter copies result" },
+        { "name": "Configured shortcuts", "detail": "Same list as the staff ring" },
+        { "name": "Web search fallback", "detail": "Configurable search engine URL" },
+        { "name": "Empty-state prefix hints", "detail": "Shows common routes when input is blank" },
+        { "name": "Capture keywords", "detail": "Screenshot display; open Screenshot.app to record" },
+        { "name": "System monitor keyword", "detail": "Type system for live stats" },
+        { "name": "Visible over full-screen", "detail": "Same overlay treatment as the staff" }
+      ]
+    },
+    {
+      "id": "prefixes",
+      "title": "Prefix routing",
+      "items": [
+        { "name": "/ → primary AI chat", "detail": "Inline in palette; threads saved in SQLite" },
+        { "name": "/c → computer use", "detail": "Hermes agent session with on-screen steps" },
+        { "name": "/v → clipboard search", "detail": "Filter history in the palette" },
+        { "name": "Custom prefix rules", "detail": "URL templates, shell, AppleScript, built-in routes" },
+        { "name": "Longest prefix wins", "detail": "/c beats /" },
+        { "name": "Alphanumeric prefix boundaries", "detail": "/computer is not /c + omputer" }
+      ]
+    },
+    {
+      "id": "shortcuts",
+      "title": "Shortcuts & automation",
+      "items": [
+        { "name": "Open URL", "detail": "{query} substitution; optional browser profile" },
+        { "name": "Launch app", "detail": "Bundle ID or path" },
+        { "name": "Run shell command", "detail": "Quoted {query}; $CADUCEUS_QUERY env" },
+        { "name": "Run AppleScript", "detail": "macOS; triggers Automation permission" },
+        { "name": "Open clipboard view", "detail": "Shortcut action" },
+        { "name": "Staff ring + palette", "detail": "One list powers both surfaces" },
+        { "name": "Custom icons", "detail": "Brand icons or uploaded images per shortcut" },
+        { "name": "Default shortcuts", "detail": "Gemini, Gmail, Chrome, Claude, Clipboard — all editable" },
+        { "name": "Browser picker", "detail": "Chrome profiles, Arc, Safari, Firefox, etc." }
+      ]
+    },
+    {
+      "id": "tools",
+      "title": "Built-in utilities (macOS)",
+      "items": [
+        { "name": "Change case", "detail": "Eight cases including camelCase and snake_case" },
+        { "name": "Paste as plain text", "detail": "Strip formatting via case transform" },
+        { "name": "Copy Finder selection path", "detail": "AppleScript" },
+        { "name": "Latest download — copy path", "detail": "Newest file in ~/Downloads" },
+        { "name": "Latest download — open", "detail": "Skips .part partial downloads" },
+        { "name": "Eject removable volumes", "detail": "diskutil" },
+        { "name": "Stay awake", "detail": "caffeinate tied to app lifetime" },
+        { "name": "File search", "detail": "Spotlight mdfind" },
+        { "name": "Define word", "detail": "Opens Dictionary.app (dict://)" },
+        { "name": "Resize / convert image", "detail": "sips; never overwrites original" },
+        { "name": "Add to Apple Notes", "detail": "AppleScript; automation prompt on first use" }
+      ]
+    },
+    {
+      "id": "clipboard",
+      "title": "Clipboard history",
+      "items": [
+        { "name": "Watch system clipboard", "detail": "Text, images, file paths" },
+        { "name": "Skip concealed copies", "detail": "Password managers" },
+        { "name": "Per-app exclusion list", "detail": "" },
+        { "name": "SQLite storage", "detail": "Max items and max age" },
+        { "name": "Optional encryption at rest", "detail": "ChaCha20-Poly1305; key in Keychain" },
+        { "name": "Search, pin, delete, clear", "detail": "Option to keep pinned when clearing" },
+        { "name": "Copy entry back to clipboard", "detail": "" },
+        { "name": "Image thumbnails", "detail": "" },
+        { "name": "Dedicated /v mode", "detail": "In Command Center" }
+      ]
+    },
+    {
+      "id": "voice",
+      "title": "Voice & dictation",
+      "items": [
+        { "name": "Push-to-talk hotkey", "detail": "Default Alt+Shift+V; rebindable" },
+        { "name": "F1 or double-click staff", "detail": "Toggle dictation" },
+        { "name": "Live partial transcripts", "detail": "On-device Speech framework" },
+        { "name": "Keyword routing after STT", "detail": "Search, AI, clipboard, insert-only, etc." },
+        { "name": "Auto-submit vs wait for Enter", "detail": "Voice settings" },
+        { "name": "Max recording length cap", "detail": "Safety limit" },
+        { "name": "Optional cloud STT backend", "detail": "API key in Keychain" }
+      ]
+    },
+    {
+      "id": "capture",
+      "title": "Screenshots & recording",
+      "items": [
+        { "name": "Full-display screenshot", "detail": "To clipboard + Downloads PNG" },
+        { "name": "Open Screenshot.app", "detail": "Record screen with Apple’s UI" },
+        { "name": "Screen Recording permission", "detail": "Required for captures" }
+      ]
+    },
+    {
+      "id": "system",
+      "title": "System monitor",
+      "items": [
+        { "name": "CPU & memory summary", "detail": "Live in palette view" },
+        { "name": "Per-disk free space", "detail": "" },
+        { "name": "Network throughput", "detail": "" },
+        { "name": "Uptime & load average", "detail": "" },
+        { "name": "Top processes", "detail": "Sort by CPU or memory" },
+        { "name": "Quit / force quit", "detail": "Own processes only; others show system" },
+        { "name": "Kill process from palette", "detail": "When permitted" }
+      ]
+    },
+    {
+      "id": "ai",
+      "title": "AI & agents (optional)",
+      "items": [
+        { "name": "Hermes Agent backend", "detail": "Primary / and /c path when configured" },
+        { "name": "OpenAI-compatible HTTP backends", "detail": "Ollama, LM Studio, cloud APIs" },
+        { "name": "Scan this Mac", "detail": "Discover local servers and Hermes" },
+        { "name": "API keys in Keychain", "detail": "Never written to settings JSON" },
+        { "name": "Saved chat threads", "detail": "SQLite; inline + Chat window" },
+        { "name": "Agent step stream", "detail": "Progress UI for computer use" },
+        { "name": "Confirm before first agent action", "detail": "Settings toggle" },
+        { "name": "Null backend default", "detail": "Everything else works offline without a model" }
+      ]
+    },
+    {
+      "id": "extensions",
+      "title": "Extensions",
+      "items": [
+        { "name": "Drop-in .js extensions", "detail": "Header comment declares permissions before run" },
+        { "name": "Extensions settings tab", "detail": "Install, list, remove; AI prompt starter" },
+        { "name": "Open extensions folder", "detail": "" }
+      ]
+    },
+    {
+      "id": "appearance",
+      "title": "Appearance & hotkeys",
+      "items": [
+        { "name": "Light / dark / system theme", "detail": "" },
+        { "name": "Accent colour", "detail": "All windows" },
+        { "name": "Staff pop-out radius & icon size", "detail": "" },
+        { "name": "Glass / vibrancy windows", "detail": "macOS" },
+        { "name": "Function keys F1–F20 table", "detail": "Staff toggle, dictation, custom actions" },
+        { "name": "Hotkey validation", "detail": "Live check before save" },
+        { "name": "Hotkey conflict relocation", "detail": "Saved alternative if key is taken" }
+      ]
+    },
+    {
+      "id": "privacy",
+      "title": "Privacy & permissions (macOS)",
+      "items": [
+        { "name": "Microphone", "detail": "Only while dictating" },
+        { "name": "Speech Recognition", "detail": "On-device transcription" },
+        { "name": "Screen Recording", "detail": "Screenshots and recording flow" },
+        { "name": "Accessibility", "detail": "Not required for core launcher; future window tools" },
+        { "name": "Apple Events", "detail": "User-defined AppleScript shortcuts only" },
+        { "name": "Local-first default", "detail": "No account; network only when you configure AI" }
+      ]
+    }
+  ],
+  "planned": [
+    { "name": "Text snippets & expansion", "detail": "Raycast-style snippets triggered by keywords or prefixes", "tag": "raycast" },
+    { "name": "Quicklinks editor", "detail": "Visual editor for URL-template prefixes (machinery mostly exists)", "tag": "raycast" },
+    { "name": "Emoji & symbol picker", "detail": "Search and paste; bundled CLDR data", "tag": "raycast" },
+    { "name": "QR code generator", "detail": "Render URL or text to PNG in clipboard", "tag": "raycast" },
+    { "name": "Sticky notes", "detail": "Small always-on-top note windows with persistence", "tag": "raycast" },
+    { "name": "Window management", "detail": "Snap halves, thirds, maximize — Accessibility API", "tag": "raycast" },
+    { "name": "Window switcher", "detail": "Fuzzy list of open windows; focus or close", "tag": "raycast" },
+    { "name": "Clipboard stack paste", "detail": "Paste previous items in order without opening history", "tag": "raycast" },
+    { "name": "Screen OCR", "detail": "Copy text from a screen region via Vision", "tag": "raycast" },
+    { "name": "Color picker", "detail": "Loupe anywhere; copy HEX/RGB to clipboard", "tag": "raycast" },
+    { "name": "Switch audio input / output", "detail": "CoreAudio helper for mic and speakers", "tag": "raycast" },
+    { "name": "Apple Music control", "detail": "Play/pause, next, current track via AppleScript", "tag": "raycast" },
+    { "name": "Incognito browser window", "detail": "Per-browser private window shortcuts", "tag": "raycast" },
+    { "name": "Hide apps from launcher results", "detail": "Blocklist in settings", "tag": "raycast" },
+    { "name": "Hyper Key", "detail": "Map Caps Lock to ⌃⌥⌘ for one-handed shortcuts", "tag": "raycast" },
+    { "name": "Homebrew search & install", "detail": "Search formulae; open install command", "tag": "raycast" },
+    { "name": "GitHub search", "detail": "Repos, issues, PRs from palette", "tag": "raycast" },
+    { "name": "SSH hosts", "detail": "Open Terminal/iTerm/Warp to saved hosts", "tag": "raycast" },
+    { "name": "Empty Trash", "detail": "One action with confirmation", "tag": "raycast" },
+    { "name": "Lock screen / sleep display", "detail": "Instant actions without digging in menus", "tag": "raycast" },
+    { "name": "Unit & currency converter", "detail": "Beyond the calculator; offline rates file", "tag": "raycast" },
+    { "name": "Natural language dates", "detail": "“next friday 3pm” → ISO or clipboard", "tag": "raycast" },
+    { "name": "Password generator", "detail": "Length and charset; copy once", "tag": "caduceus" },
+    { "name": "TOTP codes (paste seed)", "detail": "Offline 2FA — not Authy impersonation", "tag": "caduceus" },
+    { "name": "Workflow chains", "detail": "Run several shortcuts or commands in sequence", "tag": "caduceus" },
+    { "name": "Semantic file search", "detail": "Find files by meaning using a local embedding model", "tag": "caduceus" },
+    { "name": "Meeting join helper", "detail": "Parse calendar clipboards for Zoom/Meet links", "tag": "caduceus" },
+    { "name": "Pomodoro / focus timer", "detail": "Menu-bar timer tied to stay-awake", "tag": "caduceus" },
+    { "name": "Bluetooth device toggle", "detail": "Via blueutil when installed", "tag": "raycast" },
+    { "name": "Auto-quit idle apps", "detail": "Optional background watcher with safelist", "tag": "caduceus" },
+    { "name": "Extension gallery", "detail": "Curated install links once the host stabilises", "tag": "caduceus" }
+  ]
+}

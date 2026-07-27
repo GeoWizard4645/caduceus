@@ -530,3 +530,21 @@ export interface ChatReply {
   conversationId: number;
   text: string;
 }
+
+// --- extensions --------------------------------------------------------------
+
+export interface Extension {
+  id: string;
+  name: string;
+  description: string;
+  author: string;
+  permissions: string[];
+  path: string;
+  enabled: boolean;
+}
+
+export interface InstallReport {
+  ok: boolean;
+  message: string;
+  extension: Extension | null;
+}

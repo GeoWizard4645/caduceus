@@ -27,6 +27,7 @@ pub mod capture;
 pub mod chat;
 pub mod clipboard;
 pub mod commands;
+pub mod extensions;
 pub mod fn_keys;
 pub mod hotkeys;
 pub mod notes;
@@ -111,6 +112,12 @@ pub fn run() {
             commands::search_files,
             commands::define_word,
             commands::convert_image,
+            commands::inspect_extension,
+            commands::install_extension,
+            commands::list_extensions,
+            commands::remove_extension,
+            commands::open_extensions_folder,
+            commands::extension_permissions,
             commands::toggle_staff,
             commands::save_staff_position,
             commands::collapse_staff_popout,
@@ -171,28 +178,16 @@ pub fn run() {
         });
 }
 
-/// Dropped in the app data directory by the installer to ask for the
-/// walkthrough on the next launch. A file rather than a settings key because
-/// the installer would otherwise have to parse and rewrite the settings JSON,
-/// which needs a real parser it cannot count on having.
-const ONBOARDING_REQUEST_FILE: &str = ".run-onboarding";
-
-/// Consume the installer's request, if there is one.
-///
-/// Removing it here rather than after the walkthrough finishes is deliberate: a
-/// crash mid-tour should not mean being shown the tour again on every launch
-/// forever. The marker means "a fresh install happened", and that is true
-/// exactly once.
-fn take_onboarding_request<R: tauri::Runtime>(handle: &tauri::AppHandle<R>) -> bool {
+/// Remove a legacy marker older installers dropped on every reinstall. The
+/// walkthrough is gated only by [`Settings::general::onboarding_done`].
+fn discard_legacy_onboarding_marker<R: tauri::Runtime>(handle: &tauri::AppHandle<R>) {
     let Ok(dir) = handle.path().app_data_dir() else {
-        return false;
+        return;
     };
-    let marker = dir.join(ONBOARDING_REQUEST_FILE);
-    if !marker.exists() {
-        return false;
+    let marker = dir.join(".run-onboarding");
+    if marker.exists() {
+        let _ = std::fs::remove_file(marker);
     }
-    let _ = std::fs::remove_file(&marker);
-    true
 }
 
 fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
@@ -204,20 +199,8 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     app.set_activation_policy(tauri::ActivationPolicy::Accessory);
 
     // --- settings ---------------------------------------------------------
-    let mut loaded = settings::load(&handle);
-
-    // Someone who just ran the installer expects to be shown around, whether or
-    // not they have run Caduceus before. `onboarding_done` alone cannot express
-    // that: a reinstall over an existing profile would silently skip the
-    // walkthrough. The installer leaves a marker instead, and finding one here
-    // means "start the tour", regardless of what the profile says.
-    if take_onboarding_request(&handle) {
-        loaded.general.onboarding_done = false;
-        // The walkthrough lives in the staff window, so a hidden staff would
-        // make it invisible rather than skipped.
-        loaded.general.staff_visible = true;
-        let _ = settings::save(&handle, &loaded);
-    }
+    discard_legacy_onboarding_marker(&handle);
+    let loaded = settings::load(&handle);
 
     let manager = SettingsManager::new(loaded.clone());
     app.manage(manager.clone());

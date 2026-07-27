@@ -20,6 +20,7 @@ use crate::palette::{self, DispatchOutcome};
 use crate::settings::{self, secrets, BackendConfig, Settings, SettingsManager};
 use crate::shortcuts::{self, BrowserInstall, ExecOutcome};
 use crate::capture;
+use crate::extensions;
 use crate::chat;
 use crate::notes;
 use crate::tools;
@@ -1005,4 +1006,68 @@ pub fn define_word(word: String) -> tools::ToolOutcome {
 #[tauri::command]
 pub fn convert_image(path: String, width: Option<u32>, format: Option<String>) -> tools::ToolOutcome {
     tools::convert_image(&path, width, format.as_deref())
+}
+
+// ---------------------------------------------------------------------------
+// Extensions
+// ---------------------------------------------------------------------------
+
+fn app_data<R: Runtime>(app: &AppHandle<R>) -> Result<std::path::PathBuf, String> {
+    app.path()
+        .app_data_dir()
+        .map_err(|e| format!("Could not find the app data directory: {e}"))
+}
+
+/// Describe a candidate file without installing or running it.
+#[tauri::command]
+pub fn inspect_extension<R: Runtime>(
+    _app: AppHandle<R>,
+    path: String,
+) -> Res<extensions::Extension> {
+    extensions::inspect(std::path::Path::new(&path))
+}
+
+/// Install a dropped `.js` file.
+#[tauri::command]
+pub fn install_extension<R: Runtime>(
+    app: AppHandle<R>,
+    path: String,
+) -> Res<extensions::InstallReport> {
+    let dir = app_data(&app)?;
+    match extensions::install(std::path::Path::new(&path), &dir) {
+        Ok(ext) => Ok(extensions::InstallReport {
+            ok: true,
+            message: format!("Installed “{}”.", ext.name),
+            extension: Some(ext),
+        }),
+        Err(e) => Ok(extensions::InstallReport { ok: false, message: e, extension: None }),
+    }
+}
+
+#[tauri::command]
+pub fn list_extensions<R: Runtime>(app: AppHandle<R>) -> Res<Vec<extensions::Extension>> {
+    Ok(extensions::list(&app_data(&app)?))
+}
+
+#[tauri::command]
+pub fn remove_extension<R: Runtime>(app: AppHandle<R>, id: String) -> Res<()> {
+    extensions::remove(&id, &app_data(&app)?)
+}
+
+/// Reveal the extensions folder in Finder.
+#[tauri::command]
+pub fn open_extensions_folder<R: Runtime>(app: AppHandle<R>) -> Res<()> {
+    let dir = extensions::extensions_dir(&app_data(&app)?);
+    let _ = std::fs::create_dir_all(&dir);
+    std::process::Command::new("open")
+        .arg(&dir)
+        .spawn()
+        .map(|_| ())
+        .map_err(|e| format!("Could not open the folder: {e}"))
+}
+
+/// The permissions an extension is allowed to ask for, for the UI to show.
+#[tauri::command]
+pub fn extension_permissions() -> Vec<String> {
+    extensions::PERMISSIONS.iter().map(|s| s.to_string()).collect()
 }

@@ -1,0 +1,30 @@
+# Caduceus
+
+> Caduceus is a free, open-source, local-first command centre for macOS. It provides a floating staff shortcut bar, a Raycast-style command palette (apps, maths, clipboard history, snippets), optional voice dictation, and AI chat plus computer-use when you configure a backend. Offline features work without an account or API key.
+
+Important notes:
+
+- macOS 11 (Big Sur) or later; universal binary (Apple Silicon and Intel).
+- Menu bar app only — no Dock icon. Notarized signing is not in place yet; the installer clears the quarantine attribute after download.
+- AI is optional: `/` routes to your configured chat backend; `/c` starts computer-use (Hermes is the supported path for screen control). Caduceus does not ship its own mouse or screen driver.
+- Extension folders and `caduceus.json` manifests are documented in the repo but the runtime is design-stage and not loaded in current releases.
+
+## Website
+
+- [Overview](https://caduceus.vivaanshahani.com/): Product summary, install one-liner, and screenshots.
+- [All features](https://caduceus.vivaanshahani.com/features): Checklist of built-in behaviour (staff, palette, clipboard, voice, capture, AI, settings).
+- [Docs](https://caduceus.vivaanshahani.com/docs): Architecture and implementation notes for contributors (Tauri, Rust modules, events, shortcuts).
+- [Configure AI](https://caduceus.vivaanshahani.com/configure-ai): Hermes, Ollama, OpenAI-compatible CLIs, and cloud API setup for `/` and `/c`.
+
+## Source and install
+
+- [README](https://github.com/GeoWizard4645/caduceus/blob/main/README.md): Install from release or source, feature overview, build instructions.
+- [Releases](https://github.com/GeoWizard4645/caduceus/releases): Latest universal `.dmg` attached to each GitHub release.
+- [install.sh](https://vivaanshahani.com/caduceus/install.sh): Curl-to-bash installer (release DMG or `--from-source`).
+
+## Optional
+
+- [Extension system (design doc)](https://github.com/GeoWizard4645/caduceus/blob/main/EXTENSIONS.md): Planned sandbox, manifest format, and `ctx` API — not yet implemented in the app.
+- [GitHub issues](https://github.com/GeoWizard4645/caduceus/issues): Bugs and feature requests.
+- [Release process](https://github.com/GeoWizard4645/caduceus/blob/main/RELEASE.md): How maintainers cut and publish macOS builds.
+- Contact: caduceus@vivaanshahani.com
