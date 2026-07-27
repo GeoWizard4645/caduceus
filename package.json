@@ -8,6 +8,7 @@
   "scripts": {
     "start": "tauri dev",
     "bundle": "tauri build",
+    "release": "bash scripts/release.sh",
     "dev": "vite",
     "build": "npm run check:ipc && npm run check:ranking && npm run check:tabs && npm run check:permissions && npm run catalog && tsc --noEmit && vite build",
     "typecheck": "tsc --noEmit",

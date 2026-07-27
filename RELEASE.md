@@ -2,6 +2,28 @@
 
 Caduceus is **macOS-only**. Each public release is one **universal** `.dmg` (Apple Silicon + Intel) attached to a GitHub release. The website installer (`curl … install.sh`) downloads whatever `/releases/latest` points at — you do **not** redeploy the Worker for a new app version unless `install.sh` itself changed.
 
+## The short version
+
+```bash
+npm run release -- patch -m "fix a hotkey that could never fire"
+```
+
+That is the whole thing. [`scripts/release.sh`](./scripts/release.sh) does every step below in order: bumps the three version files, runs the gates and the Rust tests, builds both architectures, `lipo`s them into one universal app, signs it, packs the DMG, commits, tags, pushes, creates the release with `--latest`, and checks that `/releases/latest` now resolves to it.
+
+| | |
+|---|---|
+| `patch` \| `minor` \| `major` \| `2.4.0` | what to bump to |
+| `-m "…"` | the summary. Becomes the commit subject and the top of the release notes. Prompted for if you leave it out |
+| `-a`, `--all` | commit everything in the tree, not just the version bump. Without it, a dirty tree stops the release |
+| `-n`, `--dry-run` | print every step and change nothing. Worth doing once |
+| `--draft` | publish as a draft, so it does not become `/releases/latest` yet |
+| `--notes-file F` | use a file for the notes instead of the commit log |
+| `--skip-tests` | skip the gates. For re-runs after a failure, not for releases |
+
+It refuses to start unless you are on `main`, up to date with `origin`, logged into `gh`, and the tag is free — and it does not push anything until the DMG exists on disk, so a build that dies half-way costs you time rather than leaving a tag pointing at nothing.
+
+The rest of this document is what the script does, for the times you need to do it by hand or work out why it stopped.
+
 ## Prerequisites
 
 - macOS with **Xcode Command Line Tools** (`xcode-select --install`)
@@ -151,6 +173,8 @@ curl -fsSL https://vivaanshahani.com/caduceus/install.sh | bash
 Confirm the log line shows **`Caduceus_<version>_universal.dmg`**, then open the app from `/Applications/Caduceus.app`.
 
 ## Checklist
+
+Only for a hand-rolled release — `npm run release` enforces all of it.
 
 - [ ] Version bumped in `package.json`, `tauri.conf.json`, `Cargo.toml`
 - [ ] Changes committed on `main`
