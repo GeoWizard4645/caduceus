@@ -628,6 +628,14 @@ print(f"  wrote {cfg}")
 PY
 }
 
+prime_macos_permissions() {
+  local bin="${INSTALL_DIR}/${APP_NAME}.app/Contents/MacOS/${APP_NAME}"
+  [ -x "$bin" ] || return 0
+  say "Screen Recording — macOS must approve this in System Settings (cannot be enabled from the terminal alone)."
+  say "Caduceus will ask to register; turn it on in the list when Settings opens."
+  "$bin" --prime-macos-permissions 2>/dev/null || true
+}
+
 # --- run --------------------------------------------------------------------
 
 wants deps     && install_deps
@@ -639,6 +647,7 @@ configure_hermes
 configure_models
 
 if wants caduceus; then
+  prime_macos_permissions
   say "Launching…"
   open "${INSTALL_DIR}/${APP_NAME}.app"
 fi

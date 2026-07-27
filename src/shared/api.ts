@@ -141,6 +141,8 @@ export const openSettingsWindow = (tab?: string) =>
 
 export const toggleStaff = () => invoke<boolean>("toggle_staff");
 
+export const relaunchApp = () => invoke<void>("relaunch_app");
+
 /**
  * Hold the *whole* staff window clickable.
  *

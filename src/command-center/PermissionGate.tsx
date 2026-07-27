@@ -76,6 +76,7 @@ export function PermissionGate({
   const [repairing, setRepairing] = useState(false);
   const [note, setNote] = useState<string | null>(null);
   const prompted = useRef<string | null>(null);
+  const wasScreenGranted = useRef<boolean | null>(null);
 
   const unique = useMemo(
     () => [...new Set(permissions.filter((p) => p in PERMISSIONS))],
@@ -166,6 +167,18 @@ export function PermissionGate({
     const timer = setInterval(tick, POLL_MS);
     return () => clearInterval(timer);
   }, [active, blocking, refresh]);
+
+  useEffect(() => {
+    if (granted === null) return;
+    if (
+      blocking === "screen-recording" &&
+      wasScreenGranted.current === false &&
+      granted === true
+    ) {
+      void api.relaunchApp();
+    }
+    wasScreenGranted.current = granted;
+  }, [blocking, granted]);
 
   const info = blocking ? PERMISSIONS[blocking] : null;
   const highlightStep = info ? Math.min(1, info.steps.length - 1) : 0;

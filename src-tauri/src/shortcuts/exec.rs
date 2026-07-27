@@ -203,6 +203,63 @@ fn is_safe_url(url: &str) -> bool {
     lower.starts_with("http://") || lower.starts_with("https://")
 }
 
+/// Deep links for a named Settings pane, newest macOS first.
+#[cfg(target_os = "macos")]
+fn settings_pane_urls(pane: &str) -> Option<Vec<&'static str>> {
+    Some(match pane {
+        "keyboard-shortcuts" => {
+            vec!["x-apple.systempreferences:com.apple.Keyboard-Settings.extension?Shortcuts"]
+        }
+        "microphone" => vec![
+            "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_Microphone",
+            "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone",
+        ],
+        "accessibility" => vec![
+            "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_Accessibility",
+            "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility",
+        ],
+        "screen-recording" => vec![
+            "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_ScreenCapture",
+            "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_ScreenRecording",
+            "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture",
+        ],
+        "automation" => vec![
+            "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_Automation",
+            "x-apple.systempreferences:com.apple.preference.security?Privacy_Automation",
+        ],
+        "speech-recognition" => vec![
+            "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_SpeechRecognition",
+            "x-apple.systempreferences:com.apple.preference.security?Privacy_SpeechRecognition",
+        ],
+        "login-items" => vec!["x-apple.systempreferences:com.apple.LoginItems-Settings.extension"],
+        _ => return None,
+    })
+}
+
+#[cfg(target_os = "macos")]
+pub fn open_settings_pane_sync(pane: &str) -> ExecOutcome {
+    let Some(urls) = settings_pane_urls(pane) else {
+        return ExecOutcome::err(format!(
+            "Unknown System Settings pane \u{201c}{pane}\u{201d}."
+        ));
+    };
+
+    let mut last_err = None;
+    for url in urls {
+        let mut cmd = Command::new("open");
+        cmd.arg(url);
+        detach(&mut cmd);
+        match cmd.spawn() {
+            Ok(_) => return ExecOutcome::ok("Opened System Settings"),
+            Err(e) => last_err = Some(e),
+        }
+    }
+    ExecOutcome::err(format!(
+        "Could not open System Settings: {}",
+        last_err.map(|e| e.to_string()).unwrap_or_else(|| "unknown error".into())
+    ))
+}
+
 /// Open one named pane of macOS System Settings.
 ///
 /// An allow-list of four panes rather than a general
@@ -213,40 +270,7 @@ fn is_safe_url(url: &str) -> bool {
 /// panes wide, and the frontend never gets to supply a URL.
 #[cfg(target_os = "macos")]
 pub async fn open_settings_pane(pane: &str) -> ExecOutcome {
-    let url = match pane {
-        "keyboard-shortcuts" => {
-            "x-apple.systempreferences:com.apple.Keyboard-Settings.extension?Shortcuts"
-        }
-        "microphone" => {
-            "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone"
-        }
-        "accessibility" => {
-            "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"
-        }
-        "screen-recording" => {
-            "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture"
-        }
-        "automation" => {
-            "x-apple.systempreferences:com.apple.preference.security?Privacy_Automation"
-        }
-        "speech-recognition" => {
-            "x-apple.systempreferences:com.apple.preference.security?Privacy_SpeechRecognition"
-        }
-        "login-items" => "x-apple.systempreferences:com.apple.LoginItems-Settings.extension",
-        other => {
-            return ExecOutcome::err(format!(
-                "Unknown System Settings pane \u{201c}{other}\u{201d}."
-            ))
-        }
-    };
-
-    let mut cmd = Command::new("open");
-    cmd.arg(url);
-    detach(&mut cmd);
-    match cmd.spawn() {
-        Ok(_) => ExecOutcome::ok("Opened System Settings"),
-        Err(e) => ExecOutcome::err(format!("Could not open System Settings: {e}")),
-    }
+    open_settings_pane_sync(pane)
 }
 
 #[cfg(not(target_os = "macos"))]

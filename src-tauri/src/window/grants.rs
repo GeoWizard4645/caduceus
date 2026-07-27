@@ -174,6 +174,21 @@ pub fn repair(grant: Grant) -> RepairOutcome {
         };
     }
 
+    if grant == Grant::ScreenRecording {
+        let _ = crate::tools::system::request_screen_recording();
+        let granted = currently_granted(grant);
+        return RepairOutcome {
+            ok: true,
+            granted,
+            message: format!(
+                "Cleared the stale Screen Recording entry and asked macOS again.{relaunch_note} \
+                 If Caduceus was missing from the list, it should appear now — turn it on, then \
+                 let Caduceus restart if capture still fails."
+            ),
+            will_relaunch,
+        };
+    }
+
     RepairOutcome {
         ok: true,
         granted: false,

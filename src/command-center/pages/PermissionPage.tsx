@@ -16,7 +16,7 @@
  * * and the command that hit the wall, offered again the moment it would work.
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import * as api from "@/shared/api";
 import { COMMANDS, type CommandActions } from "@/shared/commands";
@@ -49,6 +49,8 @@ export function PermissionPage({
   const [opening, setOpening] = useState(false);
   const [repairing, setRepairing] = useState(false);
   const [result, setResult] = useState<{ text: string; ok: boolean } | null>(null);
+  const wasGranted = useRef<boolean | null>(null);
+  const relaunchScheduled = useRef(false);
 
   const check = useCallback(async () => {
     if (!info.detectable) return;
@@ -72,9 +74,32 @@ export function PermissionPage({
     return () => clearInterval(timer);
   }, [active, check, info.detectable]);
 
+  // Screen Recording often reads as granted before capture works until Caduceus restarts.
+  useEffect(() => {
+    if (granted === null) return;
+    if (
+      active &&
+      info.id === "screen-recording" &&
+      wasGranted.current === false &&
+      granted === true &&
+      !relaunchScheduled.current
+    ) {
+      relaunchScheduled.current = true;
+      setResult({
+        text: "Screen Recording is on. Restarting Caduceus so macOS applies it…",
+        ok: true,
+      });
+      void api.relaunchApp();
+    }
+    wasGranted.current = granted;
+  }, [active, granted, info.id]);
+
   const open = async () => {
     setOpening(true);
     try {
+      if (info.id === "accessibility" || info.id === "screen-recording") {
+        await api.requestPermission(info.id);
+      }
       await api.openSystemSettings(info.pane);
     } catch (error) {
       setResult({ text: api.errorMessage(error), ok: false });

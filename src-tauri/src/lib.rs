@@ -51,6 +51,24 @@ use crate::clipboard::{ClipboardStore, WatcherHandle};
 use crate::settings::SettingsManager;
 use crate::window::CursorTracker;
 
+const PERMISSION_PRIMER_ARG: &str = "--prime-macos-permissions";
+
+/// Used by `install.sh` so Screen Recording registration runs as Caduceus.app, not Terminal.
+pub fn wants_permission_primer() -> bool {
+    std::env::args().any(|a| a == PERMISSION_PRIMER_ARG)
+}
+
+/// One-shot CLI: register with TCC and open the Screen Recording pane. Cannot grant
+/// silently — macOS always requires a human toggle — but this makes Caduceus show
+/// up in the list and surfaces the system consent dialog.
+pub fn run_permission_primer() {
+    #[cfg(target_os = "macos")]
+    {
+        let _ = crate::tools::system::request_screen_recording();
+        let _ = crate::shortcuts::exec::open_settings_pane_sync("screen-recording");
+    }
+}
+
 /// Entry point called by `main.rs`.
 pub fn run() {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
@@ -151,6 +169,7 @@ pub fn run() {
             commands::extension_ai_ask,
             commands::extension_shortcuts_run,
             commands::toggle_staff,
+            commands::relaunch_app,
             commands::save_staff_position,
             commands::refresh_staff_layout,
             commands::collapse_staff_popout,

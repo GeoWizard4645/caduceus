@@ -61,9 +61,10 @@ export const PERMISSIONS: Record<PermissionId, PermissionInfo> = {
     path: "Privacy & Security → Screen & System Audio Recording",
     pane: "screen-recording",
     steps: [
-      "Click the button below to open Screen & System Audio Recording.",
-      "Find Caduceus in the list and turn its switch on.",
-      "macOS asks you to quit and reopen Caduceus for this one. Use Quit in the menu-bar icon.",
+      "Click the button below — macOS may ask first; that is what puts Caduceus in the list.",
+      "In Screen & System Audio Recording, find Caduceus and turn its switch on.",
+      "This page restarts Caduceus when the switch flips on — macOS usually needs that before capture works.",
+      "If Caduceus is missing from the list, use Repair it for me below, then try the button again.",
     ],
     detectable: true,
   },

@@ -381,6 +381,13 @@ pub fn toggle_staff<R: Runtime>(app: AppHandle<R>, settings: tauri::State<'_, Se
     Ok(visible)
 }
 
+/// Quit and reopen Caduceus — needed after some macOS privacy grants (Screen Recording).
+#[tauri::command]
+pub fn relaunch_app<R: Runtime>(app: AppHandle<R>) {
+    let _ = window::relaunch::schedule_relaunch();
+    app.exit(0);
+}
+
 /// Called by the staff after a drag ends, to remember where it was left.
 #[tauri::command]
 pub fn save_staff_position<R: Runtime>(
