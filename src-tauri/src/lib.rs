@@ -110,6 +110,10 @@ pub fn run() {
             commands::eject_disks,
             commands::stay_awake,
             commands::stay_awake_state,
+            commands::awake_start,
+            commands::awake_stop,
+            commands::awake_status,
+            commands::open_manage_window,
             commands::search_files,
             commands::define_word,
             commands::convert_image,
@@ -292,6 +296,7 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     // --- usage ranking -----------------------------------------------------
     // Loaded before the windows so the palette's first render already has it.
     app.manage(usage::UsageStore::open(data_dir.join(usage::USAGE_FILE)));
+    app.manage(tools::awake::AwakeRuntime::new());
 
     // --- agents and voice -------------------------------------------------
     app.manage(agent::AgentRuntime::new());
@@ -309,7 +314,7 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         }
         window::configure_staff_floating(&staff);
     }
-    for label in [window::COMMAND_CENTER_WINDOW, window::SETTINGS_WINDOW] {
+    for label in [window::COMMAND_CENTER_WINDOW, window::SETTINGS_WINDOW, window::MANAGE_WINDOW] {
         if let Some(w) = handle.get_webview_window(label) {
             window::apply_vibrancy(&w);
         }
@@ -352,7 +357,9 @@ fn handle_window_event(window: &tauri::Window, event: &WindowEvent) {
                 api.prevent_close();
                 let _ = window.hide();
                 #[cfg(target_os = "macos")]
-                if window.label() == window::SETTINGS_WINDOW || window.label() == window::CHAT_WINDOW
+                if window.label() == window::SETTINGS_WINDOW
+                    || window.label() == window::CHAT_WINDOW
+                    || window.label() == window::MANAGE_WINDOW
                 {
                     window::on_dock_window_closed(window.app_handle(), window.label());
                 }

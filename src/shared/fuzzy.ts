@@ -79,7 +79,13 @@ export function fuzzyMatch(needle: string, haystack: string): FuzzyMatch | null 
 
 /**
  * Score a needle against several fields, returning the best.
- * Later fields are worth slightly less, so a label match beats a keyword match.
+ *
+ * Later fields are worth slightly less, so a label match beats a keyword match
+ * — but the decay floors at 0.72. Without the floor, a command with a long
+ * keyword list had its later keywords weighted towards zero and then negative,
+ * at which point an *exact* match on "amphetamine" lost to a scattered
+ * subsequence in some unrelated title. A keyword is a keyword wherever it sits
+ * in the list; the ordering penalty only exists to keep titles on top.
  */
 export function fuzzyScore(needle: string, fields: (string | undefined | null)[]): number | null {
   let best: number | null = null;
@@ -87,7 +93,7 @@ export function fuzzyScore(needle: string, fields: (string | undefined | null)[]
     if (!field) return;
     const match = fuzzyMatch(needle, field);
     if (!match) return;
-    const weighted = match.score * (1 - index * 0.12);
+    const weighted = match.score * Math.max(1 - index * 0.12, 0.72);
     if (best === null || weighted > best) best = weighted;
   });
   return best;

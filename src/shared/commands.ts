@@ -41,6 +41,8 @@ export interface CommandActions {
   notify(message: string, tone?: "info" | "error"): void;
   showOutput(output: CommandOutput): void;
   setInput(value: string): void;
+  /** Switch the palette into one of its modes (clipboard, system monitor). */
+  setMode(mode: "default" | "clipboard" | "system"): void;
   close(): void;
 }
 
@@ -411,7 +413,13 @@ const WINDOW_COMMANDS: CommandDef[] = WINDOW_SPECS.map((spec) => ({
   detail: spec.detail,
   group: "windows" as const,
   icon: "▦",
-  keywords: ["window", ...spec.keywords],
+  // The product names carry the search: someone who has used Rectangle for
+  // years types "rectangle", not "snap".
+  keywords: [
+    "window",
+    ...spec.keywords,
+    "rectangle", "magnet", "moom", "spectacle", "amethyst", "yabai",
+  ],
   run: ({ actions }) => windowVerb(actions, spec.verb),
 }));
 
@@ -641,7 +649,7 @@ const TOOL_SPECS: ToolSpec[] = [
       "Reads a colour in any notation people paste and shows hex, RGB and HSL — plus the WCAG contrast against white and black, so you know which one the text can be.",
     group: "developer",
     icon: "◧",
-    keywords: ["colour", "color", "hex", "rgb", "hsl", "contrast", "wcag"],
+    keywords: ["colour", "color", "hex", "rgb", "hsl", "contrast", "wcag", "colorslurp", "sip"],
     trigger: "color",
     argument: "#3b82f6 or rgb(59, 130, 246)",
   },
@@ -924,7 +932,7 @@ const SYSTEM_SPECS: SystemSpec[] = [
     title: "Toggle dark mode",
     detail: "Switches macOS between light and dark appearance. Needs permission to control System Events, which macOS asks for the first time.",
     icon: "◐",
-    keywords: ["dark", "light", "appearance", "theme", "mode"],
+    keywords: ["dark", "light", "appearance", "theme", "mode", "night owl", "nightowl"],
   },
   {
     action: "toggle_stage_manager",
@@ -938,7 +946,7 @@ const SYSTEM_SPECS: SystemSpec[] = [
     title: "Toggle hidden files in Finder",
     detail: "Shows or hides dotfiles, then restarts Finder.",
     icon: "◌",
-    keywords: ["hidden", "dotfiles", "finder", "show", "invisible"],
+    keywords: ["hidden", "dotfiles", "finder", "show", "invisible", "funter"],
   },
   {
     action: "toggle_desktop_icons",
@@ -1100,6 +1108,36 @@ const SYSTEM_COMMANDS: CommandDef[] = SYSTEM_SPECS.map((spec) => ({
 // Everything else
 // ---------------------------------------------------------------------------
 
+/**
+ * "45" → 45 minutes; "2h", "1h30m", "2:30" as expected. `null` for nonsense.
+ *
+ * Mirrors `tools::awake::parse_duration` on the Rust side, in minutes because
+ * that is what the `awake_start` command takes.
+ */
+function parseAwakeMinutes(input: string): number | null {
+  const text = input.trim().toLowerCase();
+  if (!text) return null;
+
+  // "2:30" = hours:minutes.
+  const clock = text.match(/^(\d+):([0-5]?\d)$/);
+  if (clock) {
+    const minutes = Number(clock[1]) * 60 + Number(clock[2]);
+    return minutes >= 1 && minutes <= 7 * 24 * 60 ? minutes : null;
+  }
+
+  // Unit-tagged: "2h", "45m", "1h30m", "1h30".
+  if (/[hms]/.test(text)) {
+    const match = text.match(/^(?:(\d+)h)?\s*(?:(\d+)m?)?$/);
+    if (!match || (!match[1] && !match[2])) return null;
+    const minutes = Number(match[1] ?? 0) * 60 + Number(match[2] ?? 0);
+    return minutes >= 1 && minutes <= 7 * 24 * 60 ? minutes : null;
+  }
+
+  const minutes = Number.parseInt(text, 10);
+  if (!Number.isFinite(minutes) || String(minutes) !== text) return null;
+  return minutes >= 1 && minutes <= 7 * 24 * 60 ? minutes : null;
+}
+
 const OTHER_COMMANDS: CommandDef[] = [
   // --- screen and text ---
   {
@@ -1109,7 +1147,10 @@ const OTHER_COMMANDS: CommandDef[] = [
       "Drag a box over anything on screen — a screenshot, a video still, an error dialog — and the text inside it is recognised and copied. Recognition runs on-device through Apple's Vision framework, and the capture is deleted as soon as it has been read.",
     group: "screen",
     icon: "⌗",
-    keywords: ["ocr", "text", "screen", "recognise", "read", "capture", "scan", "grab"],
+    keywords: [
+      "ocr", "text", "screen", "recognise", "read", "capture", "scan", "grab",
+      "cleanshot", "textsniper", "shottr", "live text",
+    ],
     run: ({ actions }) => outcome(actions, "Recognised text", () => api.ocrScreen()),
   },
   {
@@ -1255,27 +1296,47 @@ const OTHER_COMMANDS: CommandDef[] = [
     detail: "Ejects every removable volume under /Volumes, and says which ones refused.",
     group: "utilities",
     icon: "⏏",
-    keywords: ["eject", "unmount", "disk", "drive", "usb", "volume"],
+    keywords: ["eject", "unmount", "disk", "drive", "usb", "volume", "jettison", "ejectify"],
     run: ({ actions }) => outcome(actions, "Eject", () => api.ejectDisks()),
   },
   {
     id: "utility.caffeinate-on",
     title: "Keep this Mac awake",
     detail:
-      "Blocks sleep and display dimming until you turn it off. Tied to Caduceus's own process, so quitting the app releases it — a stray assertion outliving the app that made it is how laptops cook in bags.",
+      "Opens the Keep Awake page: sessions that run indefinitely, for a duration, or until a time, with a live countdown — everything Amphetamine's core does, on the caffeinate macOS already ships. Or skip the page: `awake 45` and `awake 2h` start a timed session straight from here. Sessions are tied to Caduceus's process, so quitting the app always re-enables sleep.",
     group: "utilities",
     icon: "☀",
-    keywords: ["awake", "caffeine", "caffeinate", "sleep", "insomnia", "presentation"],
-    run: ({ actions }) => outcome(actions, "Stay awake", () => api.stayAwake(true)),
+    keywords: [
+      "awake", "caffeine", "caffeinate", "sleep", "insomnia", "presentation", "session",
+      // What the app people are switching from is called.
+      "amphetamine", "keepingyouawake", "lungo", "theine", "owly",
+    ],
+    trigger: "awake",
+    argument: "duration (45, 2h, 1h30m) — or empty for the page",
+    async run({ input, actions }) {
+      // `awake 45` starts a session without opening anything; a bare `awake`
+      // opens the management page, which is where the options live.
+      const trimmed = input.trim();
+      if (trimmed) {
+        const minutes = parseAwakeMinutes(trimmed);
+        if (minutes === null) {
+          actions.notify("Try a duration like 45, 2h or 1h30m.", "error");
+          return false;
+        }
+        return outcome(actions, "Stay awake", () => api.awakeStart(minutes));
+      }
+      await api.openManageWindow("awake");
+      return true;
+    },
   },
   {
     id: "utility.caffeinate-off",
     title: "Allow this Mac to sleep",
-    detail: "Releases the keep-awake assertion.",
+    detail: "Ends the running keep-awake session immediately.",
     group: "utilities",
     icon: "☾",
-    keywords: ["awake", "caffeine", "sleep", "allow", "release"],
-    run: ({ actions }) => outcome(actions, "Sleep", () => api.stayAwake(false)),
+    keywords: ["awake", "caffeine", "sleep", "allow", "release", "amphetamine", "end session"],
+    run: ({ actions }) => outcome(actions, "Sleep", () => api.awakeStop()),
   },
   {
     id: "utility.define",
@@ -1322,6 +1383,62 @@ const OTHER_COMMANDS: CommandDef[] = [
             : "Window management needs Accessibility: System Settings → Privacy & Security → Accessibility.",
         });
         return false;
+      } catch (error) {
+        actions.notify(api.errorMessage(error), "error");
+        return false;
+      }
+    },
+  },
+
+  {
+    id: "utility.clipboard",
+    title: "Clipboard history",
+    detail:
+      "Everything you have copied — text, images, file paths — searchable and pinnable, kept in a local database that never leaves this Mac. The /v prefix filters it directly.",
+    group: "utilities",
+    icon: "❐",
+    keywords: [
+      "clipboard", "history", "copied", "paste", "pasteboard",
+      "maccy", "jumpcut", "flycut", "copyclip", "pastebot",
+    ],
+    run({ actions }) {
+      actions.setMode("clipboard");
+      actions.setInput("");
+      return false;
+    },
+  },
+  {
+    id: "utility.system-monitor",
+    title: "System monitor",
+    detail: "Live CPU, memory, disk and network, with the processes using them — and a way to end one that has stopped behaving.",
+    group: "utilities",
+    icon: "◔",
+    keywords: [
+      "system", "monitor", "cpu", "memory", "ram", "processes", "kill",
+      "activity monitor", "istat", "stats", "htop", "top",
+    ],
+    run({ actions }) {
+      actions.setMode("system");
+      actions.setInput("");
+      return false;
+    },
+  },
+  {
+    id: "utility.manage",
+    title: "Open the Manage window",
+    detail:
+      "The tabbed window for everything with live state: keep-awake sessions, sound devices, listening ports, Docker containers and this Mac's details. Tabs stay open while you use another, like a browser — ⌘1–⌘5 switch, ⌘W closes.",
+    group: "utilities",
+    icon: "▤",
+    keywords: [
+      "manage", "management", "tabs", "window", "control", "panel", "dashboard",
+      "awake", "sound", "ports", "docker", "amphetamine",
+    ],
+    trigger: "manage",
+    async run({ actions }) {
+      try {
+        await api.openManageWindow();
+        return true;
       } catch (error) {
         actions.notify(api.errorMessage(error), "error");
         return false;
@@ -1445,7 +1562,7 @@ const LIST_SPECS: ListSpec[] = [
       "Every container, running or not, with its image and status. Choosing one starts or stops it. Says plainly whether Docker is missing or simply not running.",
     group: "devenv",
     icon: "◉",
-    keywords: ["docker", "container", "containers", "compose", "image"],
+    keywords: ["docker", "container", "containers", "compose", "image", "orbstack", "colima"],
     prefill: "docker ",
   },
   {
@@ -1455,7 +1572,10 @@ const LIST_SPECS: ListSpec[] = [
       "Every connected output device, with the current one marked. Switching is immediate and system-wide. Devices are tracked by their CoreAudio UID, which survives a reboot — unlike the numeric id macOS reassigns freely.",
     group: "sound",
     icon: "◐",
-    keywords: ["output", "speaker", "speakers", "headphones", "audio", "sound", "device", "airpods"],
+    keywords: [
+      "output", "speaker", "speakers", "headphones", "audio", "sound", "device", "airpods",
+      "soundsource",
+    ],
     prefill: "output ",
   },
   {
@@ -1464,7 +1584,7 @@ const LIST_SPECS: ListSpec[] = [
     detail: "Every connected input device, with the current one marked.",
     group: "sound",
     icon: "◍",
-    keywords: ["input", "mic", "microphone", "audio", "device", "recording"],
+    keywords: ["input", "mic", "microphone", "audio", "device", "recording", "soundsource"],
     prefill: "input ",
   },
   {
@@ -1672,6 +1792,9 @@ const WEIGHTS: Record<string, number> = {
   // Utilities.
   "utility.define": 48,
   "utility.caffeinate-on": 44,
+  "utility.manage": 40,
+  "utility.clipboard": 76,
+  "utility.system-monitor": 46,
   "utility.machine": 34,
   "utility.eject": 32,
   "utility.permissions": 28,

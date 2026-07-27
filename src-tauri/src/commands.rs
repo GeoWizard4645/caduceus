@@ -984,13 +984,23 @@ pub fn eject_disks() -> tools::ToolOutcome {
 }
 
 #[tauri::command]
-pub fn stay_awake(on: bool) -> tools::ToolOutcome {
-    tools::set_awake(on, std::process::id())
+pub fn stay_awake(
+    awake: tauri::State<'_, tools::awake::AwakeRuntime>,
+    on: bool,
+) -> tools::ToolOutcome {
+    // Routed through the session runtime rather than tools::set_awake, so the
+    // quick toggle and the Manage window's sessions are one state, not two
+    // caffeinate processes fighting over who is keeping the machine up.
+    if on {
+        awake.start(None, false)
+    } else {
+        awake.stop()
+    }
 }
 
 #[tauri::command]
-pub fn stay_awake_state() -> bool {
-    tools::awake_state()
+pub fn stay_awake_state(awake: tauri::State<'_, tools::awake::AwakeRuntime>) -> bool {
+    awake.status().active
 }
 
 #[tauri::command]
@@ -1335,4 +1345,43 @@ pub fn record_usage(
 #[tauri::command]
 pub fn clear_usage(usage: tauri::State<'_, crate::usage::UsageStore>) {
     usage.clear();
+}
+
+// ---------------------------------------------------------------------------
+// Keep-awake sessions (the Manage window's Keep Awake page)
+// ---------------------------------------------------------------------------
+
+/// Start a keep-awake session. `minutes` of `None` means until turned off.
+#[tauri::command]
+pub fn awake_start(
+    awake: tauri::State<'_, tools::awake::AwakeRuntime>,
+    minutes: Option<u64>,
+    display_may_sleep: Option<bool>,
+) -> tools::ToolOutcome {
+    let duration = match minutes {
+        None => None,
+        // Rejecting rather than clamping: a UI that asked for 0 minutes has a
+        // bug, and silently holding the machine awake would hide it.
+        Some(0) => return tools::ToolOutcome::err("A session needs at least one minute."),
+        Some(m) => Some(std::time::Duration::from_secs(m.min(7 * 24 * 60) * 60)),
+    };
+    awake.start(duration, display_may_sleep.unwrap_or(false))
+}
+
+#[tauri::command]
+pub fn awake_stop(awake: tauri::State<'_, tools::awake::AwakeRuntime>) -> tools::ToolOutcome {
+    awake.stop()
+}
+
+#[tauri::command]
+pub fn awake_status(
+    awake: tauri::State<'_, tools::awake::AwakeRuntime>,
+) -> tools::awake::AwakeStatus {
+    awake.status()
+}
+
+/// Open the Manage window, optionally on a named page.
+#[tauri::command]
+pub fn open_manage_window<R: Runtime>(app: AppHandle<R>, page: Option<String>) -> Res<()> {
+    window::open_manage(&app, page.as_deref())
 }

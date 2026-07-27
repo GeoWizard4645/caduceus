@@ -502,7 +502,18 @@ export const EVENTS = {
   hotkeyProblems: "caduceus://hotkey-problems",
   chatChanged: "caduceus://chat-changed",
   chatOpen: "caduceus://chat-open",
+  manageOpen: "caduceus://manage-open",
 } as const;
+
+// --- keep-awake sessions -----------------------------------------------------
+
+export interface AwakeStatus {
+  active: boolean;
+  /** Seconds remaining, or null for an indefinite session. */
+  remainingSecs: number | null;
+  totalSecs: number | null;
+  displayMaySleep: boolean;
+}
 
 // --- chat --------------------------------------------------------------------
 

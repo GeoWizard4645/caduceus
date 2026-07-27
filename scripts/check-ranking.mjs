@@ -112,6 +112,38 @@ try {
     `typing a name still wins — "shut down" finds "${searched[0].command.title}"`,
     searched[0].command.id === "system.shut_down",
   );
+
+  // Product-name aliases: searching the tool someone is switching *from* must
+  // find the Caduceus equivalent. These live in keyword lists, which once
+  // decayed to nothing after the tenth entry — hence checked here forever.
+  const topFor = (query) =>
+    COMMANDS.map((command) => ({
+      command,
+      score: fuzzyScore(query, [command.title, command.detail, ...command.keywords]),
+    }))
+      .filter((row) => row.score !== null)
+      .sort((a, b) => b.score - a.score)[0]?.command;
+
+  const aliases = [
+    ["amphetamine", "utility.caffeinate-on"],
+    ["cleanshot", "screen.ocr"],
+    ["maccy", "utility.clipboard"],
+    ["orbstack", "list.docker"],
+    ["jettison", "utility.eject"],
+    ["activity monitor", "utility.system-monitor"],
+  ];
+  for (const [query, expectedId] of aliases) {
+    const found = topFor(query);
+    check(
+      `"${query}" finds ${expectedId} (got "${found?.title}")`,
+      found?.id === expectedId,
+    );
+  }
+  const rectangle = topFor("rectangle");
+  check(
+    `"rectangle" finds a window command (got "${rectangle?.title}")`,
+    rectangle?.id.startsWith("window."),
+  );
 } finally {
   await rm(scratch, { recursive: true, force: true });
 }

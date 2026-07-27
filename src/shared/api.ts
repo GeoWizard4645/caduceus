@@ -492,3 +492,18 @@ export const usageCounts = () => invoke<Record<string, UsageEntry>>("usage_count
 export const recordUsage = (id: string) => invoke<UsageEntry>("record_usage", { id });
 
 export const clearUsage = () => invoke<void>("clear_usage");
+
+// --- keep-awake sessions -----------------------------------------------------
+// The engine behind Manage → Keep Awake. `stayAwake` above is the quick toggle
+// over the same runtime, so the two can never disagree about the state.
+
+export const awakeStart = (minutes: number | null, displayMaySleep = false) =>
+  invoke<ToolOutcome>("awake_start", { minutes, displayMaySleep });
+
+export const awakeStop = () => invoke<ToolOutcome>("awake_stop");
+
+export const awakeStatus = () => invoke<import("./types").AwakeStatus>("awake_status");
+
+/** Open the Manage window, optionally on a named page ("awake", "sound", …). */
+export const openManageWindow = (page?: string) =>
+  invoke<void>("open_manage_window", { page: page ?? null });

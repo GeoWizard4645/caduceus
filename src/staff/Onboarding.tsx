@@ -71,6 +71,10 @@ function buildSteps(hotkey: string): Step[] {
     body: "chrome → launches the app · 2+2 → answers inline · your text → searches the web · / → asks your AI · /v → your clipboard history · /c → an agent that drives your Mac",
   },
   {
+    title: "124 commands, and pages with tabs",
+    body: "left half snaps a window · awake 45 keeps this Mac up for 45 minutes · sha256, port 3000, dark — it is all in the bar. Anything with live state opens the Manage window: browser-style tabs you can leave open, ⌘1–⌘5 to switch. Searching the app you came from works too — amphetamine, rectangle, maccy all find their counterpart.",
+  },
+  {
     title: "One last thing",
     body: "The / and /c prefixes need a model. Nothing else does — the launcher, clipboard, dictation, system monitor and search all work as they are. Want to configure AI features? Settings → Learn walks you through it and can find what is already on your Mac.",
   },

@@ -113,6 +113,15 @@ pub fn save<R: Runtime>(app: &AppHandle<R>, settings: &Settings) -> Result<(), S
 /// `#[serde(default)]` already handles *added* fields. This function handles
 /// the cases where a default alone would leave the app in a broken state.
 fn migrate(s: &mut Settings) {
+    // v2: launch-at-login became the default. Applied once, gated on the stored
+    // version: a hotkey only works while the process is running, so an install
+    // that is not a login item fails at exactly the moment it is reached for.
+    // A user who turns it off after this keeps their choice — the gate never
+    // fires twice.
+    if s.version < 2 {
+        s.general.launch_at_login = true;
+    }
+
     // A config that predates the Null backend, or one whose backend list was
     // emptied by hand, would leave every AI route unresolvable.
     if s.agents.backends.is_empty() {
@@ -337,6 +346,22 @@ pub fn reset_to_defaults<R: Runtime>(app: &AppHandle<R>) -> Result<Settings, Str
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn upgrading_to_v2_turns_launch_at_login_on_exactly_once() {
+        // An existing install that never chose either way gets the new default…
+        let mut old = Settings { version: 1, ..Settings::default() };
+        old.general.launch_at_login = false;
+        migrate(&mut old);
+        assert!(old.general.launch_at_login);
+        assert_eq!(old.version, Settings::CURRENT_VERSION);
+
+        // …and turning it off afterwards is a choice migrate never overrides.
+        let mut opted_out = old.clone();
+        opted_out.general.launch_at_login = false;
+        migrate(&mut opted_out);
+        assert!(!opted_out.general.launch_at_login);
+    }
 
     fn action_for(s: &Settings, key: &str) -> FunctionKeyAction {
         s.general

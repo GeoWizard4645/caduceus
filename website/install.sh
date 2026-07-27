@@ -401,7 +401,13 @@ replace_installed_app() {
   local source_app="$1" target="${INSTALL_DIR}/${APP_NAME}.app"
 
   if [ -d "$target" ]; then
-    say "Replacing the existing install…"
+    local old_version
+    old_version=$(defaults read "$target/Contents/Info" CFBundleShortVersionString 2>/dev/null || echo "unknown")
+    say "Updating ${APP_NAME} (was ${old_version}) — your settings, shortcuts, clipboard history and AI setup are kept."
+    # Only the .app bundle is replaced. Everything the user has configured lives
+    # in ~/Library/Application Support/${BUNDLE_ID}/ and API keys live in the
+    # Keychain; neither is touched by this script, ever. That is what makes an
+    # update indistinguishable from a restart.
     # Quit a running copy first, or the replaced binary keeps running.
     osascript -e "tell application \"${APP_NAME}\" to quit" >/dev/null 2>&1 || true
     pkill -f "${APP_NAME}.app/Contents/MacOS/" >/dev/null 2>&1 || true

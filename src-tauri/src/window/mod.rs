@@ -40,6 +40,10 @@ pub const STAFF_WINDOW: &str = "staff";
 pub const COMMAND_CENTER_WINDOW: &str = "command-center";
 pub const SETTINGS_WINDOW: &str = "settings";
 pub const CHAT_WINDOW: &str = "chat";
+pub const MANAGE_WINDOW: &str = "manage";
+
+/// Asks the Manage window to open (or focus) a particular page's tab.
+pub const MANAGE_OPEN_EVENT: &str = "caduceus://manage-open";
 
 /// Asks the chat window to open a particular thread.
 pub const CHAT_OPEN_EVENT: &str = "caduceus://chat-open";
@@ -751,8 +755,29 @@ pub fn open_chat<R: Runtime>(app: &AppHandle<R>, conversation_id: Option<i64>) -
 /// fires the window still reports itself visible, so counting it would keep the
 /// Dock icon forever.
 #[cfg(target_os = "macos")]
+/// Open the Manage window, optionally telling it which page to show.
+///
+/// Pages are tabs: opening one that is already open focuses its tab rather
+/// than duplicating it, which is the browser behaviour the window imitates.
+pub fn open_manage<R: Runtime>(app: &AppHandle<R>, page: Option<&str>) -> Result<(), String> {
+    let Some(window) = app.get_webview_window(MANAGE_WINDOW) else {
+        return Err("the manage window is missing".into());
+    };
+    window.show().map_err(|e| e.to_string())?;
+    window.unminimize().ok();
+    window.set_focus().map_err(|e| e.to_string())?;
+    let _ = window.emit(MANAGE_OPEN_EVENT, page.map(str::to_string));
+
+    // Like Settings and Chat: a real window deserves a Dock entry while open.
+    #[cfg(target_os = "macos")]
+    {
+        let _ = app.set_activation_policy(tauri::ActivationPolicy::Regular);
+    }
+    Ok(())
+}
+
 pub fn on_dock_window_closed<R: Runtime>(app: &AppHandle<R>, closing: &str) {
-    let others_visible = [SETTINGS_WINDOW, CHAT_WINDOW, COMMAND_CENTER_WINDOW]
+    let others_visible = [SETTINGS_WINDOW, CHAT_WINDOW, MANAGE_WINDOW, COMMAND_CENTER_WINDOW]
         .iter()
         .filter(|label| **label != closing)
         .any(|label| {

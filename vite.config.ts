@@ -34,6 +34,7 @@ export default defineConfig({
         commandCenter: resolve(__dirname, "command-center.html"),
         settings: resolve(__dirname, "settings.html"),
         chat: resolve(__dirname, "chat.html"),
+        manage: resolve(__dirname, "manage.html"),
       },
     },
   },

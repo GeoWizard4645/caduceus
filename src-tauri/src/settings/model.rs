@@ -34,7 +34,12 @@ pub struct Settings {
 }
 
 impl Settings {
-    pub const CURRENT_VERSION: u32 = 1;
+    /// Bump only when `migrate` needs to know a config predates a change.
+    ///
+    /// v2: `launch_at_login` became true by default. The version gate is what
+    /// makes the migration run once — a user who turns it back off afterwards
+    /// must stay off.
+    pub const CURRENT_VERSION: u32 = 2;
 }
 
 impl Default for Settings {
@@ -111,7 +116,13 @@ impl Default for GeneralSettings {
             staff_position: None,
             hover_expand_delay_ms: 0,
             collapse_idle_ms: 50,
-            launch_at_login: false,
+            // On by default: the hotkeys and the staff only exist while the
+            // process runs, and a launcher that is not running when you press
+            // its hotkey has failed at the one moment it was needed. This is
+            // how Raycast and Spotlight behave. It is a visible checkbox in
+            // Settings → General, and turning it off is respected permanently
+            // (see the v2 migration).
+            launch_at_login: true,
             cursor_poll_ms: 33,
             onboarding_done: false,
             function_keys: default_function_key_bindings(),
