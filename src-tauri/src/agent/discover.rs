@@ -104,7 +104,7 @@ async fn probe(candidate: &'static Candidate) -> DetectedProvider {
         Some(found) if found.is_empty() => (
             true,
             format!(
-                "Running, but no models are loaded. Pull one first (e.g. `ollama pull qwen3:4b` for {}).",
+                "Running, but no models are loaded. Pull one first (e.g. `ollama pull qwen3:1.7b` for {}).",
                 candidate.display_name
             ),
         ),

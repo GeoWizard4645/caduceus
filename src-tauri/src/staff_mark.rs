@@ -6,8 +6,10 @@ use image::ImageReader;
 use tauri::{AppHandle, Manager, Runtime};
 
 pub const IMAGE_TOKEN: &str = "image:staff-mark.png";
+pub const STAFF_MARK_CHANGED_EVENT: &str = "caduceus://staff-mark-changed";
 const MARK_FILENAME: &str = "staff-mark.png";
-const MAX_BYTES: u64 = 512 * 1024;
+/// Source file may be a large photo; we downscale before saving.
+const MAX_SOURCE_BYTES: u64 = 20 * 1024 * 1024;
 
 pub fn mark_dir<R: Runtime>(app: &AppHandle<R>) -> Result<PathBuf, String> {
     let dir = app
@@ -29,10 +31,10 @@ pub fn resolve_path<R: Runtime>(app: &AppHandle<R>, token: &str) -> Option<PathB
 
 pub fn import_mark<R: Runtime>(app: &AppHandle<R>, source: &Path) -> Result<String, String> {
     let meta = std::fs::metadata(source).map_err(|e| e.to_string())?;
-    if meta.len() > MAX_BYTES {
+    if meta.len() > MAX_SOURCE_BYTES {
         return Err(format!(
-            "Image is too large ({} KB). Use something under 512 KB.",
-            meta.len() / 1024
+            "Image is too large ({} MB). Use something under 20 MB.",
+            meta.len() / (1024 * 1024)
         ));
     }
 

@@ -85,19 +85,7 @@ fn run_tool(program: &str, args: &[&str]) -> Result<String, String> {
 
 /// Run AppleScript, translating the two errors users actually hit.
 fn osa(script: &str) -> Result<String, String> {
-    run_tool("osascript", &["-e", script]).map_err(|e| {
-        if e.contains("-1743") || e.contains("Not authorized") {
-            "Caduceus needs Automation permission to control that app. Grant it in System \
-             Settings → Privacy & Security → Automation."
-                .to_string()
-        } else if e.contains("-25211") || e.contains("assistive access") {
-            "Caduceus needs Accessibility permission for this. Grant it in System Settings → \
-             Privacy & Security → Accessibility."
-                .to_string()
-        } else {
-            e
-        }
-    })
+    super::apple::run_script(script)
 }
 
 /// Read a `defaults` boolean, treating anything unset as false.
@@ -363,6 +351,8 @@ pub struct PermissionReport {
 extern "C" {
     /// Reports the Screen Recording grant without prompting for it.
     fn CGPreflightScreenCaptureAccess() -> bool;
+    /// Shows the system Screen Recording consent dialog when still denied.
+    fn CGRequestScreenCaptureAccess() -> bool;
 }
 
 /// What Caduceus is and is not currently allowed to do.
@@ -384,6 +374,23 @@ pub fn permissions() -> PermissionReport {
             native_helper: false,
         }
     }
+}
+
+/// Ask macOS for Screen Recording. Returns whether access is granted afterward.
+#[cfg(target_os = "macos")]
+pub fn request_screen_recording() -> bool {
+    // SAFETY: documented API; no ownership.
+    unsafe {
+        if CGPreflightScreenCaptureAccess() {
+            return true;
+        }
+        CGRequestScreenCaptureAccess()
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+pub fn request_screen_recording() -> bool {
+    false
 }
 
 /// A one-screen summary of the machine, for the palette's output panel.

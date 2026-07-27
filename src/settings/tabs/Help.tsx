@@ -28,6 +28,7 @@ import type { RuntimeInfo } from "@/shared/types";
 import { countCommands, countFeatures } from "@/shared/featuresCatalog";
 import { Button, Callout, Kbd, Section, cx } from "@/shared/ui";
 
+import { UninstallSection } from "../UninstallSection";
 import type { Draft } from "../useDraft";
 
 export function HelpTab({
@@ -49,6 +50,12 @@ export function HelpTab({
 
   const replay = () => {
     draft.update((d) => (d.general.onboardingDone = false));
+  };
+
+  const retakeQuiz = () => {
+    draft.update((d) => {
+      d.general.onboardingQuizDone = false;
+    });
   };
 
   return (
@@ -97,6 +104,26 @@ export function HelpTab({
             <Callout tone="info">
               It is running on the staff right now. If the staff is hidden, press{" "}
               {staffKey ? <Kbd>{staffKey}</Kbd> : "the toggle key"} or use the menu-bar icon.
+            </Callout>
+          )}
+
+          <div className="row items-start justify-between gap-4 rounded-lg border border-line bg-base/20 px-3.5 py-3">
+            <div className="min-w-0">
+              <p className="text-[13px] font-medium text-ink">Personalization quiz</p>
+              <p className="mt-1 text-2xs leading-relaxed text-ink-mute">
+                Three quick questions: developer or not, what you use your Mac for, and which
+                features you wanted to try. Answers update your Favorites section and how commands
+                rank in search.
+              </p>
+            </div>
+            <Button size="sm" tone="default" onClick={retakeQuiz}>
+              {settings.general.onboardingQuizDone === false ? "Showing now" : "Retake"}
+            </Button>
+          </div>
+
+          {settings.general.onboardingQuizDone === false && (
+            <Callout tone="info">
+              The quiz is on the staff now. Show the staff to answer it before the two-minute tour.
             </Callout>
           )}
         </div>
@@ -220,6 +247,8 @@ export function HelpTab({
           </Button>
         </div>
       </Section>
+
+      <UninstallSection />
 
       <Section title="This install">
         <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-2 text-[13px]">

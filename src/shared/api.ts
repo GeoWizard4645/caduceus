@@ -28,7 +28,12 @@ import type {
   ChatMessage,
   ChatReply,
   Extension,
+  ExtensionFetchRequest,
+  ExtensionFetchResponse,
   InstallReport,
+  UninstallRequest,
+  UninstallResult,
+  UninstallSnapshot,
   Conversation,
   ParsedInput,
   RoutedText,
@@ -367,9 +372,85 @@ export const listExtensions = () => invoke<Extension[]>("list_extensions");
 
 export const removeExtension = (id: string) => invoke<void>("remove_extension", { id });
 
+export const uninstallSnapshot = () => invoke<UninstallSnapshot>("uninstall_snapshot");
+
+export const runUninstall = (request: UninstallRequest) =>
+  invoke<UninstallResult>("run_uninstall", { request });
+
 export const openExtensionsFolder = () => invoke<void>("open_extensions_folder");
 
 export const extensionPermissions = () => invoke<string[]>("extension_permissions");
+
+// --- what a running extension is allowed to do -------------------------------
+//
+// The `ctx` object an extension is handed is built out of exactly these calls
+// and nothing else — see `extensionRuntime.ts` for the sandbox they come from.
+// Each one takes the extension's id, and Rust re-reads that extension's header
+// to check the permission before it acts. A caller here cannot vouch for one.
+
+/** The extension's own source, to be run in the sandbox. */
+export const extensionSource = (id: string) => invoke<string>("extension_source", { id });
+
+export const extensionClipboardRead = (id: string) =>
+  invoke<string>("extension_clipboard_read", { id });
+
+export const extensionClipboardWrite = (id: string, text: string) =>
+  invoke<void>("extension_clipboard_write", { id, text });
+
+export const extensionFetch = (id: string, request: ExtensionFetchRequest) =>
+  invoke<ExtensionFetchResponse>("extension_fetch", { id, request });
+
+export const extensionSelection = (id: string) =>
+  invoke<string[]>("extension_selection", { id });
+
+export const extensionNotify = (id: string, text: string) =>
+  invoke<void>("extension_notify", { id, text });
+
+export const extensionOpen = (id: string, url: string) =>
+  invoke<void>("extension_open", { id, url });
+
+export const extensionStorageGet = (id: string, key: string) =>
+  invoke<unknown>("extension_storage_get", { id, key });
+
+export const extensionStorageSet = (id: string, key: string, value: unknown) =>
+  invoke<void>("extension_storage_set", { id, key, value });
+
+export const extensionShellRun = (
+  id: string,
+  command: string,
+  input?: string,
+  timeoutSecs?: number,
+) => invoke<ExecOutcome>("extension_shell_run", { id, command, input, timeoutSecs });
+
+export const extensionAutomationScript = (id: string, script: string) =>
+  invoke<string>("extension_automation_script", { id, script });
+
+export const extensionAutomationShortcut = (id: string, name: string, input?: string) =>
+  invoke<string>("extension_automation_shortcut", { id, name, input });
+
+export const extensionFilesRead = (id: string, path: string) =>
+  invoke<string>("extension_files_read", { id, path });
+
+export const extensionFilesWrite = (id: string, path: string, content: string) =>
+  invoke<void>("extension_files_write", { id, path, content });
+
+export const extensionSettingsGet = (id: string) =>
+  invoke<Settings>("extension_settings_get", { id });
+
+export const extensionSettingsSet = (id: string, next: Settings) =>
+  invoke<void>("extension_settings_set", { id, next });
+
+export const extensionCommandsDispatch = (id: string, input: string) =>
+  invoke<DispatchOutcome>("extension_commands_dispatch", { id, input });
+
+export const extensionCommandsRunTool = (id: string, toolId: string, input: string) =>
+  invoke<ToolResult>("extension_commands_run_tool", { id, toolId, input });
+
+export const extensionAiAsk = (id: string, prompt: string) =>
+  invoke<string>("extension_ai_ask", { id, prompt });
+
+export const extensionShortcutsRun = (id: string, shortcutId: string, query?: string) =>
+  invoke<ExecOutcome>("extension_shortcuts_run", { id, shortcutId, query });
 
 // --- window management -------------------------------------------------------
 // Needs the Accessibility permission. `windowPermission` never prompts, so the
@@ -412,6 +493,10 @@ export interface RepairOutcome {
  */
 export const repairPermission = (grant: import("./tabs").PermissionId) =>
   invoke<RepairOutcome>("repair_permission", { grant });
+
+/** Trigger the system consent sheet where macOS provides one (Accessibility, Screen Recording). */
+export const requestPermission = (grant: import("./tabs").PermissionId) =>
+  invoke<boolean>("request_permission", { grant });
 
 export const machineSummary = () => invoke<ToolOutcome>("machine_summary");
 
@@ -723,6 +808,9 @@ export interface UsageEntry {
 export const usageCounts = () => invoke<Record<string, UsageEntry>>("usage_counts");
 
 export const recordUsage = (id: string) => invoke<UsageEntry>("record_usage", { id });
+
+export const seedUsage = (ids: string[], count: number) =>
+  invoke<void>("seed_usage", { ids, count });
 
 export const clearUsage = () => invoke<void>("clear_usage");
 

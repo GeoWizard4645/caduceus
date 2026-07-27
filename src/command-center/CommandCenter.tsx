@@ -40,6 +40,7 @@ import { DockerPage } from "./pages/DockerPage";
 import { MachinePage } from "./pages/MachinePage";
 import { PermissionPage } from "./pages/PermissionPage";
 import { ToolPage } from "./pages/ToolPage";
+import { ExtensionPage } from "./pages/ExtensionPage";
 import {
   MAX_TABS,
   closeTab as closeTabIn,
@@ -63,8 +64,8 @@ const SettingsPage = lazy(() =>
 const ChatPage = lazy(() => import("@/chat/Chat").then((m) => ({ default: m.Chat })));
 
 /** Size the window grows to the first time a real page opens in it. */
-const PAGE_MIN_WIDTH = 940;
-const PAGE_MIN_HEIGHT = 660;
+const PAGE_MIN_WIDTH = 1080;
+const PAGE_MIN_HEIGHT = 720;
 
 export function CommandCenter() {
   // Restored during the first render, so a reopened window *is* the window you
@@ -516,6 +517,15 @@ function TabContent({
           onSetTitle={onSetTitle}
         />
       );
+    case "extension":
+      return (
+        <ExtensionPage
+          active={active}
+          extensionId={tab.extensionId ?? ""}
+          prefill={tab.prefill}
+          onSetTitle={onSetTitle}
+        />
+      );
     case "permission":
       return (
         <PermissionPage
@@ -534,7 +544,12 @@ function TabContent({
     case "chat":
       return (
         <LazyPage>
-          <ChatPage initialConversationId={tab.conversationId} />
+          <ChatPage
+            initialConversationId={tab.conversationId}
+            initialPrefill={tab.prefill}
+            initialMode={tab.chatMode ?? "chat"}
+            onOpenTab={onOpenTab}
+          />
         </LazyPage>
       );
   }

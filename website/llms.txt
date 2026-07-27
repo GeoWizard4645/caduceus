@@ -4,12 +4,14 @@
 
 Important notes:
 
+- Commonly searched for as an open-source alternative to Raycast, Alfred, Spotlight, Maccy and Amphetamine; it covers the launcher, clipboard-history, window-management and keep-awake ground those tools occupy, without an account or a subscription.
+- Built with Tauri, Rust and React; one ~10 MB universal binary.
 - Fully open source (GPL-3.0-or-later; MIT through v2.3.1) and fully customizable — hotkeys, prefixes, backends, and optional extensions.
 - No monetization, no data collection, no telemetry, and no tracking. Private and secure by default; as local as you want (offline core workflow, optional local or cloud AI only if you configure it).
 - macOS 11 (Big Sur) or later; universal binary (Apple Silicon and Intel).
 - Menu bar app only — no Dock icon. Notarized signing is not in place yet; the installer clears the quarantine attribute after download.
 - AI is optional: `/` routes to your configured chat backend; `/c` starts computer-use (Hermes is the supported path for screen control). Caduceus does not ship its own mouse or screen driver.
-- Extension folders and `caduceus.json` manifests are documented in the repo but the runtime is design-stage and not loaded in current releases.
+- Extensions are single `.js` files with a `@caduceus` header comment; they install by drag-and-drop and run in a Web Worker sandbox with a permission-checked `ctx` API. No folders, no `caduceus.json` manifest.
 
 ## Website
 
@@ -27,7 +29,7 @@ Important notes:
 
 ## Optional
 
-- [Extension system (design doc)](https://github.com/GeoWizard4645/caduceus/blob/main/EXTENSIONS.md): Planned sandbox, manifest format, and `ctx` API — not yet implemented in the app.
+- [Extension system](https://github.com/GeoWizard4645/caduceus/blob/main/EXTENSIONS.md): The one-file format, the Web Worker sandbox, the permission set, and the `ctx` API.
 - [GitHub issues](https://github.com/GeoWizard4645/caduceus/issues): Bugs and feature requests.
 - [Release process](https://github.com/GeoWizard4645/caduceus/blob/main/RELEASE.md): How maintainers cut and publish macOS builds.
 - Contact: caduceus@vivaanshahani.com

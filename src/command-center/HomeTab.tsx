@@ -199,6 +199,22 @@ export function HomeTab({
     else inputRef.current?.focus();
   });
 
+const CHAT_OPEN_PREFIX = "/ ";
+const aiPortalOpened = useRef(false);
+
+  useEffect(() => {
+    if (!active) return;
+    const opensChat = input === CHAT_OPEN_PREFIX || input.startsWith(CHAT_OPEN_PREFIX);
+    if (opensChat && !aiPortalOpened.current) {
+      aiPortalOpened.current = true;
+      const remainder = input.startsWith(CHAT_OPEN_PREFIX) ? input.slice(2) : "";
+      onOpenTab({ kind: "chat", prefill: remainder, chatMode: "chat" });
+      setInput("");
+      return;
+    }
+    if (!opensChat) aiPortalOpened.current = false;
+  }, [input, active, onOpenTab]);
+
   // --- results ------------------------------------------------------------
   useEffect(() => {
     if (!settings) return;

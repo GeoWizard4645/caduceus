@@ -36,12 +36,15 @@ import {
   type CommandOutput,
   type FieldValues,
 } from "@/shared/commands";
-import { PERMISSIONS, permissionFromMessage } from "@/shared/permissions";
+import { permissionFromMessage } from "@/shared/permissions";
+import { permissionsForCommand } from "@/shared/commandPermissions";
 import { useDebounced, useEscape } from "@/shared/hooks";
-import type { PermissionId, Tab } from "@/shared/tabs";
+import type { Tab } from "@/shared/tabs";
 import { ShortcutIcon } from "@/shared/ShortcutIcon";
-import { Button, Callout, EmptyState, Spinner, cx } from "@/shared/ui";
+import { Button, EmptyState, Spinner, cx } from "@/shared/ui";
 import { recordUsage } from "@/shared/usage";
+
+import { PermissionGate, usePermissionGate } from "../PermissionGate";
 
 import { CommandFields } from "./CommandForm";
 import { TOOL_PAGES } from "./tools";
@@ -60,6 +63,10 @@ export function ToolPage({
   onSetTitle,
 }: ToolPageProps & { commandId: string; prefill?: string }) {
   const command = useMemo(() => COMMANDS.find((c) => c.id === commandId), [commandId]);
+  const requiredPermissions = useMemo(
+    () => (command ? permissionsForCommand(command) : []),
+    [command],
+  );
 
   if (!command) {
     return (
@@ -73,13 +80,9 @@ export function ToolPage({
 
   // A feature whose interaction cannot be a form gets its own page.
   const Bespoke = command.page ? TOOL_PAGES[command.page] : undefined;
-  if (Bespoke) {
-    return (
-      <Bespoke active={active} onOpenTab={onOpenTab} onSetTitle={onSetTitle} />
-    );
-  }
-
-  return (
+  const page = Bespoke ? (
+    <Bespoke active={active} onOpenTab={onOpenTab} onSetTitle={onSetTitle} />
+  ) : (
     <FormTool
       key={command.id}
       active={active}
@@ -88,6 +91,18 @@ export function ToolPage({
       onOpenTab={onOpenTab}
       onSetTitle={onSetTitle}
     />
+  );
+
+  return (
+    <PermissionGate
+      active={active}
+      permissions={requiredPermissions}
+      scope={command.id}
+      retryCommandId={command.id}
+      onOpenTab={onOpenTab}
+    >
+      {page}
+    </PermissionGate>
   );
 }
 
@@ -111,7 +126,7 @@ function FormTool({
 
   const [output, setOutput] = useState<CommandOutput | null>(null);
   const [note, setNote] = useState<{ text: string; ok: boolean } | null>(null);
-  const [wall, setWall] = useState<PermissionId | null>(null);
+  const reportPermissionWall = usePermissionGate();
   const [busy, setBusy] = useState(false);
   const [armed, setArmed] = useState(false);
   /** Which required field ⌘↵ was refused for, once it has been refused. */
@@ -137,13 +152,10 @@ function FormTool({
     () => ({
       notify: (message, tone) => {
         const permission = tone === "error" ? permissionFromMessage(message) : null;
-        setWall(permission);
-        // A permission wall says its piece in the block below; repeating it as
-        // a red line underneath would be the same sentence twice.
+        if (permission) reportPermissionWall(permission);
         setNote(permission ? null : { text: message, ok: tone !== "error" });
       },
       showOutput: (next) => {
-        setWall(null);
         setNote(null);
         setOutput(next);
       },
@@ -154,7 +166,7 @@ function FormTool({
       // purpose and are still reading.
       close: () => {},
     }),
-    [onOpenTab, setValue],
+    [onOpenTab, reportPermissionWall, setValue],
   );
 
   const run = useCallback(
@@ -170,13 +182,13 @@ function FormTool({
       } catch (error) {
         const message = api.errorMessage(error);
         const permission = permissionFromMessage(message);
-        setWall(permission);
-        if (!permission) setNote({ text: message, ok: false });
+        if (permission) reportPermissionWall(permission);
+        else setNote({ text: message, ok: false });
       } finally {
         setBusy(false);
       }
     },
-    [actions, command],
+    [actions, command, reportPermissionWall],
   );
 
   // --- is it fillable in ------------------------------------------------
@@ -289,38 +301,6 @@ function FormTool({
         {busy && <Spinner className="text-accent" />}
       </div>
 
-      {/* --- permission wall ---------------------------------------------- */}
-      {wall && (
-        <div className="mb-3 shrink-0">
-          <Callout tone="warn" title={`${PERMISSIONS[wall].title} is switched off`}>
-            <p>{PERMISSIONS[wall].why}</p>
-            <div className="row mt-2.5 gap-2">
-              <Button
-                size="sm"
-                tone="primary"
-                onClick={() => void api.openSystemSettings(PERMISSIONS[wall].pane)}
-              >
-                Open System Settings
-              </Button>
-              <Button
-                size="sm"
-                tone="ghost"
-                onClick={() =>
-                  onOpenTab({
-                    kind: "permission",
-                    permission: wall,
-                    retryCommandId: command.id,
-                    title: `${PERMISSIONS[wall].title} permission`,
-                  })
-                }
-              >
-                Show me exactly what to click
-              </Button>
-            </div>
-          </Callout>
-        </div>
-      )}
-
       {note && (
         <p className={cx("mb-3 shrink-0 text-2xs", note.ok ? "text-ink-mute" : "text-danger")}>
           {note.text}
@@ -397,8 +377,7 @@ function FormTool({
           )}
         </div>
       ) : (
-        !wall && (
-          <div className="flex min-h-0 flex-1 items-center justify-center rounded-cad border border-dashed border-line/70">
+        <div className="flex min-h-0 flex-1 items-center justify-center rounded-cad border border-dashed border-line/70">
             <p className="px-6 text-center text-2xs text-ink-faint">
               {form.fields.length === 0
                 ? "Press Run — whatever it produces shows up here."
@@ -407,7 +386,6 @@ function FormTool({
                   : "Fill the fields above, then Run."}
             </p>
           </div>
-        )
       )}
     </div>
   );

@@ -39,6 +39,7 @@ pub mod sysmon;
 pub mod tools;
 pub mod staff_mark;
 pub mod tray;
+pub mod uninstall;
 pub mod usage;
 pub mod voice;
 pub mod window;
@@ -123,8 +124,30 @@ pub fn run() {
             commands::install_extension,
             commands::list_extensions,
             commands::remove_extension,
+            commands::uninstall_snapshot,
+            commands::run_uninstall,
             commands::open_extensions_folder,
             commands::extension_permissions,
+            commands::extension_source,
+            commands::extension_clipboard_read,
+            commands::extension_clipboard_write,
+            commands::extension_fetch,
+            commands::extension_selection,
+            commands::extension_notify,
+            commands::extension_open,
+            commands::extension_storage_get,
+            commands::extension_storage_set,
+            commands::extension_shell_run,
+            commands::extension_automation_script,
+            commands::extension_automation_shortcut,
+            commands::extension_files_read,
+            commands::extension_files_write,
+            commands::extension_settings_get,
+            commands::extension_settings_set,
+            commands::extension_commands_dispatch,
+            commands::extension_commands_run_tool,
+            commands::extension_ai_ask,
+            commands::extension_shortcuts_run,
             commands::toggle_staff,
             commands::save_staff_position,
             commands::refresh_staff_layout,
@@ -181,6 +204,7 @@ pub fn run() {
             commands::window_action,
             commands::window_permission,
             commands::repair_permission,
+            commands::request_permission,
             commands::selected_text,
             // developer toolbox
             commands::run_tool,
@@ -246,6 +270,7 @@ pub fn run() {
             // usage ranking
             commands::usage_counts,
             commands::record_usage,
+            commands::seed_usage,
             commands::clear_usage,
             // misc
             commands::quit_app,

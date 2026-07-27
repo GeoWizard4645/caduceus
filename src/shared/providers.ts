@@ -18,12 +18,14 @@ import {
   type CommandOutput,
 } from "./commands";
 import { usageBoost } from "./usage";
+import { personalizationBoost } from "./personalization";
 import { convert as convertUnits, formatValue, parseConversion } from "./units";
 import { fuzzyMatch, fuzzyScore } from "./fuzzy";
 import type { Tab } from "./tabs";
 import type {
   CalcResult,
   ClipboardEntry,
+  Extension,
   InstalledApp,
   ParsedInput,
   Settings,
@@ -649,10 +651,44 @@ export const captureProvider: ResultProvider = {
  * SHA-256, and a command sit in one ranked list with everything else rather
  * than in a submenu you have to know exists.
  */
+export const favoritesProvider: ResultProvider = {
+  id: "favorites",
+  title: "Favorites",
+  search({ query, settings, actions }) {
+    if (query) return [];
+
+    const ids = settings.general.personalization?.favoriteCommandIds ?? [];
+    if (ids.length === 0) return [];
+
+    const byId = new Map(COMMANDS.map((c) => [c.id, c]));
+    const rows: ResultItem[] = [];
+
+    ids.forEach((commandId, index) => {
+      const command = byId.get(commandId);
+      if (!command) return;
+      rows.push({
+        id: `favorite:${command.id}`,
+        usageKey: `command:${command.id}`,
+        title: command.title,
+        subtitle: command.detail,
+        icon: command.icon,
+        group: "Favorites",
+        score: 540 - index,
+        accessory: accessoryFor(command),
+        confirm: command.argument ? undefined : command.confirm,
+        openPage: () => openCommandPage(command, "", actions),
+        run: () => runCommand(command, "", actions),
+      });
+    });
+
+    return rows;
+  },
+};
+
 export const commandProvider: ResultProvider = {
   id: "commands",
   title: "Commands",
-  search({ query, raw, parsed, actions }) {
+  search({ query, raw, parsed, actions, settings }) {
     // A prefixed input has its own destination; "/c open mail" is a task.
     if (parsed?.rule) return [];
 
@@ -688,8 +724,11 @@ export const commandProvider: ResultProvider = {
       const ranked = [...COMMANDS].sort(
         (a, b) =>
           usageBoost(`command:${b.id}`) +
-          commandWeight(b) -
-          (usageBoost(`command:${a.id}`) + commandWeight(a)),
+          commandWeight(b) +
+          personalizationBoost(settings, b.id) -
+          (usageBoost(`command:${a.id}`) +
+            commandWeight(a) +
+            personalizationBoost(settings, a.id)),
       );
 
       return ranked.map((command, index) => ({
@@ -725,7 +764,7 @@ export const commandProvider: ResultProvider = {
         // exact app-name match, but above a web search. The usage boost is what
         // lets a command you run daily overtake a closer textual match you never
         // touch.
-        score: score - 10 + usageBoost(`command:${command.id}`),
+        score: score - 10 + usageBoost(`command:${command.id}`) + personalizationBoost(settings, command.id),
         positions: match?.positions,
         accessory: accessoryFor(command),
         confirm: command.argument ? undefined : command.confirm,
@@ -1014,14 +1053,122 @@ async function bigFileRows(limit: number, actions: PaletteActions) {
   }));
 }
 
+// ---------------------------------------------------------------------------
+// Extensions
+// ---------------------------------------------------------------------------
+
+/**
+ * The installed list, cached for the length of a window session.
+ *
+ * Reading it is a directory scan plus a header parse per file, and this runs on
+ * every keystroke. Installing or removing one goes through Settings, which calls
+ * {@link forgetExtensions} — so the cache is only ever stale for a file someone
+ * dropped into the folder by hand, and it comes back on the next window.
+ */
+let extensionCache: Promise<Extension[]> | null = null;
+
+function installedExtensions(): Promise<Extension[]> {
+  extensionCache ??= api.listExtensions().catch(() => [] as Extension[]);
+  return extensionCache;
+}
+
+/** Drop the cache after an install or a removal. */
+export function forgetExtensions(): void {
+  extensionCache = null;
+}
+
+/**
+ * How much of the query names the extension, and how much is its input.
+ *
+ * Longest match first: for "word count hello", `Word Count` should take two
+ * tokens and be handed "hello", not take one and be handed "count hello".
+ * Fuzzy matching is subsequence-based, so trying short prefixes first would
+ * almost always win with the wrong answer.
+ */
+function splitExtensionQuery(
+  tokens: string[],
+  ext: Extension,
+): { score: number; positions?: number[]; input: string } | null {
+  for (let take = tokens.length; take >= 1; take -= 1) {
+    const head = tokens.slice(0, take).join(" ");
+    const match = fuzzyMatch(head, ext.name) ?? fuzzyMatch(head, ext.id);
+    if (!match) continue;
+    return {
+      score: match.score,
+      positions: fuzzyMatch(head, ext.name)?.positions,
+      input: tokens.slice(take).join(" "),
+    };
+  }
+  return null;
+}
+
+/**
+ * Installed extensions, as palette rows.
+ *
+ * Enter opens the extension's page rather than running it in place. An
+ * extension can return a list whose rows carry an `action` closure, and that
+ * closure only exists while the worker that made it does — a palette row that
+ * vanishes on the next keystroke cannot own a running program. The page can,
+ * and it is also where an extension's errors can be read.
+ */
+export const extensionProvider: ResultProvider = {
+  id: "extensions",
+  title: "Extensions",
+  async search({ query, actions }) {
+    const trimmed = query.trim();
+    if (!trimmed) return [];
+
+    const installed = await installedExtensions();
+    if (installed.length === 0) return [];
+
+    const tokens = trimmed.split(/\s+/);
+    const rows: ResultItem[] = [];
+
+    for (const ext of installed) {
+      const match = splitExtensionQuery(tokens, ext);
+      if (!match) continue;
+
+      rows.push({
+        id: `extension:${ext.id}`,
+        title: ext.name,
+        subtitle: match.input
+          ? `${ext.description || "Extension"} — “${match.input}”`
+          : ext.description || "Extension",
+        icon: "⊞",
+        group: "Extensions",
+        // Below a built-in command of the same name: a third-party file should
+        // not be able to take a keystroke away from something that ships.
+        score: match.score - 40 + usageBoost(`extension:${ext.id}`),
+        positions: match.positions,
+        usageKey: `extension:${ext.id}`,
+        accessory: "↵",
+        run: () => {
+          actions.openTab({
+            kind: "extension",
+            extensionId: ext.id,
+            prefill: match.input,
+            title: ext.name,
+            icon: "⊞",
+          });
+          return false;
+        },
+      });
+    }
+
+    return rows;
+  },
+};
+
 export const defaultProviders: ResultProvider[] = [
   calculatorProvider,
+  favoritesProvider,
   commandProvider,
   liveListProvider,
   shortcutProvider,
   conversionProvider,
   appLauncherProvider,
   captureProvider,
+  extensionProvider,
   searchFallbackProvider,
   clipboardProvider,
   prefixHintProvider,

@@ -19,15 +19,45 @@
 //! The header is parsed here **without executing anything**. That ordering is
 //! the point: you can see an extension's name and everything it claims it wants
 //! before any of its code has run.
+//!
+//! # Where an extension actually runs
+//!
+//! Not here. The code runs in a Web Worker inside the Command Center webview
+//! (`src/shared/extensionRuntime.ts`), which has no DOM, no Tauri IPC and — by
+//! the CSP in `tauri.conf.json` — no route to the network. Everything it is
+//! allowed to touch comes back through this crate as a named command.
+//!
+//! Which means the permission check that matters is the one in [`require`], on
+//! this side. The sandbox refuses an ungranted call too, but that refusal is
+//! written in the same JavaScript context the extension runs in, so it is a
+//! convenience rather than a boundary. [`require`] re-reads the header off disk
+//! on every call: editing an installed file to widen its permissions works, and
+//! is supposed to — it is your file. Persuading the webview to ask for
+//! something the header does not claim does not.
+
+pub mod files;
+pub mod net;
+pub mod storage;
 
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
-/// Capabilities an extension can ask for. A closed set — a permission that is
-/// not on this list cannot be granted, so a typo fails loudly at install time
-/// rather than silently widening what something can reach.
-pub const PERMISSIONS: &[&str] = &["clipboard", "network", "selection", "notifications"];
+/// Capabilities an extension can ask for. Declared in the file header; checked on
+/// every call in Rust (`require`). Users can read the list before installing.
+pub const PERMISSIONS: &[&str] = &[
+    "clipboard",
+    "network",
+    "selection",
+    "notifications",
+    "shell",
+    "automation",
+    "files",
+    "settings",
+    "commands",
+    "ai",
+    "shortcuts",
+];
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -156,8 +186,8 @@ pub fn inspect(source_path: &Path) -> Result<Extension, String> {
     let source = std::fs::read_to_string(source_path)
         .map_err(|e| format!("Could not read that file: {e}"))?;
 
-    if source.len() > 512 * 1024 {
-        return Err("That file is over 512 KB. Extensions are single scripts, not bundles.".into());
+    if source.len() > 2 * 1024 * 1024 {
+        return Err("That file is over 2 MB. Split logic into smaller extensions or trim dead code.".into());
     }
 
     let header = parse_header(&source);
@@ -232,15 +262,68 @@ pub fn list(app_data: &Path) -> Vec<Extension> {
     out
 }
 
-pub fn remove(id: &str, app_data: &Path) -> Result<(), String> {
-    // Never let an id out of the UI become a path: `../../something` would
-    // otherwise delete a file well outside the extensions directory.
-    let safe = id_from_filename(Path::new(id));
-    let path = extensions_dir(app_data).join(format!("{safe}.js"));
+/// An id that arrived over IPC, forced back into a filename.
+///
+/// `../../something` must name a file in the extensions directory or nothing at
+/// all — never a path out of it.
+pub(crate) fn safe_id(id: &str) -> String {
+    id_from_filename(Path::new(id))
+}
+
+/// Where an installed extension lives, given an id that came from the UI.
+fn installed_path(id: &str, app_data: &Path) -> PathBuf {
+    extensions_dir(app_data).join(format!("{}.js", safe_id(id)))
+}
+
+/// Re-read an installed extension's header.
+pub fn load(id: &str, app_data: &Path) -> Result<Extension, String> {
+    let path = installed_path(id, app_data);
     if !path.is_file() {
         return Err("That extension is not installed.".into());
     }
-    std::fs::remove_file(&path).map_err(|e| format!("Could not remove it: {e}"))
+    inspect(&path)
+}
+
+/// The source of an installed extension, for the sandbox to run.
+pub fn source(id: &str, app_data: &Path) -> Result<String, String> {
+    // Through `load` first, so a file that has been edited into something
+    // without a header stops being an extension rather than quietly still
+    // running as one.
+    load(id, app_data)?;
+    std::fs::read_to_string(installed_path(id, app_data))
+        .map_err(|e| format!("Could not read that extension: {e}"))
+}
+
+/// Refuse to act for an extension that did not ask for this permission.
+///
+/// Every capability command goes through here, so the answer to "what can this
+/// extension reach?" is the header you can read in the Extensions tab, checked
+/// against the file on disk at the moment of the call.
+pub fn require(id: &str, app_data: &Path, permission: &str) -> Result<Extension, String> {
+    let ext = load(id, app_data)?;
+    if !ext.permissions.iter().any(|p| p == permission) {
+        return Err(format!(
+            "“{}” did not ask for the “{permission}” permission. Add it to the permissions line \
+             in the file's header and install it again.",
+            ext.name
+        ));
+    }
+    Ok(ext)
+}
+
+pub fn remove(id: &str, app_data: &Path) -> Result<(), String> {
+    // Never let an id out of the UI become a path: `../../something` would
+    // otherwise delete a file well outside the extensions directory.
+    let path = installed_path(id, app_data);
+    if !path.is_file() {
+        return Err("That extension is not installed.".into());
+    }
+    std::fs::remove_file(&path).map_err(|e| format!("Could not remove it: {e}"))?;
+    // Removing an extension removes what it saved. Leaving the keys behind
+    // would mean reinstalling it silently hands it back state from a version
+    // you deleted.
+    storage::forget(id, app_data);
+    Ok(())
 }
 
 #[cfg(test)]
@@ -346,6 +429,71 @@ export default async function (input, ctx) {}
 
         let _ = remove("../../victim", &app_data);
         assert!(outside.is_file(), "a traversing id must not delete anything outside");
+    }
+
+    #[test]
+    fn a_declared_permission_is_granted_and_an_undeclared_one_is_not() {
+        let dir = tmp();
+        let app_data = dir.join("data");
+        install(&write(&dir, "word-count.js", GOOD), &app_data).unwrap();
+
+        assert!(require("word-count", &app_data, "clipboard").is_ok());
+        let err = require("word-count", &app_data, "selection").unwrap_err();
+        assert!(err.contains("selection"), "{err}");
+        assert!(err.contains("Word Count"), "{err}");
+    }
+
+    /// The check reads the file, not a value the caller supplied — so an id
+    /// that names nothing cannot be waved through.
+    #[test]
+    fn an_extension_that_is_not_installed_is_granted_nothing() {
+        let dir = tmp();
+        let app_data = dir.join("data");
+        std::fs::create_dir_all(extensions_dir(&app_data)).unwrap();
+        assert!(require("ghost", &app_data, "clipboard").is_err());
+        assert!(source("ghost", &app_data).is_err());
+    }
+
+    /// An installed file edited into something without a header stops being an
+    /// extension, rather than continuing to run with its old permissions.
+    #[test]
+    fn editing_the_header_away_stops_it_running() {
+        let dir = tmp();
+        let app_data = dir.join("data");
+        let installed = install(&write(&dir, "word-count.js", GOOD), &app_data).unwrap();
+
+        std::fs::write(&installed.path, "export default () => {}").unwrap();
+        assert!(source("word-count", &app_data).is_err());
+        assert!(require("word-count", &app_data, "clipboard").is_err());
+    }
+
+    /// Editing the file to ask for more is allowed — it is your file, and the
+    /// Extensions tab shows what it now claims. What must not work is the
+    /// webview asking for something the file does not claim.
+    #[test]
+    fn widening_the_header_widens_what_is_granted() {
+        let dir = tmp();
+        let app_data = dir.join("data");
+        let installed = install(&write(&dir, "word-count.js", GOOD), &app_data).unwrap();
+        assert!(require("word-count", &app_data, "selection").is_err());
+
+        std::fs::write(
+            &installed.path,
+            "/**\n * @caduceus 1\n * name: Word Count\n * permissions: selection\n */\n",
+        )
+        .unwrap();
+        assert!(require("word-count", &app_data, "selection").is_ok());
+    }
+
+    #[test]
+    fn removing_an_extension_takes_its_storage_with_it() {
+        let dir = tmp();
+        let app_data = dir.join("data");
+        install(&write(&dir, "word-count.js", GOOD), &app_data).unwrap();
+        storage::set("word-count", &app_data, "k", Some(serde_json::json!(1))).unwrap();
+
+        remove("word-count", &app_data).unwrap();
+        assert_eq!(storage::get("word-count", &app_data, "k").unwrap(), None);
     }
 
     #[test]

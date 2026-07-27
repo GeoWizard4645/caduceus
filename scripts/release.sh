@@ -209,7 +209,7 @@ fi
 
 # --- bump ------------------------------------------------------------------
 
-step "Setting the version in three files"
+step "Setting the version in four files"
 
 bump_json() {
   local file="$1"
@@ -225,6 +225,12 @@ bump_json src-tauri/tauri.conf.json
 run perl -0pi -e "s/^version = \"[^\"]+\"/version = \"$VERSION\"/m" src-tauri/Cargo.toml
 note "src-tauri/Cargo.toml"
 
+# The site's SoftwareApplication schema states the shipping version, and a
+# structured-data block that disagrees with the release is worse than no block
+# at all — search engines read it literally.
+run perl -0pi -e "s/(\"softwareVersion\": \")[^\"]+/\${1}$VERSION/" website/index.html
+note "website/index.html (schema.org softwareVersion)"
+
 # Cargo.lock carries the version too. It is not rewritten here: the builds
 # below run cargo, which updates it as a side effect, and they finish before
 # anything is staged. It is in the `git add` list for that reason.
@@ -235,6 +241,8 @@ if ! (( DRY_RUN )); then
     [[ "${pair##*:}" == "$VERSION" ]] || die "${pair%%:*} is still on ${pair##*:} — the bump did not take"
   done
   grep -q "^version = \"$VERSION\"" src-tauri/Cargo.toml || die "Cargo.toml is still on the old version"
+  grep -q "\"softwareVersion\": \"$VERSION\"" website/index.html \
+    || die "website/index.html schema is still on the old version"
 fi
 
 # --- build -----------------------------------------------------------------
@@ -326,7 +334,8 @@ step "Committing $VERSION"
 if (( COMMIT_ALL )); then
   run git add -A
 else
-  run git add package.json src-tauri/tauri.conf.json src-tauri/Cargo.toml src-tauri/Cargo.lock
+  run git add package.json src-tauri/tauri.conf.json src-tauri/Cargo.toml src-tauri/Cargo.lock \
+    website/index.html
 fi
 
 if (( DRY_RUN )); then

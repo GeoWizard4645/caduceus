@@ -3,8 +3,30 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Caduceus — configure your own AI</title>
-<meta name="description" content="Use Hermes, Ollama, OpenAI-compatible CLIs, or cloud APIs with Caduceus / and /c routing.">
+<title>Configure AI in Caduceus — Ollama, OpenAI, Hermes</title>
+<meta name="description" content="Point Caduceus at any model: Hermes Agent, a local Ollama, an OpenAI-compatible endpoint, or your own. Caduceus ships no model and holds no keys but yours.">
+<link rel="canonical" href="https://caduceus.vivaanshahani.com/configure-ai">
+<meta name="theme-color" content="#12131d">
+<meta name="author" content="Vivaan Shahani">
+<meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1">
+
+<meta property="og:site_name" content="Caduceus">
+<meta property="og:locale" content="en_GB">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://caduceus.vivaanshahani.com/configure-ai">
+<meta property="og:title" content="Configure AI in Caduceus — Ollama, OpenAI, Hermes">
+<meta property="og:description" content="Point Caduceus at any model: Hermes Agent, a local Ollama, an OpenAI-compatible endpoint, or your own. Caduceus ships no model and holds no keys but yours.">
+<meta property="og:image" content="https://caduceus.vivaanshahani.com/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="The Caduceus mark beside the words “Caduceus — a fast, local-first command centre for your Mac”">
+
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Configure AI in Caduceus — Ollama, OpenAI, Hermes">
+<meta name="twitter:description" content="Point Caduceus at any model: Hermes Agent, a local Ollama, an OpenAI-compatible endpoint, or your own. Caduceus ships no model and holds no keys but yours.">
+<meta name="twitter:image" content="https://caduceus.vivaanshahani.com/og-image.png">
+<meta name="twitter:image:alt" content="The Caduceus mark beside the words “Caduceus — a fast, local-first command centre for your Mac”">
+
 <link rel="icon" href="caduceus-mark.png">
 <script>
 (function () {
@@ -144,7 +166,7 @@
     <li>Set <strong>Routing → “/”</strong> to that backend.</li>
   </ol>
   <pre>Base URL:  http://localhost:11434/v1
-Model:     qwen3.5:4b</pre>
+Model:     qwen3:1.7b</pre>
   <p>
     <code>/c</code> needs a backend with screen control. Today that means <strong>Hermes</strong> with
     <code>computer_use</code> enabled — a plain chat endpoint cannot drive the mouse.

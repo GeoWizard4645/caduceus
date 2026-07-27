@@ -8,7 +8,7 @@ Caduceus is **macOS-only**. Each public release is one **universal** `.dmg` (App
 npm run release -- patch -m "fix a hotkey that could never fire"
 ```
 
-That is the whole thing. [`scripts/release.sh`](./scripts/release.sh) does every step below in order: bumps the three version files, runs the gates and the Rust tests, builds both architectures, `lipo`s them into one universal app, signs it, packs the DMG, commits, tags, pushes, creates the release with `--latest`, updates the Homebrew tap, and checks that `/releases/latest` now resolves to it.
+That is the whole thing. [`scripts/release.sh`](./scripts/release.sh) does every step below in order: bumps the four version files, runs the gates and the Rust tests, builds both architectures, `lipo`s them into one universal app, signs it, packs the DMG, commits, tags, pushes, creates the release with `--latest`, updates the Homebrew tap, and checks that `/releases/latest` now resolves to it.
 
 Releases are **ad-hoc signed** unless `CADUCEUS_SIGNING_IDENTITY` is set, in which case the DMG is also signed with a real Developer ID and notarized by Apple — see [Notarization](#notarization) at the end of this document.
 
@@ -39,13 +39,16 @@ Not required, and not currently used: an Apple Developer Program membership, a D
 
 ## 1. Bump the version
 
-Keep these three in sync (semver, e.g. `1.0.3`):
+Keep these four in sync (semver, e.g. `1.0.3`). The last one is the site's
+`SoftwareApplication` structured data — search engines read it literally, so a
+stale version there is worse than none:
 
 | File | Field |
 |------|--------|
 | `package.json` | `"version"` |
 | `src-tauri/tauri.conf.json` | `"version"` |
 | `src-tauri/Cargo.toml` | `version = "…"` under `[package]` |
+| `website/index.html` | `"softwareVersion"` in the schema.org block |
 
 Commit and push to `main` (or merge your PR) **before** tagging.
 

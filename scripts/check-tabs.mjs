@@ -78,6 +78,15 @@ try {
     shaAgain.tabs.length === 3 && shaAgain.activeId === sha.activeId,
   );
 
+  const ext = openTab(slug.tabs, { kind: "extension", extensionId: "word-count" });
+  const extAgain = openTab(ext.tabs, { kind: "extension", extensionId: "word-count" });
+  check(
+    "opening the same extension twice focuses the page you have",
+    extAgain.tabs.length === ext.tabs.length && extAgain.activeId === ext.activeId,
+  );
+  const otherExt = openTab(ext.tabs, { kind: "extension", extensionId: "shorten-url" });
+  check("a different extension is a different page", otherExt.tabs.length === ext.tabs.length + 1);
+
   const ax = openTab(slug.tabs, { kind: "permission", permission: "accessibility" });
   const axAgain = openTab(ax.tabs, { kind: "permission", permission: "accessibility" });
   check(
@@ -122,7 +131,7 @@ try {
   // --- labels -------------------------------------------------------------
   check("every kind has a label",
     ["home", "clipboard", "chat", "settings", "system", "awake", "sound", "ports", "docker",
-     "machine", "tool", "permission"]
+     "machine", "tool", "extension", "permission"]
       .every((kind) => tabLabel({ id: "x", kind }).length > 0));
   check("a Home tab shows its query once there is one",
     tabLabel({ id: "x", kind: "home", title: "sha256 hello" }) === "sha256 hello");

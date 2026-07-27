@@ -3,8 +3,30 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Caduceus — docs</title>
-<meta name="description" content="Full documentation for Caduceus: the staff, the Command Center, prefixes, shortcuts, the system monitor, voice, clipboard, AI and every setting.">
+<title>Caduceus docs — setup, shortcuts, AI and extensions</title>
+<meta name="description" content="Full documentation for Caduceus: the floating staff, the Command Center, prefixes, shortcuts, clipboard, voice, AI backends, and how to write a one-file extension.">
+<link rel="canonical" href="https://caduceus.vivaanshahani.com/docs">
+<meta name="theme-color" content="#12131d">
+<meta name="author" content="Vivaan Shahani">
+<meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1">
+
+<meta property="og:site_name" content="Caduceus">
+<meta property="og:locale" content="en_GB">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://caduceus.vivaanshahani.com/docs">
+<meta property="og:title" content="Caduceus docs — setup, shortcuts, AI and extensions">
+<meta property="og:description" content="Full documentation for Caduceus: the floating staff, the Command Center, prefixes, shortcuts, clipboard, voice, AI backends, and how to write a one-file extension.">
+<meta property="og:image" content="https://caduceus.vivaanshahani.com/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="The Caduceus mark beside the words “Caduceus — a fast, local-first command centre for your Mac”">
+
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Caduceus docs — setup, shortcuts, AI and extensions">
+<meta name="twitter:description" content="Full documentation for Caduceus: the floating staff, the Command Center, prefixes, shortcuts, clipboard, voice, AI backends, and how to write a one-file extension.">
+<meta name="twitter:image" content="https://caduceus.vivaanshahani.com/og-image.png">
+<meta name="twitter:image:alt" content="The Caduceus mark beside the words “Caduceus — a fast, local-first command centre for your Mac”">
+
 <link rel="icon" href="caduceus-mark.png">
 <script>
 (function () {
@@ -432,12 +454,26 @@ export default async function (input, ctx) {
         <tr><td><code>network</code></td><td><code>ctx.fetch(url, init)</code></td></tr>
         <tr><td><code>selection</code></td><td><code>ctx.selection()</code> — current Finder selection</td></tr>
         <tr><td><code>notifications</code></td><td><code>ctx.notify(text)</code></td></tr>
+        <tr><td><code>shell</code></td><td><code>ctx.shell.run(command, input?, timeoutSecs?)</code> — an arbitrary shell command</td></tr>
+        <tr><td><code>automation</code></td><td><code>ctx.automation.runAppleScript(script)</code>, <code>.runShortcut(name, input?)</code></td></tr>
+        <tr><td><code>files</code></td><td><code>ctx.files.read(path)</code> and <code>.write(path, content)</code>, under <code>~</code> or Caduceus app data</td></tr>
+        <tr><td><code>settings</code></td><td><code>ctx.settings.get()</code> and <code>.set(settings)</code> — all of them</td></tr>
+        <tr><td><code>commands</code></td><td><code>ctx.commands.dispatch(paletteLine)</code>, <code>.runTool(toolId, input)</code></td></tr>
+        <tr><td><code>ai</code></td><td><code>ctx.ai.ask(prompt)</code> — your configured backend, and your credits</td></tr>
+        <tr><td><code>shortcuts</code></td><td><code>ctx.shortcuts.run(shortcutId, query?)</code></td></tr>
       </tbody>
     </table>
+    <p>
+      <b>Read this line before installing something.</b> <code>shell</code> and
+      <code>automation</code> mean the file can run commands and drive every app on your Mac —
+      whatever you can do, it can do. Each permission is checked in Rust on every call, against
+      the header on disk, so an extension cannot reach past what it declared. What it declared
+      is the thing to look at.
+    </p>
     <p>Omit the <code>permissions</code> line entirely if you only need the APIs below that do not require one.</p>
 
     <h3>3. Use the <code>ctx</code> API</h3>
-    <p>This is the complete surface — no <code>require</code>, no filesystem, no shell, no ambient <code>fetch</code>.</p>
+    <p>This is the complete surface — no <code>require</code>, no <code>import</code>, no ambient <code>fetch</code>. Anything not listed here has no implementation to reach.</p>
     <pre>ctx.clipboard.read()          → Promise&lt;string&gt;
 ctx.clipboard.write(text)     → Promise&lt;void&gt;
 ctx.fetch(url, init)          → Promise&lt;Response&gt;   // needs network
@@ -445,8 +481,18 @@ ctx.selection()               → Promise&lt;string[]&gt;   // needs selection
 ctx.notify(text)              → void                // needs notifications
 ctx.storage.get(key)          → Promise&lt;any&gt;
 ctx.storage.set(key, value)   → Promise&lt;void&gt;
-ctx.open(url)                 → Promise&lt;void&gt;</pre>
-    <p><code>ctx.storage</code> is scoped per extension — two extensions cannot read each other's keys.</p>
+ctx.open(url)                 → Promise&lt;void&gt;
+
+ctx.shell.run(cmd, input?, timeoutSecs?)     // needs shell
+ctx.automation.runAppleScript(script)        // needs automation
+ctx.automation.runShortcut(name, input?)     // needs automation
+ctx.files.read(path) / write(path, content)  // needs files
+ctx.settings.get() / set(settings)           // needs settings
+ctx.commands.dispatch(input)                 // needs commands
+ctx.commands.runTool(toolId, input)          // needs commands
+ctx.ai.ask(prompt)                           // needs ai
+ctx.shortcuts.run(shortcutId, query?)        // needs shortcuts</pre>
+    <p><code>ctx.storage</code> is scoped per extension — one JSON file each, so two extensions cannot read each other's keys. <code>ctx.fetch</code> resolves to a Response-like object (<code>ok</code>, <code>status</code>, <code>headers.get()</code>, <code>text()</code>, <code>json()</code>) rather than a real <code>Response</code>: the request happened in Rust, so there is no stream left to wrap.</p>
 
     <h3>4. Install</h3>
     <ul>
@@ -462,10 +508,27 @@ ctx.open(url)                 → Promise&lt;void&gt;</pre>
       and API rules. Save the reply as <code>something.js</code> and drag it in.
     </p>
 
+    <h3>5. Run it</h3>
+    <p>
+      Type the extension's name in the Command Center. Anything after the name is passed as
+      <code>input</code>, so <code>word count the quick brown fox</code> runs Word Count with
+      <code>the quick brown fox</code>. Enter opens the extension's page: a string comes back as
+      text with a Copy button, an array as a clickable list, and errors are shown there rather
+      than swallowed.
+    </p>
+    <p>
+      Extensions execute in a Web Worker — no DOM, and no Tauri IPC, so an extension cannot
+      call a Caduceus command directly. The network globals are removed before your code runs,
+      and the CSP allows <code>connect-src 'self'</code> and nothing else; <code>ctx.fetch</code>
+      is a Rust call that re-reads your header and checks the <code>network</code> permission
+      first, as every other capability does. A call gets 120 seconds before the worker is
+      terminated. The worker bounds what an extension reaches by accident; the permissions line
+      is what bounds what it reaches by asking.
+    </p>
+
     <div class="doc-note">
-      <strong>Installing works today;</strong> the sandbox that executes extensions is still in
-      progress, so an installed file is listed and validated but may not run yet. The format is
-      fixed so you can write against it now. Full spec in
+      <strong>Installing and running both ship</strong> as of 3.1.2. The format has not changed
+      since 2.0.0. Full spec in
       <a href="https://github.com/GeoWizard4645/caduceus/blob/main/EXTENSIONS.md">EXTENSIONS.md</a>
       on GitHub.
     </div>
@@ -660,13 +723,19 @@ inspect_extension(path)   → Extension metadata or error
 install_extension(path)   → InstallReport { ok, message, extension? }
 list_extensions()         → Vec&lt;Extension&gt;
 remove_extension(id)      → ()
-open_extensions_folder()  → reveals ~/Library/Application Support/…/extensions/</pre>
+open_extensions_folder()  → reveals ~/Library/Application Support/…/extensions/
+extension_source(id)      → String                      // for the sandbox to run
+extension_clipboard_read/write, extension_fetch, extension_selection,
+extension_notify, extension_open, extension_storage_get/set  // the ctx API</pre>
     <p>
       Install copies a validated file into <code>extensions_dir(app_data)</code> under a
-      sanitised basename. Remove refuses paths outside that directory. Execution sandbox (calling
-      the default export with a restricted <code>ctx</code>) is not wired yet — see
-      <a href="https://github.com/GeoWizard4645/caduceus/blob/main/EXTENSIONS.md">EXTENSIONS.md</a>
-      for the planned runtime API.
+      sanitised basename. Remove refuses paths outside that directory, and takes the extension's
+      storage with it. Every command in the second group is one <code>ctx</code> call: each takes
+      the extension id and goes through <code>extensions::require</code>, which re-reads the
+      header from disk and refuses a permission the file does not claim. That check is in Rust
+      rather than the webview on purpose — the sandbox's own refusal is JavaScript sitting beside
+      the extension's JavaScript. See
+      <a href="https://github.com/GeoWizard4645/caduceus/blob/main/EXTENSIONS.md">EXTENSIONS.md</a>.
     </p>
   </section>
 

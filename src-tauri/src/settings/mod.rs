@@ -113,6 +113,11 @@ pub fn save<R: Runtime>(app: &AppHandle<R>, settings: &Settings) -> Result<(), S
 /// `#[serde(default)]` already handles *added* fields. This function handles
 /// the cases where a default alone would leave the app in a broken state.
 fn migrate(s: &mut Settings) {
+    // Upgraders who already finished the staff walkthrough skip the quiz.
+    if s.general.onboarding_done && !s.general.onboarding_quiz_done {
+        s.general.onboarding_quiz_done = true;
+    }
+
     // v2: launch-at-login became the default. Applied once, gated on the stored
     // version: a hotkey only works while the process is running, so an install
     // that is not a login item fails at exactly the moment it is reached for.
@@ -413,7 +418,7 @@ mod tests {
                     "displayName": "Ollama",
                     "kind": "openai_compatible",
                     "baseUrl": "http://localhost:11434/v1",
-                    "model": "qwen3.5:4b",
+                    "model": "qwen3:1.7b",
                 }],
             }
         });

@@ -62,6 +62,14 @@ export interface Point {
   y: number;
 }
 
+/** First-run quiz answers — stored locally, never sent anywhere. */
+export interface PersonalizationProfile {
+  isDeveloper: boolean;
+  /** launcher | clipboard | windows | system | ai | developer */
+  primaryFocus: string;
+  favoriteCommandIds: string[];
+}
+
 export interface GeneralSettings {
   toggleOrbHotkey: string;
   commandCenterHotkey: string;
@@ -73,6 +81,9 @@ export interface GeneralSettings {
   launchAtLogin: boolean;
   /** False until the first-run walkthrough is finished or skipped. */
   onboardingDone: boolean;
+  /** False until the three-question personalization quiz is done. */
+  onboardingQuizDone: boolean;
+  personalization: PersonalizationProfile;
   cursorPollMs: number;
   functionKeys: FunctionKeyBinding[];
   /**
@@ -520,6 +531,7 @@ export const EVENTS = {
   voiceResult: "caduceus://voice-result",
   hotkeyProblems: "caduceus://hotkey-problems",
   chatChanged: "caduceus://chat-changed",
+  staffMarkChanged: "caduceus://staff-mark-changed",
   /** Rust asking the shell to open (or focus) a tab. */
   tabOpen: "caduceus://tab-open",
 } as const;
@@ -577,6 +589,51 @@ export interface InstallReport {
   ok: boolean;
   message: string;
   extension: Extension | null;
+}
+
+export interface UninstallSnapshot {
+  extensions: Extension[];
+  ollamaModels: string[];
+  caduceusAppInstalled: boolean;
+  ollamaInstalled: boolean;
+  hermesInstalled: boolean;
+}
+
+export interface UninstallRequest {
+  extensionIds: string[];
+  caduceus: boolean;
+  hermes: boolean;
+  ollama: boolean;
+  ollamaModels: string[];
+}
+
+export interface UninstallResult {
+  ok: boolean;
+  messages: string[];
+  quitApp: boolean;
+}
+
+/**
+ * One `ctx.fetch` call, on its way to Rust.
+ *
+ * Headers are pairs rather than a record because a response may repeat one
+ * (`set-cookie`), and a shape that silently drops the repeats is worse than a
+ * slightly less convenient one. Mirrors `extensions::net::FetchRequest`.
+ */
+export interface ExtensionFetchRequest {
+  url: string;
+  method?: string;
+  headers?: [string, string][];
+  body?: string | null;
+}
+
+export interface ExtensionFetchResponse {
+  ok: boolean;
+  status: number;
+  statusText: string;
+  url: string;
+  headers: [string, string][];
+  body: string;
 }
 
 // ---------------------------------------------------------------------------

@@ -84,6 +84,22 @@ impl UsageStore {
         updated
     }
 
+    /// Set a floor on use counts — for onboarding favorites, not daily telemetry.
+    pub fn seed(&self, id: &str, count: u32, now_ms: i64) {
+        {
+            let mut entries = self.entries.lock();
+            let entry = entries.entry(id.to_string()).or_default();
+            if count > entry.count {
+                entry.count = count;
+                entry.last_used_ms = now_ms;
+            }
+            if entries.len() > MAX_ENTRIES {
+                prune(&mut entries);
+            }
+        }
+        self.persist();
+    }
+
     pub fn clear(&self) {
         self.entries.lock().clear();
         self.persist();

@@ -19,11 +19,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import * as api from "@/shared/api";
-import { PERMISSIONS, permissionFromMessage } from "@/shared/permissions";
+import { permissionFromMessage } from "@/shared/permissions";
 import type { DesktopShape, DesktopShapePlan, DesktopSpot } from "@/shared/types";
-import type { PermissionId } from "@/shared/tabs";
 import { Button, Callout, cx } from "@/shared/ui";
 import type { ToolPageProps } from "../ToolPage";
+import { usePermissionGate } from "../../PermissionGate";
 
 const SHAPES: { value: DesktopShape; label: string; closed: boolean; joined: boolean }[] = [
   { value: "circle", label: "Circle", closed: true, joined: true },
@@ -33,12 +33,12 @@ const SHAPES: { value: DesktopShape; label: string; closed: boolean; joined: boo
   { value: "line", label: "Line", closed: false, joined: true },
 ];
 
-export function DesktopShapesPage({ active, onOpenTab, onSetTitle }: ToolPageProps) {
+export function DesktopShapesPage({ active, onSetTitle }: ToolPageProps) {
   const [shape, setShape] = useState<DesktopShape>("circle");
   const [plan, setPlan] = useState<DesktopShapePlan | null>(null);
   const [undo, setUndo] = useState<DesktopSpot[] | null>(null);
   const [note, setNote] = useState<{ text: string; ok: boolean } | null>(null);
-  const [wall, setWall] = useState<PermissionId | null>(null);
+  const reportPermissionWall = usePermissionGate();
   const [busy, setBusy] = useState(false);
 
   useEffect(() => onSetTitle("Desktop icon shapes"), [onSetTitle]);
@@ -46,16 +46,13 @@ export function DesktopShapesPage({ active, onOpenTab, onSetTitle }: ToolPagePro
   const fail = useCallback((error: unknown) => {
     const text = api.errorMessage(error);
     const permission = permissionFromMessage(text);
-    setWall(permission);
-    // A permission wall says its piece in its own block; the same sentence
-    // again underneath would just be the same sentence again.
-    setNote(permission ? null : { text, ok: false });
-  }, []);
+    if (permission) reportPermissionWall(permission);
+    else setNote({ text, ok: false });
+  }, [reportPermissionWall]);
 
   const preview = useCallback(async () => {
     setBusy(true);
     setNote(null);
-    setWall(null);
     try {
       setPlan(await api.desktopShapePlan(shape));
     } catch (e) {
@@ -142,35 +139,6 @@ export function DesktopShapesPage({ active, onOpenTab, onSetTitle }: ToolPagePro
       </div>
 
       <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-5 py-4">
-        {wall && (
-          <Callout tone="warn" title={`${PERMISSIONS[wall].title} is switched off`}>
-            <p>{PERMISSIONS[wall].why}</p>
-            <div className="row mt-2.5 gap-2">
-              <Button
-                size="sm"
-                tone="primary"
-                onClick={() => void api.openSystemSettings(PERMISSIONS[wall].pane)}
-              >
-                Open System Settings
-              </Button>
-              <Button
-                size="sm"
-                tone="ghost"
-                onClick={() =>
-                  onOpenTab({
-                    kind: "permission",
-                    permission: wall,
-                    retryCommandId: "page.desktop-shapes",
-                    title: `${PERMISSIONS[wall].title} permission`,
-                  })
-                }
-              >
-                Show me exactly what to click
-              </Button>
-            </div>
-          </Callout>
-        )}
-
         {plan?.arrangement.blocks && (
           <Callout
             tone="warn"

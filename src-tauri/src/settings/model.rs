@@ -94,6 +94,10 @@ pub struct GeneralSettings {
     /// Lives in settings rather than a marker file so "show me that again" is a
     /// checkbox rather than a support question about deleting hidden state.
     pub onboarding_done: bool,
+    /// Whether the three-question personalization quiz has been completed.
+    pub onboarding_quiz_done: bool,
+    /// Answers from the quiz — drives favorites and ranking nudges.
+    pub personalization: PersonalizationProfile,
     /// Per-key actions for `F1`–`F12` (and `F13`–`F20` when present). macOS
     /// users often remap hardware keys to standard function keys in System
     /// Settings so Caduceus can intercept them globally.
@@ -133,6 +137,8 @@ impl Default for GeneralSettings {
             launch_at_login: true,
             cursor_poll_ms: 33,
             onboarding_done: false,
+            onboarding_quiz_done: false,
+            personalization: PersonalizationProfile::default(),
             function_keys: default_function_key_bindings(),
             // `None` means "never started" — which is true both of a genuinely
             // fresh install and of one upgrading from before this field
@@ -140,6 +146,20 @@ impl Default for GeneralSettings {
             last_launched_version: None,
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// Personalization (first-run quiz)
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(default, rename_all = "camelCase")]
+pub struct PersonalizationProfile {
+    pub is_developer: bool,
+    /// `launcher`, `clipboard`, `windows`, `system`, `ai`, or `developer`.
+    pub primary_focus: String,
+    /// Command ids (no `command:` prefix) the user picked in the quiz.
+    pub favorite_command_ids: Vec<String>,
 }
 
 /// Keys exposed in Settings → General → Function keys.

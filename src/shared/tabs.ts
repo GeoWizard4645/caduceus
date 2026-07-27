@@ -29,6 +29,7 @@ export type TabKind =
   | "docker"
   | "machine"
   | "tool"
+  | "extension"
   | "permission";
 
 export interface Tab {
@@ -45,8 +46,12 @@ export interface Tab {
   conversationId?: number;
   /** For `tool`: which command's page this is. */
   commandId?: string;
-  /** For `tool`: text to start the page's input with. */
+  /** For `extension`: which installed extension this page runs. */
+  extensionId?: string;
+  /** For `tool` / `chat`: text to start the input with. */
   prefill?: string;
+  /** For `chat`: open in Cowork (computer use) instead of plain chat. */
+  chatMode?: "chat" | "computer";
   /** For `permission`: which grant is missing. */
   permission?: PermissionId;
   /** For `permission`: the command to offer to re-run once it is granted. */
@@ -88,7 +93,7 @@ interface KindMeta {
 export const TAB_KINDS: Record<TabKind, KindMeta> = {
   home: { label: "Search", icon: "⌕", singleton: false, page: false },
   clipboard: { label: "Clipboard", icon: "❐", singleton: true, page: true },
-  chat: { label: "AI Chat", icon: "✳", singleton: true, page: true },
+  chat: { label: "AI", icon: "✳", singleton: true, page: true },
   settings: { label: "Settings", icon: "⚙", singleton: true, page: true },
   system: { label: "System Monitor", icon: "◔", singleton: true, page: true },
   awake: { label: "Keep Awake", icon: "☀", singleton: true, page: true },
@@ -97,6 +102,7 @@ export const TAB_KINDS: Record<TabKind, KindMeta> = {
   docker: { label: "Docker", icon: "◉", singleton: true, page: true },
   machine: { label: "This Mac", icon: "◍", singleton: true, page: true },
   tool: { label: "Tool", icon: "⌂", singleton: true, page: true },
+  extension: { label: "Extension", icon: "⊞", singleton: true, page: true },
   permission: { label: "Permission", icon: "⚠", singleton: true, page: true },
 };
 
@@ -107,10 +113,16 @@ export const TAB_KINDS: Record<TabKind, KindMeta> = {
  * command*, so `sha256` and `slugify` coexist while asking for `sha256` twice
  * lands you back on the one you already have.
  */
-export function singletonKey(tab: Pick<Tab, "kind" | "commandId" | "permission">): string {
+export function singletonKey(
+  tab: Pick<Tab, "kind" | "commandId" | "extensionId" | "permission">,
+): string {
   switch (tab.kind) {
     case "tool":
       return `tool:${tab.commandId ?? ""}`;
+    // One page per extension, for the same reason as one page per tool: two
+    // extensions open at once is normal, the same one twice is not.
+    case "extension":
+      return `extension:${tab.extensionId ?? ""}`;
     case "permission":
       return `permission:${tab.permission ?? ""}`;
     default:
@@ -307,6 +319,7 @@ export function loadTabs(): { tabs: Tab[]; activeId: string } | null {
     // window with it, not just the tab.
     .filter((tab) => tab.kind !== "permission" || isPermissionId(tab.permission))
     .filter((tab) => tab.kind !== "tool" || typeof tab.commandId === "string")
+    .filter((tab) => tab.kind !== "extension" || typeof tab.extensionId === "string")
     .slice(0, MAX_TABS);
   if (restored.length === 0) return null;
 

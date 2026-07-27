@@ -3,3 +3,5 @@
 
 User-agent: *
 Allow: /
+
+Sitemap: https://caduceus.vivaanshahani.com/sitemap.xml

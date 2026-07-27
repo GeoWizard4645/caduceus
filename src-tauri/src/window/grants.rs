@@ -184,6 +184,21 @@ pub fn currently_granted(grant: Grant) -> bool {
     }
 }
 
+/// Trigger the system consent flow where macOS provides one, without resetting TCC.
+#[cfg(target_os = "macos")]
+pub fn request(grant: Grant) -> bool {
+    match grant {
+        Grant::Accessibility => super::accessibility::prompt_for_trust(),
+        Grant::ScreenRecording => crate::tools::system::request_screen_recording(),
+        Grant::Microphone | Grant::Automation | Grant::SpeechRecognition => false,
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+pub fn request(_grant: Grant) -> bool {
+    false
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

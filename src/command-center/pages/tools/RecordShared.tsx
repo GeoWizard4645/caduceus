@@ -19,12 +19,15 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import * as api from "@/shared/api";
 import { useTauriEvent } from "@/shared/hooks";
+import { permissionFromMessage } from "@/shared/permissions";
 import { Button, Callout, cx } from "@/shared/ui";
+import { usePermissionGate } from "../../PermissionGate";
 
 /** Emitted by Rust whenever the recording state changes. */
 export const RECORDING_EVENT = "caduceus://recording";
 
 export function useRecording() {
+  const reportPermissionWall = usePermissionGate();
   const [status, setStatus] = useState<api.RecordingStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState<string | null>(null);
@@ -56,10 +59,13 @@ export function useRecording() {
         await api.recordingStart(mode, microphone);
         await refresh();
       } catch (e) {
-        setError(api.errorMessage(e));
+        const message = api.errorMessage(e);
+        const permission = permissionFromMessage(message);
+        if (permission) reportPermissionWall(permission);
+        else setError(message);
       }
     },
-    [refresh],
+    [refresh, reportPermissionWall],
   );
 
   const setPaused = useCallback(

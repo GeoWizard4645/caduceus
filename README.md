@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="assets/caduceus-mark.png" width="96" alt="">
+  <img src="assets/caduceus-mark.png" width="96" alt="The Caduceus mark: a pixel-art winged staff with two coiled snakes">
   <h1>Caduceus</h1>
   <p><strong>A fast, local-first command centre for your Mac.</strong></p>
   <p>
@@ -8,12 +8,37 @@
     drive your machine when you ask it to.
   </p>
   <p>
+    <a href="https://caduceus.vivaanshahani.com">Website</a> ·
     <a href="#install">Install</a> ·
     <a href="#what-it-does">What it does</a> ·
+    <a href="https://caduceus.vivaanshahani.com/docs">Docs</a> ·
     <a href="#the-ai-part">The AI part</a> ·
     <a href="#building-from-source">Build from source</a>
   </p>
+  <p>
+    <img alt="macOS 11+" src="https://img.shields.io/badge/macOS-11%2B-111?logo=apple&logoColor=white">
+    <img alt="Apple Silicon and Intel" src="https://img.shields.io/badge/universal-Apple%20Silicon%20%2B%20Intel-111">
+    <img alt="Built with Tauri and Rust" src="https://img.shields.io/badge/built%20with-Tauri%20%2B%20Rust-111?logo=rust&logoColor=white">
+    <img alt="GPL-3.0-or-later" src="https://img.shields.io/badge/licence-GPL--3.0--or--later-111">
+  </p>
 </div>
+
+---
+
+**Caduceus is an open-source macOS command palette, app launcher and clipboard
+manager, built with Tauri and Rust.** It is a free alternative to Raycast,
+Alfred and Spotlight that runs entirely on your machine: no account, no
+subscription, no telemetry, and no network connection required for anything
+except the parts you explicitly point at a model. One ~10 MB universal binary,
+Apple Silicon and Intel, macOS 11 and later.
+
+If you have been looking for a Raycast alternative that is actually open source,
+a Spotlight replacement with clipboard history, or a Mac launcher you can read
+the source of before you run it — that is what this is.
+
+**Website:** [caduceus.vivaanshahani.com](https://caduceus.vivaanshahani.com) ·
+**Docs:** [caduceus.vivaanshahani.com/docs](https://caduceus.vivaanshahani.com/docs) ·
+**Releases:** [every version](https://github.com/GeoWizard4645/caduceus/releases)
 
 ---
 

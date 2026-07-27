@@ -30,6 +30,7 @@ export function AppearanceTab({ draft }: { draft: Draft }) {
   // shows the real file rather than a guess at where it went.
   const [backdropPreview, setBackdropPreview] = useState<string | null>(null);
   const [backdropError, setBackdropError] = useState<string | null>(null);
+  const [staffMarkError, setStaffMarkError] = useState<string | null>(null);
 
   const backdropToken = draft.settings?.appearance.commandCenterBackground ?? "";
   useEffect(() => {
@@ -204,18 +205,23 @@ export function AppearanceTab({ draft }: { draft: Draft }) {
                 <Button
                   size="sm"
                   onClick={async () => {
+                    setStaffMarkError(null);
                     const path = await open({
                       multiple: false,
                       filters: [
                         {
                           name: "Images",
-                          extensions: ["png", "jpg", "jpeg", "webp", "gif"],
+                          extensions: ["png", "jpg", "jpeg", "webp", "gif", "heic"],
                         },
                       ],
                     });
                     if (!path || typeof path !== "string") return;
-                    const token = await api.importStaffMark(path);
-                    draft.update((d) => (d.appearance.staffMarkIcon = token));
+                    try {
+                      const token = await api.importStaffMark(path);
+                      draft.update((d) => (d.appearance.staffMarkIcon = token));
+                    } catch (e) {
+                      setStaffMarkError(api.errorMessage(e));
+                    }
                   }}
                 >
                   Upload image…
@@ -233,6 +239,9 @@ export function AppearanceTab({ draft }: { draft: Draft }) {
                 ) : null}
               </div>
             </div>
+            {staffMarkError && (
+              <p className="mt-2 text-2xs text-danger">{staffMarkError}</p>
+            )}
           </Field>
         </div>
 

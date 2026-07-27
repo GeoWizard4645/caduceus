@@ -17,6 +17,8 @@ import { useCallback, useEffect, useState } from "react";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 
 import * as api from "@/shared/api";
+import { buildExtensionPrompt } from "@/shared/extensionAppModel";
+import { forgetExtensions } from "@/shared/providers";
 import type { Extension } from "@/shared/types";
 import { Button, Callout, Section, TextArea, cx } from "@/shared/ui";
 
@@ -29,6 +31,10 @@ export function ExtensionsTab() {
   const [copied, setCopied] = useState(false);
 
   const reload = useCallback(async () => {
+    // The palette caches the installed list for the length of a window session,
+    // so it has to be told. Otherwise an extension you just dropped in is not
+    // searchable until the next launch.
+    forgetExtensions();
     try {
       setInstalled(await api.listExtensions());
     } catch {
@@ -78,7 +84,7 @@ export function ExtensionsTab() {
     return () => unlisten?.();
   }, [install]);
 
-  const prompt = buildPrompt(task);
+  const prompt = buildExtensionPrompt(task);
 
   return (
     <div className="flex flex-col gap-6">
@@ -97,7 +103,7 @@ export function ExtensionsTab() {
           </p>
           <p className="max-w-[46ch] text-2xs leading-relaxed text-ink-faint">
             Caduceus reads the header comment to find out what it is called and what it wants
-            access to. Nothing runs until you install it.
+            access to. Nothing runs until you install it and ask for it by name.
           </p>
           <div className="row mt-2 gap-2">
             <Button size="sm" onClick={() => void api.openExtensionsFolder()}>
@@ -208,75 +214,11 @@ export function ExtensionsTab() {
       </Section>
 
       <Callout>
-        <strong>Extensions do not run yet.</strong> Installing, reading the header and showing what
-        an extension wants all work in this version; the sandbox that executes them does not ship
-        yet. The format is settled so you can write against it now.
+        <strong>How they run.</strong> Type an extension&rsquo;s name in the Command Center; anything
+        after the name is passed as <code>input</code>. Extensions run in a Web Worker (no DOM). Each
+        capability is declared in the file header and enforced in Rust when used — including shell,
+        automation, files, settings, AI, and paid network APIs if you grant <code>network</code>.
       </Callout>
     </div>
   );
-}
-
-/**
- * The prompt starter.
- *
- * Written as one block rather than assembled from fragments so that what you
- * read in the box is exactly what gets copied — a prompt that differs from its
- * preview is a bug nobody can see.
- */
-function buildPrompt(task: string): string {
-  const goal = task.trim() || "<describe what the extension should do>";
-
-  return `Write a Caduceus extension.
-
-Caduceus is a macOS command palette. An extension is ONE JavaScript file. There
-is no manifest file, no folder layout, no build step, and no npm install.
-
-WHAT IT SHOULD DO
-${goal}
-
-REQUIRED FILE SHAPE
-
-/**
- * @caduceus 1
- * name: <short title shown in the palette>
- * description: <one line>
- * author: <your name>
- * permissions: <comma-separated, or omit the line entirely>
- */
-export default async function (input, ctx) {
-  // input: string — whatever the user typed after the command name
-  // return a string to show a message, or an array of rows to show a list
-}
-
-The header comment must be the FIRST comment in the file. Caduceus parses it
-without running your code, so it is how the app knows what to display and what
-to grant.
-
-PERMISSIONS — ask only for what you use
-  clipboard      ctx.clipboard.read() / ctx.clipboard.write(text)
-  network        ctx.fetch(url, init) — only hosts you actually need
-  selection      ctx.selection() — current Finder selection, array of paths
-  notifications  ctx.notify(text)
-
-THE ctx API — this is the complete list. Nothing else is available.
-  ctx.clipboard.read()            -> Promise<string>
-  ctx.clipboard.write(text)       -> Promise<void>
-  ctx.fetch(url, init)            -> Promise<Response>
-  ctx.selection()                 -> Promise<string[]>
-  ctx.notify(text)                -> void
-  ctx.storage.get(key)            -> Promise<any>
-  ctx.storage.set(key, value)     -> Promise<void>
-  ctx.open(url)                   -> Promise<void>
-
-RULES
-- Plain modern JavaScript. No TypeScript, no imports, no require, no npm.
-- There is no filesystem, no shell, and no process access. Do not try.
-- There is no ambient fetch — use ctx.fetch, and only with the network permission.
-- Return a string for a simple result. Return an array of
-  { title, subtitle?, action? } for a list of rows.
-- Handle failure by returning a short human-readable string. Do not throw.
-- Must work with no account, no API key and no paid service. If the task cannot
-  be done for free, say so instead of writing it.
-
-Reply with the complete file contents and nothing else.`;
 }

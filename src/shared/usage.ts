@@ -76,6 +76,17 @@ export async function clearUsage(): Promise<void> {
   await api.clearUsage();
 }
 
+/** Apply seeded counts to the in-memory cache after onboarding. */
+export function seedUsageCache(ids: string[], count: number): void {
+  const now = Date.now();
+  for (const id of ids) {
+    const current = cache[id];
+    if (!current || current.count < count) {
+      cache[id] = { count, lastUsedMs: now };
+    }
+  }
+}
+
 /** A day, in milliseconds. */
 const DAY = 86_400_000;
 

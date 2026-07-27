@@ -47,13 +47,6 @@ export function ScreenRecordPage({ onSetTitle }: ToolPageProps) {
           mixing is something you can always do afterwards and unmixing is not.
         </Callout>
 
-        <Callout tone="warn" title="It needs Screen Recording, and a restart the first time">
-          macOS will not let an app capture the screen until you allow it in System Settings →
-          Privacy &amp; Security → Screen &amp; System Audio Recording — and unlike every other
-          permission, it does not take effect until the app is quit and reopened. That is
-          Apple's rule, not ours.
-        </Callout>
-
         <Callout tone="info" title="System audio needs macOS 13">
           Before Ventura there was no way to capture system audio without installing an audio
           driver, and Caduceus will not put a driver on your Mac to work around a missing API.

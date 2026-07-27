@@ -15,6 +15,7 @@ import * as api from "@/shared/api";
 import { StaffMark } from "@/shared/StaffMark";
 import { CaduceusMark } from "@/shared/CaduceusMark";
 import { Onboarding, type OnboardingSignals } from "./Onboarding";
+import { OnboardingQuiz } from "./OnboardingQuiz";
 import { StaffResizeFrame } from "./StaffResize";
 import { useSettings, useTauriEvent } from "@/shared/hooks";
 import { ShortcutIcon } from "@/shared/ShortcutIcon";
@@ -48,7 +49,7 @@ const POPOUT_FADE_MS = 90;
 const POPOUT_STAGGER_MS = 10;
 
 export function Staff() {
-  const { settings } = useSettings();
+  const { settings, reload } = useSettings();
   const [hover, setHover] = useState<StaffHoverState>({ hovering: false, expanded: false });
   const [side, setSide] = useState<"left" | "right">("right");
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -430,7 +431,15 @@ export function Staff() {
         </div>
       </div>
 
-      {settings.general.onboardingDone === false && (
+      {settings.general.onboardingQuizDone === false && (
+        <OnboardingQuiz
+          staffSize={staffSize}
+          settings={settings}
+          onComplete={() => void reload()}
+        />
+      )}
+
+      {settings.general.onboardingQuizDone !== false && settings.general.onboardingDone === false && (
         <Onboarding
           signals={signals}
           settings={settings}

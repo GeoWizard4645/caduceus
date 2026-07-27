@@ -425,12 +425,18 @@ pub fn resolve_staff_mark<R: Runtime>(app: AppHandle<R>, icon: String) -> Res<Op
 
 #[tauri::command]
 pub fn import_staff_mark<R: Runtime>(app: AppHandle<R>, source_path: String) -> Res<String> {
-    crate::staff_mark::import_mark(&app, std::path::Path::new(&source_path))
+    use tauri::Emitter;
+    let token = crate::staff_mark::import_mark(&app, std::path::Path::new(&source_path))?;
+    let _ = app.emit(crate::staff_mark::STAFF_MARK_CHANGED_EVENT, ());
+    Ok(token)
 }
 
 #[tauri::command]
 pub fn clear_staff_mark<R: Runtime>(app: AppHandle<R>) -> Res<()> {
-    crate::staff_mark::clear_mark(&app)
+    use tauri::Emitter;
+    crate::staff_mark::clear_mark(&app)?;
+    let _ = app.emit(crate::staff_mark::STAFF_MARK_CHANGED_EVENT, ());
+    Ok(())
 }
 
 /// Where the Command Center's background image is on disk, if there is one.
@@ -1148,6 +1154,21 @@ pub fn remove_extension<R: Runtime>(app: AppHandle<R>, id: String) -> Res<()> {
     extensions::remove(&id, &app_data(&app)?)
 }
 
+/// What can be removed and what is currently installed.
+#[tauri::command]
+pub fn uninstall_snapshot<R: Runtime>(app: AppHandle<R>) -> Res<crate::uninstall::UninstallSnapshot> {
+    crate::uninstall::snapshot(&app)
+}
+
+/// Remove selected extensions and/or AI stack components.
+#[tauri::command]
+pub fn run_uninstall<R: Runtime>(
+    app: AppHandle<R>,
+    request: crate::uninstall::UninstallRequest,
+) -> Res<crate::uninstall::UninstallResult> {
+    crate::uninstall::run(&app, request)
+}
+
 /// Reveal the extensions folder in Finder.
 #[tauri::command]
 pub fn open_extensions_folder<R: Runtime>(app: AppHandle<R>) -> Res<()> {
@@ -1164,6 +1185,351 @@ pub fn open_extensions_folder<R: Runtime>(app: AppHandle<R>) -> Res<()> {
 #[tauri::command]
 pub fn extension_permissions() -> Vec<String> {
     extensions::PERMISSIONS.iter().map(|s| s.to_string()).collect()
+}
+
+// ---------------------------------------------------------------------------
+// What an extension is allowed to do
+// ---------------------------------------------------------------------------
+//
+// The extension itself runs in a Web Worker in the Command Center webview: no
+// DOM, no Tauri IPC, and a CSP that permits `connect-src 'self'` and nothing
+// else. Everything below is therefore the complete list of what an installed
+// extension can reach, and each one is `ctx.<something>` in the sandbox.
+//
+// Every command that acts on the world takes the extension's id and calls
+// `extensions::require` first, which re-reads the header off disk and refuses
+// if it does not claim that permission. The sandbox refuses too, but the
+// sandbox is JavaScript sitting beside the extension's own JavaScript; this is
+// the check that decides.
+//
+// Note what is *not* here: no `run_apple_script`, no shell, no filesystem, no
+// window control. Those commands exist on this same IPC surface, and an
+// extension has no way to name them — the bridge in `extensionRuntime.ts` maps
+// a fixed set of operation names onto the functions below and nothing else.
+
+/// The source of an installed extension, for the sandbox to run.
+#[tauri::command]
+pub fn extension_source<R: Runtime>(app: AppHandle<R>, id: String) -> Res<String> {
+    extensions::source(&id, &app_data(&app)?)
+}
+
+/// `ctx.clipboard.read()`
+#[tauri::command]
+pub async fn extension_clipboard_read<R: Runtime>(app: AppHandle<R>, id: String) -> Res<String> {
+    let dir = app_data(&app)?;
+    extensions::require(&id, &dir, "clipboard")?;
+    tauri::async_runtime::spawn_blocking(|| {
+        arboard::Clipboard::new()
+            .and_then(|mut c| c.get_text())
+            .map_err(|_| "There is no text on the clipboard.".to_string())
+    })
+    .await
+    .map_err(|e| format!("Could not read the clipboard: {e}"))?
+}
+
+/// `ctx.clipboard.write(text)`
+#[tauri::command]
+pub async fn extension_clipboard_write<R: Runtime>(
+    app: AppHandle<R>,
+    id: String,
+    text: String,
+) -> Res<()> {
+    let dir = app_data(&app)?;
+    extensions::require(&id, &dir, "clipboard")?;
+    tauri::async_runtime::spawn_blocking(move || {
+        arboard::Clipboard::new()
+            .and_then(|mut c| c.set_text(text))
+            .map_err(|e| format!("Could not write to the clipboard: {e}"))
+    })
+    .await
+    .map_err(|e| format!("Could not write to the clipboard: {e}"))?
+}
+
+/// `ctx.fetch(url, init)`
+#[tauri::command]
+pub async fn extension_fetch<R: Runtime>(
+    app: AppHandle<R>,
+    id: String,
+    request: extensions::net::FetchRequest,
+) -> Res<extensions::net::FetchResponse> {
+    let dir = app_data(&app)?;
+    extensions::require(&id, &dir, "network")?;
+    extensions::net::fetch(request).await
+}
+
+/// `ctx.selection()`
+#[tauri::command]
+pub async fn extension_selection<R: Runtime>(
+    app: AppHandle<R>,
+    id: String,
+) -> Res<Vec<String>> {
+    let dir = app_data(&app)?;
+    extensions::require(&id, &dir, "selection")?;
+    tauri::async_runtime::spawn_blocking(|| {
+        tools::files::finder_selection()
+            .into_iter()
+            .map(|p| p.to_string_lossy().into_owned())
+            .collect()
+    })
+    .await
+    .map_err(|e| format!("Could not ask Finder what is selected: {e}"))
+}
+
+/// `ctx.notify(text)`
+///
+/// The extension's name is the notification's title, so a banner you did not
+/// expect names the thing that sent it rather than just saying "Caduceus".
+#[tauri::command]
+pub async fn extension_notify<R: Runtime>(
+    app: AppHandle<R>,
+    id: String,
+    text: String,
+) -> Res<()> {
+    let dir = app_data(&app)?;
+    let ext = extensions::require(&id, &dir, "notifications")?;
+
+    // Both halves are escaped before they reach osascript. `text` is written by
+    // the extension and `name` comes out of its header, so both are strings
+    // Caduceus did not write, and an unescaped quote in either one turns the
+    // rest of the line into script.
+    let script = format!(
+        "display notification \"{}\" with title \"{}\"",
+        shortcuts::escape_applescript(&truncate(&text, 400)),
+        shortcuts::escape_applescript(&truncate(&ext.name, 100)),
+    );
+    tauri::async_runtime::spawn_blocking(move || tools::apple::run_script(&script))
+        .await
+        .map_err(|e| format!("Could not show that notification: {e}"))?
+        .map(|_| ())
+}
+
+/// `ctx.open(url)` — hand a link to the browser.
+///
+/// No permission gates this because it cannot act silently: opening a URL puts
+/// a window in front of you. It is still restricted to `http(s)` by
+/// `shortcuts::exec::open_url`, so it cannot be used to launch an application
+/// through a custom scheme.
+#[tauri::command]
+pub async fn extension_open<R: Runtime>(
+    app: AppHandle<R>,
+    settings: tauri::State<'_, SettingsManager>,
+    id: String,
+    url: String,
+) -> Res<()> {
+    let dir = app_data(&app)?;
+    extensions::load(&id, &dir)?;
+    let browser = settings.get().command_center.browser.clone();
+    let outcome = shortcuts::exec::open_url(&url, &browser).await;
+    if outcome.ok {
+        Ok(())
+    } else {
+        Err(outcome.message)
+    }
+}
+
+/// `ctx.storage.get(key)`
+#[tauri::command]
+pub fn extension_storage_get<R: Runtime>(
+    app: AppHandle<R>,
+    id: String,
+    key: String,
+) -> Res<Option<serde_json::Value>> {
+    let dir = app_data(&app)?;
+    extensions::load(&id, &dir)?;
+    extensions::storage::get(&id, &dir, &key)
+}
+
+/// `ctx.storage.set(key, value)` — a `null` value removes the key.
+#[tauri::command]
+pub fn extension_storage_set<R: Runtime>(
+    app: AppHandle<R>,
+    id: String,
+    key: String,
+    value: Option<serde_json::Value>,
+) -> Res<()> {
+    let dir = app_data(&app)?;
+    extensions::load(&id, &dir)?;
+    extensions::storage::set(&id, &dir, &key, value.filter(|v| !v.is_null()))
+}
+
+/// `ctx.shell.run(command, input?)`
+#[tauri::command]
+pub async fn extension_shell_run<R: Runtime>(
+    app: AppHandle<R>,
+    id: String,
+    command: String,
+    input: Option<String>,
+    timeout_secs: Option<u64>,
+) -> Res<ExecOutcome> {
+    let dir = app_data(&app)?;
+    extensions::require(&id, &dir, "shell")?;
+    let timeout = timeout_secs.unwrap_or(60).min(120);
+    Ok(shortcuts::exec::run_command_capture(&command, input.as_deref().unwrap_or(""), timeout).await)
+}
+
+/// `ctx.automation.runAppleScript(script)`
+#[tauri::command]
+pub async fn extension_automation_script<R: Runtime>(app: AppHandle<R>, id: String, script: String) -> Res<String> {
+    let dir = app_data(&app)?;
+    extensions::require(&id, &dir, "automation")?;
+    tauri::async_runtime::spawn_blocking(move || tools::apple::run_script(&script))
+        .await
+        .map_err(|e| format!("Could not run the script: {e}"))?
+}
+
+/// `ctx.automation.runShortcut(name, input?)`
+#[tauri::command]
+pub async fn extension_automation_shortcut<R: Runtime>(
+    app: AppHandle<R>,
+    id: String,
+    name: String,
+    input: Option<String>,
+) -> Res<String> {
+    let dir = app_data(&app)?;
+    extensions::require(&id, &dir, "automation")?;
+    let text = input.unwrap_or_default();
+    tauri::async_runtime::spawn_blocking(move || tools::apple::run_shortcut(&name, &text))
+        .await
+        .map_err(|e| format!("Could not run the shortcut: {e}"))?
+}
+
+/// `ctx.files.read(path)` — under ~ or app data.
+#[tauri::command]
+pub fn extension_files_read<R: Runtime>(app: AppHandle<R>, id: String, path: String) -> Res<String> {
+    let dir = app_data(&app)?;
+    extensions::require(&id, &dir, "files")?;
+    extensions::files::read(&dir, &path)
+}
+
+/// `ctx.files.write(path, content)`
+#[tauri::command]
+pub fn extension_files_write<R: Runtime>(
+    app: AppHandle<R>,
+    id: String,
+    path: String,
+    content: String,
+) -> Res<()> {
+    let dir = app_data(&app)?;
+    extensions::require(&id, &dir, "files")?;
+    extensions::files::write(&dir, &path, &content)
+}
+
+/// `ctx.settings.get()`
+#[tauri::command]
+pub fn extension_settings_get<R: Runtime>(
+    app: AppHandle<R>,
+    settings: tauri::State<'_, SettingsManager>,
+    id: String,
+) -> Res<Settings> {
+    let dir = app_data(&app)?;
+    extensions::require(&id, &dir, "settings")?;
+    Ok(settings.get())
+}
+
+/// `ctx.settings.set(fullSettings)` — same shape as Settings in the app.
+#[tauri::command]
+pub async fn extension_settings_set<R: Runtime>(
+    app: AppHandle<R>,
+    settings: tauri::State<'_, SettingsManager>,
+    id: String,
+    next: Settings,
+) -> Res<()> {
+    let dir = app_data(&app)?;
+    extensions::require(&id, &dir, "settings")?;
+    let previous = settings.get();
+    settings::save(&app, &next)?;
+    let _ = crate::hotkeys::register_all(&app, &settings);
+    if previous.general.staff_edge != next.general.staff_edge && next.general.staff_position.is_none() {
+        let _ = window::position_staff(&app, &settings);
+    }
+    if previous.general.staff_visible != next.general.staff_visible {
+        let _ = window::set_staff_visible(&app, &settings, next.general.staff_visible);
+    }
+    if previous.appearance != next.appearance {
+        let _ = window::sync_staff_window(&app, &settings);
+    }
+    crate::tray::refresh(&app);
+    Ok(())
+}
+
+/// `ctx.commands.dispatch(input)` — palette routing (`/`, `/c`, prefixes, etc.).
+#[tauri::command]
+pub async fn extension_commands_dispatch<R: Runtime>(
+    app: AppHandle<R>,
+    settings: tauri::State<'_, SettingsManager>,
+    id: String,
+    input: String,
+) -> Res<DispatchOutcome> {
+    let dir = app_data(&app)?;
+    extensions::require(&id, &dir, "commands")?;
+    Ok(palette::dispatch(&app, &settings, &input).await)
+}
+
+/// `ctx.commands.runTool(toolId, input)`
+#[tauri::command]
+pub fn extension_commands_run_tool<R: Runtime>(
+    app: AppHandle<R>,
+    id: String,
+    tool_id: String,
+    input: String,
+) -> Res<tools::dev::ToolResult> {
+    let dir = app_data(&app)?;
+    extensions::require(&id, &dir, "commands")?;
+    let tool: tools::dev::ToolId = serde_json::from_value(serde_json::Value::String(tool_id.clone()))
+        .map_err(|_| format!("Unknown tool id “{tool_id}”. Use snake_case names like sha256, json_format."))?;
+    Ok(tools::dev::run(tool, &input))
+}
+
+/// `ctx.ai.ask(prompt)` — one message to the primary AI backend.
+#[tauri::command]
+pub async fn extension_ai_ask<R: Runtime>(
+    app: AppHandle<R>,
+    settings: tauri::State<'_, SettingsManager>,
+    id: String,
+    prompt: String,
+) -> Res<String> {
+    let dir = app_data(&app)?;
+    extensions::require(&id, &dir, "ai")?;
+    use crate::agent::Message;
+    let response = agent::chat_with_history(&settings, vec![Message::user(prompt)])
+        .await
+        .map_err(|e| e.to_string())?;
+    Ok(response.text)
+}
+
+/// `ctx.shortcuts.run(shortcutId, query?)`
+#[tauri::command]
+pub async fn extension_shortcuts_run<R: Runtime>(
+    app: AppHandle<R>,
+    settings: tauri::State<'_, SettingsManager>,
+    id: String,
+    shortcut_id: String,
+    query: Option<String>,
+) -> Res<ExecOutcome> {
+    let dir = app_data(&app)?;
+    extensions::require(&id, &dir, "shortcuts")?;
+    let cfg = settings.get();
+    let shortcut = cfg
+        .shortcuts
+        .iter()
+        .find(|s| s.id == shortcut_id)
+        .ok_or_else(|| format!("No shortcut with id “{shortcut_id}”."))?;
+    Ok(
+        shortcuts::execute_shortcut(
+            shortcut,
+            query.as_deref().unwrap_or_default(),
+            &cfg.command_center.browser,
+        )
+        .await,
+    )
+}
+
+/// Clip a string to a character count, not a byte count.
+fn truncate(text: &str, chars: usize) -> String {
+    if text.chars().count() <= chars {
+        return text.to_string();
+    }
+    text.chars().take(chars).collect::<String>() + "…"
 }
 
 // ---------------------------------------------------------------------------
@@ -1204,6 +1570,12 @@ pub async fn repair_permission(
     tauri::async_runtime::spawn_blocking(move || window::grants::repair(grant))
         .await
         .map_err(|e| format!("The repair could not be run: {e}"))
+}
+
+/// Ask macOS for a privacy grant without clearing an existing TCC entry.
+#[tauri::command]
+pub fn request_permission(grant: window::grants::Grant) -> bool {
+    window::grants::request(grant)
 }
 
 /// The text selected in the frontmost app, or `null` if there is none.
@@ -1795,6 +2167,19 @@ pub fn record_usage(
     id: String,
 ) -> crate::usage::UsageEntry {
     usage.record(&id, crate::usage::now_ms())
+}
+
+/// Give several commands a starting use count (onboarding favorites).
+#[tauri::command]
+pub fn seed_usage(
+    usage: tauri::State<'_, crate::usage::UsageStore>,
+    ids: Vec<String>,
+    count: u32,
+) {
+    let now = crate::usage::now_ms();
+    for id in ids {
+        usage.seed(&id, count, now);
+    }
 }
 
 /// Forget every recorded count, putting the palette back to its shipped order.

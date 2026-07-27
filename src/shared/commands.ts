@@ -2483,8 +2483,9 @@ const BROWSER_SPECS: AppCommandSpec[] = [
   },
 ];
 
+const APP_NOT_RUNNING = "CADUCEUS_NOT_RUNNING";
+
 /**
- * Turn a spec into a command.
  *
  * The `tell application` wrapper is added here rather than written out in every
  * spec, and the "is it running" guard with it: every one of these should be a
@@ -2502,7 +2503,7 @@ function appCommand(spec: AppCommandSpec): CommandDef {
     reach: spec.reach,
     async run({ actions }) {
       const script = [
-        `if application "${spec.app}" is not running then return "\\u0000not-running"`,
+        `if application "${spec.app}" is not running then return "${APP_NOT_RUNNING}"`,
         `tell application "${spec.app}"`,
         spec.script,
         "end tell",
@@ -2510,7 +2511,7 @@ function appCommand(spec: AppCommandSpec): CommandDef {
 
       try {
         const result = await api.runAppleScript(script);
-        if (result.trim() === " not-running" || result.includes("not-running")) {
+        if (result.trim() === APP_NOT_RUNNING) {
           actions.notify(`${spec.app} is not running.`, "error");
           return false;
         }

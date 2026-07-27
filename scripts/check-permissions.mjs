@@ -69,14 +69,20 @@ try {
   // --- the sentences Rust actually produces ------------------------------
   const sources = {
     "src-tauri/src/window/accessibility.rs": "accessibility",
-    "src-tauri/src/tools/system.rs": "accessibility",
+    // `tools::system::osa` used to translate these itself; it now defers to
+    // `tools::apple::run_script`, so that is where the sentences live.
+    "src-tauri/src/tools/apple.rs": "accessibility",
     "src-tauri/src/capture/mod.rs": "screen-recording",
     "src-tauri/src/voice/recorder.rs": "microphone",
     "src-tauri/src/notes.rs": "automation",
   };
 
   for (const [path, expected] of Object.entries(sources)) {
-    const source = await readFile(join(root, path), "utf8");
+    const whole = await readFile(join(root, path), "utf8");
+    // Tests are cut first. A test that asserts a message merely *mentions*
+    // System Settings quotes that fragment, and a fragment routes nowhere —
+    // which would fail this check for a file whose real messages are fine.
+    const source = whole.split("#[cfg(test)]")[0];
     // Every user-facing wall message mentions System Settings by name; that is
     // what makes it findable here without hard-coding the sentence twice.
     const quoted = [...source.matchAll(/"((?:[^"\\]|\\.)*System Settings(?:[^"\\]|\\.)*)"/gs)]

@@ -2,7 +2,9 @@ import { convertFileSrc } from "@tauri-apps/api/core";
 import { useEffect, useState } from "react";
 
 import * as api from "./api";
+import { useTauriEvent } from "./hooks";
 import { CaduceusMark } from "./CaduceusMark";
+import { EVENTS } from "./types";
 import { cx } from "./ui";
 
 const IMAGE_PREFIX = "image:";
@@ -20,6 +22,11 @@ export function StaffMark({
   title?: string;
 }) {
   const [uploadedSrc, setUploadedSrc] = useState<string | null>(null);
+  const [revision, setRevision] = useState(0);
+
+  useTauriEvent(EVENTS.staffMarkChanged, () => {
+    setRevision((r) => r + 1);
+  });
 
   useEffect(() => {
     if (!icon.startsWith(IMAGE_PREFIX)) {
@@ -29,12 +36,14 @@ export function StaffMark({
     let cancelled = false;
     void api.resolveStaffMark(icon).then((path) => {
       if (cancelled) return;
-      setUploadedSrc(path ? convertFileSrc(path) : null);
+      setUploadedSrc(
+        path ? `${convertFileSrc(path)}?v=${revision}-${Date.now()}` : null,
+      );
     });
     return () => {
       cancelled = true;
     };
-  }, [icon]);
+  }, [icon, revision]);
 
   if (icon.startsWith(IMAGE_PREFIX) && uploadedSrc) {
     const width = Math.round(height * 0.72);

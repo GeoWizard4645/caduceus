@@ -22,8 +22,13 @@ const TIMEOUT: std::time::Duration = super::TOOL_TIMEOUT;
 const WEDGED: &str = "The other app did not answer. It may be showing a dialog that needs attention.";
 
 /// Run a script and return its output.
+///
+/// Source is piped on stdin rather than passed with `-e`, so multiline scripts
+/// and embedded quotes do not go through another layer of shell escaping.
 pub fn run_script(script: &str) -> Result<String, String> {
-    let output = spawn_with_timeout(Command::new("osascript").arg("-e").arg(script))?;
+    let mut command = Command::new("osascript");
+    command.arg("-");
+    let output = spawn_with_stdin(&mut command, script)?;
 
     if output.status.success() {
         return Ok(String::from_utf8_lossy(&output.stdout).trim_end().to_string());
@@ -206,5 +211,14 @@ mod tests {
     fn a_shortcut_needs_a_name() {
         let err = run_shortcut("   ", "").unwrap_err();
         assert!(err.contains("Which shortcut"));
+    }
+
+    #[test]
+    fn multiline_scripts_run_via_stdin() {
+        let out = run_script(
+            "if false then\nreturn \"nope\"\nelse\nreturn \"ok\"\nend if",
+        )
+        .unwrap();
+        assert_eq!(out, "ok");
     }
 }
