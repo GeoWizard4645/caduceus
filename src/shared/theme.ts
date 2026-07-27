@@ -39,6 +39,16 @@ function resolveTheme(theme: Theme): "dark" | "light" {
   return window.matchMedia?.("(prefers-color-scheme: light)").matches ? "light" : "dark";
 }
 
+/** Exported for UI that shows or toggles the active mode. */
+export function resolvedAppearanceMode(theme: Theme): "dark" | "light" {
+  return resolveTheme(theme);
+}
+
+/** Flip between light and dark; leaves an explicit choice (not system). */
+export function toggleAppearanceTheme(theme: Theme): "dark" | "light" {
+  return resolveTheme(theme) === "light" ? "dark" : "light";
+}
+
 /**
  * Write the appearance settings into the document.
  *

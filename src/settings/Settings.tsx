@@ -12,6 +12,7 @@ import * as api from "@/shared/api";
 import { useAsync, useTauriEvent } from "@/shared/hooks";
 import { EVENTS } from "@/shared/types";
 import { Callout, Spinner, cx } from "@/shared/ui";
+import { ThemeToggle } from "@/shared/ThemeToggle";
 
 import { AppearanceTab } from "./tabs/Appearance";
 import { AiTab } from "./tabs/Ai";
@@ -93,7 +94,10 @@ export function Settings() {
         <div className="h-11 shrink-0" />
 
         <div className="px-3 pb-3">
-          <p className="px-2 text-[15px] font-semibold tracking-[-0.01em] text-ink">Caduceus</p>
+          <div className="row justify-between gap-2 px-2">
+            <p className="text-[15px] font-semibold tracking-[-0.01em] text-ink">Caduceus</p>
+            <ThemeToggle />
+          </div>
           <p className="px-2 text-2xs text-ink-faint">
             {info.data ? `Version ${info.data.version}` : " "}
           </p>

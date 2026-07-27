@@ -11,9 +11,12 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+
 import * as api from "@/shared/api";
 import { applyAppearance } from "@/shared/theme";
 import type { Settings } from "@/shared/types";
+import { EVENTS } from "@/shared/types";
 
 const SAVE_DEBOUNCE_MS = 500;
 
@@ -57,6 +60,19 @@ export function useDraft(): Draft {
 
   useEffect(() => {
     void reload();
+
+    let unlisten: UnlistenFn | undefined;
+    void listen<Settings>(EVENTS.settingsChanged, (event) => {
+      setSettings(event.payload);
+      applyAppearance(event.payload.appearance);
+      pending.current = null;
+    }).then((fn) => {
+      unlisten = fn;
+    });
+
+    return () => {
+      unlisten?.();
+    };
   }, [reload]);
 
   const flush = useCallback(async () => {

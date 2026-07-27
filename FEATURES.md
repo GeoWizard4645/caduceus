@@ -83,6 +83,20 @@ define word and image conversion all shipped as Rust commands in 1.1.0 — and
 none of them had a caller. The release notes listed them and nothing in the UI
 could run them. They are wired into the palette in 2.0.
 
+## Ranking
+
+The palette ships an opinion about what you are most likely to want — window
+snapping first, the commands that end your session last — and then lets your own
+use overrule it. One use of anything puts it above everything untouched; more
+uses outrank fewer.
+
+Typing still wins. History breaks ties, it does not override what you asked for:
+`shut down` finds Shut down however rarely you run it.
+
+`scripts/check-ranking.mjs` asserts all four of those properties at build time,
+because getting the constants wrong does not fail a type check — it just quietly
+produces a list in the wrong order.
+
 ## Needs something you install
 
 Detected and used when present; never a silent failure.

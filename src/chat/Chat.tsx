@@ -9,14 +9,16 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import * as api from "@/shared/api";
-import { useTauriEvent } from "@/shared/hooks";
+import { useSettings, useTauriEvent } from "@/shared/hooks";
 import type { ChatMessage, Conversation } from "@/shared/types";
 import { EVENTS } from "@/shared/types";
 import { Button, EmptyState, Spinner, cx } from "@/shared/ui";
+import { ThemeToggle } from "@/shared/ThemeToggle";
 
 import { Thread } from "./Thread";
 
 export function Chat() {
+  const { settings } = useSettings();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeId, setActiveId] = useState<number | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -140,6 +142,14 @@ export function Chat() {
     }
   };
 
+  if (!settings) {
+    return (
+      <div className="flex h-screen w-screen items-center justify-center bg-base text-ink-faint">
+        <Spinner />
+      </div>
+    );
+  }
+
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-base text-ink">
       {/* --- thread list ------------------------------------------------- */}
@@ -151,9 +161,12 @@ export function Chat() {
           <span className="text-2xs font-medium uppercase tracking-[0.1em] text-ink-faint">
             Chats
           </span>
-          <Button size="sm" tone="ghost" onClick={() => void newChat()} title="Start a new chat">
-            New
-          </Button>
+          <div className="row gap-1">
+            <ThemeToggle />
+            <Button size="sm" tone="ghost" onClick={() => void newChat()} title="Start a new chat">
+              New
+            </Button>
+          </div>
         </div>
 
         <div className="flex-1 overflow-y-auto px-2 pb-3">

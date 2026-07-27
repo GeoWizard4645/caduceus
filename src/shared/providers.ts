@@ -10,7 +10,8 @@
  */
 
 import * as api from "./api";
-import { COMMANDS, matchTrigger, type CommandOutput } from "./commands";
+import { COMMANDS, commandWeight, matchTrigger, type CommandOutput } from "./commands";
+import { usageBoost } from "./usage";
 import { fuzzyMatch, fuzzyScore } from "./fuzzy";
 import type {
   CalcResult,
@@ -37,6 +38,14 @@ export interface ResultItem {
   accessory?: string;
   /** Character indices in `title` to highlight. */
   positions?: number[];
+  /**
+   * Stable id used to count how often this row is run.
+   *
+   * Set it for anything whose identity survives a restart — a command, an
+   * application, a shortcut. Left unset for rows that are one-offs (a clipboard
+   * entry, a web search), where a count would mean nothing.
+   */
+  usageKey?: string;
   /**
    * Ask before running, showing this sentence. Enter a second time confirms.
    *
@@ -121,6 +130,7 @@ function toItem(
 ): ResultItem {
   return {
     id: `shortcut:${shortcut.id}`,
+    usageKey: `shortcut:${shortcut.id}`,
     title: shortcut.label,
     subtitle: shortcut.description || describeTarget(shortcut),
     icon: shortcut.icon || shortcut.label.charAt(0).toUpperCase(),
@@ -393,13 +403,15 @@ export const appLauncherProvider: ResultProvider = {
       .slice(0, limit)
       .map(({ app, match }) => ({
         id: `app:${app.path}`,
+        usageKey: `app:${app.path}`,
         title: app.name,
         subtitle: "Application",
         icon: "▣",
         group: "Applications",
         // Launching an app you named is almost always what you meant, so this
-        // outranks a web search for the same word.
-        score: match.score + 40,
+        // outranks a web search for the same word — and the apps you launch
+        // most rise above the ones that merely match as well.
+        score: match.score + 40 + usageBoost(`app:${app.path}`),
         positions: match.positions,
         accessory: "↵",
         run: async () => {
@@ -611,7 +623,32 @@ export const commandProvider: ResultProvider = {
       return [row];
     }
 
-    if (!query) return [];
+    // Nothing typed: show the whole catalogue, ranked. Commands that are only
+    // discoverable once you already know their name are not discoverable, and
+    // the empty palette is the one place with room to list them.
+    if (!query) {
+      const ranked = [...COMMANDS].sort(
+        (a, b) =>
+          usageBoost(`command:${b.id}`) +
+          commandWeight(b) -
+          (usageBoost(`command:${a.id}`) + commandWeight(a)),
+      );
+
+      return ranked.map((command, index) => ({
+        id: `command:${command.id}`,
+        usageKey: `command:${command.id}`,
+        title: command.title,
+        subtitle: command.detail,
+        icon: command.icon,
+        group: "All commands",
+        // Below the prefix hints and the clipboard, which is where a list this
+        // long belongs — it is a reference, not a suggestion.
+        score: EMPTY_STATE_BASE - index,
+        accessory: command.trigger ? `${command.trigger} …` : "↵",
+        confirm: command.confirm,
+        run: () => command.run({ input: "", actions }),
+      }));
+    }
 
     return COMMANDS.map((command): ResultItem | null => {
       const match = fuzzyMatch(query, command.title);
@@ -620,13 +657,16 @@ export const commandProvider: ResultProvider = {
 
       return {
         id: `command:${command.id}`,
+        usageKey: `command:${command.id}`,
         title: command.title,
         subtitle: command.detail,
         icon: command.icon,
         group: "Commands",
         // Just under a shortcut the user configured themselves, and under an
-        // exact app-name match, but above a web search.
-        score: score - 10,
+        // exact app-name match, but above a web search. The usage boost is what
+        // lets a command you run daily overtake a closer textual match you never
+        // touch.
+        score: score - 10 + usageBoost(`command:${command.id}`),
         positions: match?.positions,
         accessory: command.trigger ? `${command.trigger} …` : "↵",
         confirm: command.confirm,
@@ -635,6 +675,15 @@ export const commandProvider: ResultProvider = {
     }).filter((item): item is ResultItem => item !== null);
   },
 };
+
+/**
+ * Where the full command list starts on an empty query.
+ *
+ * Below the clipboard rows (which top out at 200) so the catalogue sits at the
+ * bottom, and far enough above nothing that 124 descending scores never collide
+ * with another provider.
+ */
+const EMPTY_STATE_BASE = 180;
 
 function truncate(text: string, max: number): string {
   return text.length <= max ? text : `${text.slice(0, max - 1)}…`;

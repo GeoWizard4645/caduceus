@@ -1305,3 +1305,34 @@ pub fn open_path_in_terminal(path: String) -> tools::ToolOutcome {
 pub fn ssh_connect(alias: String) -> tools::ToolOutcome {
     tools::devenv::ssh_connect(&alias)
 }
+
+// ---------------------------------------------------------------------------
+// Usage ranking
+// ---------------------------------------------------------------------------
+//
+// The palette ranks by how often *you* run something. These three commands are
+// the whole of it: read the counts, add one, throw them away. Nothing is sent
+// anywhere — see the module docs in `usage.rs`.
+
+/// Every recorded id and how often it has been run.
+#[tauri::command]
+pub fn usage_counts(
+    usage: tauri::State<'_, crate::usage::UsageStore>,
+) -> std::collections::HashMap<String, crate::usage::UsageEntry> {
+    usage.snapshot()
+}
+
+/// Count one use of a palette row.
+#[tauri::command]
+pub fn record_usage(
+    usage: tauri::State<'_, crate::usage::UsageStore>,
+    id: String,
+) -> crate::usage::UsageEntry {
+    usage.record(&id, crate::usage::now_ms())
+}
+
+/// Forget every recorded count, putting the palette back to its shipped order.
+#[tauri::command]
+pub fn clear_usage(usage: tauri::State<'_, crate::usage::UsageStore>) {
+    usage.clear();
+}

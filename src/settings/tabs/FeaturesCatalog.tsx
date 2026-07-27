@@ -14,25 +14,42 @@
  * at all.
  */
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import * as api from "@/shared/api";
 import {
   FEATURE_SECTIONS,
   countCommands,
   countFeatures,
+  rankItems,
   type FeatureSection,
 } from "@/shared/featuresCatalog";
+import { loadUsage } from "@/shared/usage";
 import { DOCS_FEATURES } from "@/shared/docsUrls";
 import { Button, Section, cx } from "@/shared/ui";
 
 export function FeaturesCatalogTab() {
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState<Set<string>>(() => new Set());
+  const [usageReady, setUsageReady] = useState(false);
+
+  // Command sections are ordered by how often you run each one, so this window
+  // agrees with the palette about what comes first.
+  useEffect(() => {
+    void loadUsage().finally(() => setUsageReady(true));
+  }, []);
 
   const q = query.trim().toLowerCase();
 
-  const sections = useMemo(() => filterSections(FEATURE_SECTIONS, q), [q]);
+  const sections = useMemo(
+    () => filterSections(FEATURE_SECTIONS, q).map((section) => ({
+      ...section,
+      items: rankItems(section),
+    })),
+    // `usageReady` is a dependency because the counts it loads are read
+    // synchronously by `rankItems` rather than passed in.
+    [q, usageReady],
+  );
 
   const total = countFeatures();
   const commands = countCommands();

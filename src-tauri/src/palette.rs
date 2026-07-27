@@ -148,10 +148,59 @@ pub async fn dispatch<R: tauri::Runtime>(
     let action = parsed.action();
     let close = snapshot.command_center.close_on_action;
 
-    // An empty query after a prefix is a no-op, not an error — the user is
-    // mid-thought.
-    if parsed.remainder.is_empty() && !matches!(action, PrefixAction::ClipboardSearch) {
-        return DispatchOutcome::simple(false, action, "Type something first.", false);
+    // An empty query after a prefix is a no-op for most routes — but a bare `/`
+    // or `/c` should open the AI or agent UI without sending a message yet.
+    if parsed.remainder.is_empty() {
+        match action {
+            PrefixAction::PrimaryAi => {
+                let Some(store) = app.try_state::<crate::chat::ChatStore>() else {
+                    return DispatchOutcome::simple(
+                        false,
+                        action,
+                        "Chat history is unavailable.",
+                        false,
+                    );
+                };
+                let conversation = match crate::chat::active_conversation(store.inner()) {
+                    Ok(id) => id,
+                    Err(e) => return DispatchOutcome::simple(false, action, e.user_message(), false),
+                };
+                return DispatchOutcome {
+                    ok: true,
+                    message: String::new(),
+                    action,
+                    session_id: None,
+                    clipboard_query: None,
+                    conversation_id: Some(conversation),
+                    close_window: false,
+                };
+            }
+            PrefixAction::ComputerUse => {
+                return DispatchOutcome {
+                    ok: true,
+                    message: "Describe what to do, then press Enter.".into(),
+                    action,
+                    session_id: None,
+                    clipboard_query: None,
+                    conversation_id: None,
+                    close_window: false,
+                };
+            }
+            PrefixAction::ClipboardSearch => {
+                return DispatchOutcome {
+                    ok: true,
+                    message: String::new(),
+                    action,
+                    session_id: None,
+                    clipboard_query: Some(String::new()),
+                    conversation_id: None,
+                    close_window: false,
+                };
+            }
+            _ => {
+                return DispatchOutcome::simple(false, action, "Type something first.", false);
+            }
+        }
     }
 
     match action {
@@ -323,6 +372,13 @@ mod tests {
         let p = parse("/computer stuff", &cfg());
         assert_eq!(p.action(), PrefixAction::PrimaryAi);
         assert_eq!(p.remainder, "computer stuff");
+    }
+
+    #[test]
+    fn a_bare_slash_prefix_yields_primary_ai_with_empty_remainder() {
+        let p = parse("/", &cfg());
+        assert_eq!(p.action(), PrefixAction::PrimaryAi);
+        assert_eq!(p.remainder, "");
     }
 
     #[test]

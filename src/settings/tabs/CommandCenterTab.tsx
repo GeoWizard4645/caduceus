@@ -1,3 +1,5 @@
+import { useEffect, useState } from "react";
+
 import type { PrefixAction, PrefixRule, RuntimeInfo } from "@/shared/types";
 import {
   Button,
@@ -9,6 +11,9 @@ import {
   TextInput,
   Toggle,
 } from "@/shared/ui";
+
+import { COMMANDS } from "@/shared/commands";
+import { clearUsage, loadUsage, usageOf } from "@/shared/usage";
 
 import { BrowserPicker } from "../BrowserPicker";
 import type { Draft } from "../useDraft";
@@ -241,6 +246,69 @@ export function CommandCenterTab({ draft, info }: { draft: Draft; info: RuntimeI
           </Field>
         </div>
       </Section>
+
+      <UsageRanking />
     </>
   );
+}
+
+/**
+ * The palette learns your order. This says so, and offers to forget it.
+ *
+ * Worth its own section rather than a footnote: a list that silently reorders
+ * itself is unsettling if you do not know why, and the honest answer — a count
+ * in a local file, nothing sent anywhere — is short enough to just say.
+ */
+function UsageRanking() {
+  const [total, setTotal] = useState<number | null>(null);
+
+  const refresh = () => {
+    void loadUsage().then(() => {
+      // `usageOf` reads the same in-memory cache the palette ranks from.
+      let runs = 0;
+      let ids = 0;
+      for (const key of trackedKeys()) {
+        const entry = usageOf(key);
+        if (entry) {
+          runs += entry.count;
+          ids += 1;
+        }
+      }
+      setTotal(ids === 0 ? 0 : runs);
+    });
+  };
+
+  useEffect(refresh, []);
+
+  return (
+    <Section
+      title="Ranking"
+      description="The Command Center puts what you use most at the top. Counts are kept in a file next to your clipboard history, are never sent anywhere, and only ever record which built-in row was run — never what you typed."
+    >
+      <div className="row flex-wrap gap-2">
+        <span className="text-2xs text-ink-mute">
+          {total === null
+            ? "Reading…"
+            : total === 0
+              ? "Nothing recorded yet — the list is in its shipped order."
+              : `${total} run${total === 1 ? "" : "s"} recorded.`}
+        </span>
+        <Button
+          size="sm"
+          className="ml-auto"
+          disabled={total === 0}
+          onClick={() => {
+            void clearUsage().then(refresh);
+          }}
+        >
+          Reset ranking
+        </Button>
+      </div>
+    </Section>
+  );
+}
+
+/** Every id the palette counts against, so the total is a real total. */
+function trackedKeys(): string[] {
+  return COMMANDS.map((command) => `command:${command.id}`);
 }

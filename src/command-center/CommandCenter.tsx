@@ -20,6 +20,7 @@ import {
   type ResultItem,
 } from "@/shared/providers";
 import type { CommandOutput } from "@/shared/commands";
+import { loadUsage, recordUsage } from "@/shared/usage";
 import type {
   ChatMessage,
   ClipboardEntry,
@@ -30,6 +31,7 @@ import type {
 } from "@/shared/types";
 import { EVENTS } from "@/shared/types";
 import { Kbd, Spinner, cx } from "@/shared/ui";
+import { ThemeToggle } from "@/shared/ThemeToggle";
 import { ShortcutIcon } from "@/shared/ShortcutIcon";
 import { Thread } from "@/chat/Thread";
 
@@ -64,6 +66,8 @@ export function CommandCenter() {
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const activateClipboard = useRef<() => void>(() => {});
+  /** After Esc closes inline chat, do not auto-reopen until the query changes. */
+  const skipChatAutoOpen = useRef<string | null>(null);
 
   // 45ms, not 90: every provider behind this was measured in the tens of
   // microseconds (parse 0.1ms, calculator 0.3ms, app list cached in-process),
@@ -95,6 +99,7 @@ export function CommandCenter() {
     setSelected(0);
     setOutput(null);
     setPendingConfirm(null);
+    skipChatAutoOpen.current = null;
     // The webview needs a tick to become focusable after the window is shown.
     setTimeout(() => {
       inputRef.current?.focus();
@@ -104,6 +109,13 @@ export function CommandCenter() {
 
   useEffect(() => {
     inputRef.current?.focus();
+  }, []);
+
+  // Ranking reads these synchronously inside `search()`, so they have to be in
+  // memory before the first result pass rather than awaited during it.
+  const [usageReady, setUsageReady] = useState(false);
+  useEffect(() => {
+    void loadUsage().finally(() => setUsageReady(true));
   }, []);
 
   // --- voice --------------------------------------------------------------
@@ -178,28 +190,67 @@ export function CommandCenter() {
     return () => {
       cancelled = true;
     };
-  }, [debouncedInput, mode, settings, actions]);
+  }, [debouncedInput, mode, settings, actions, usageReady]);
+
+  // Open the inline chat as soon as the input routes to `/`, before Enter.
+  useEffect(() => {
+    if (skipChatAutoOpen.current !== null && skipChatAutoOpen.current !== debouncedInput) {
+      skipChatAutoOpen.current = null;
+    }
+  }, [debouncedInput]);
+
+  useEffect(() => {
+    if (mode !== "default" || session || output) return;
+
+    const action = parsed?.rule?.action;
+    if (action !== "primary_ai") {
+      setChat(null);
+      return;
+    }
+
+    if (skipChatAutoOpen.current === debouncedInput) return;
+
+    let cancelled = false;
+    void (async () => {
+      try {
+        const list = await api.chatConversations();
+        let id = list[0]?.id;
+        if (id == null) id = await api.chatNewConversation();
+        if (!cancelled) setChat({ conversationId: id });
+      } catch {
+        // Chat store unavailable — Enter dispatch will surface the error.
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [parsed?.rule?.action, parsed?.rule?.id, debouncedInput, mode, session, output]);
 
   // --- submit -------------------------------------------------------------
   const submit = useCallback(
     async (raw?: string) => {
-      const text = (raw ?? input).trim();
-      if (!text) return;
+      // Trim only trailing whitespace so `/ ` still parses as the AI prefix with
+      // an empty remainder; `.trim()` would collapse it to `/` before dispatch.
+      const text = (raw ?? input).trimEnd();
+      if (!text.trim()) return;
 
       setBusy(true);
-      setChat(null);
       try {
         const outcome = await api.dispatchInput(text);
 
         if (outcome.action === "primary_ai") {
-          if (outcome.ok && outcome.conversationId != null)
+          if (outcome.conversationId != null) {
             setChat({ conversationId: outcome.conversationId });
-          else if (!outcome.ok) notify(outcome.message, "error");
-          else notify(outcome.message, "error");
+          } else if (!outcome.ok) {
+            notify(outcome.message, "error");
+          }
         } else if (outcome.action === "computer_use") {
           if (outcome.ok && outcome.sessionId) {
             setSession({ id: outcome.sessionId, task: parsedRemainder(text) });
-          } else {
+          } else if (outcome.ok && outcome.message) {
+            notify(outcome.message, "info");
+          } else if (!outcome.ok) {
             notify(outcome.message, "error");
           }
         } else if (outcome.action === "clipboard_search") {
@@ -261,7 +312,10 @@ export function CommandCenter() {
         if (pendingConfirm) setPendingConfirm(null);
         else if (output) setOutput(null);
         else if (session) setSession(null);
-        else if (chat) setChat(null);
+        else if (chat) {
+          skipChatAutoOpen.current = input;
+          setChat(null);
+        }
         else if (mode === "clipboard" || mode === "system") {
           setMode("default");
           setInput("");
@@ -289,6 +343,10 @@ export function CommandCenter() {
       return;
     }
     setPendingConfirm(null);
+
+    // Counted here rather than inside each command, so applications, shortcuts
+    // and commands are all ranked by the same rule.
+    if (item.usageKey) recordUsage(item.usageKey);
 
     setBusy(true);
     try {
@@ -449,7 +507,6 @@ export function CommandCenter() {
           selectedIndex={selected}
           onCountChange={setClipboardCount}
           onNotify={notify}
-          onClose={() => void api.hideCommandCenter()}
           registerActivate={(fn) => {
             activateClipboard.current = fn;
           }}
@@ -502,6 +559,7 @@ export function CommandCenter() {
           <span>close</span>
         </div>
         <div className="row">
+          <ThemeToggle />
           <button
             type="button"
             onClick={() => void api.openSettingsWindow()}

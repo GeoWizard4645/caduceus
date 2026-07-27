@@ -478,3 +478,17 @@ export const openPathInTerminal = (path: string) =>
   invoke<ToolOutcome>("open_path_in_terminal", { path });
 
 export const sshConnect = (alias: string) => invoke<ToolOutcome>("ssh_connect", { alias });
+
+// --- usage ranking -----------------------------------------------------------
+// Local only. See src-tauri/src/usage.rs — nothing here is sent anywhere.
+
+export interface UsageEntry {
+  count: number;
+  lastUsedMs: number;
+}
+
+export const usageCounts = () => invoke<Record<string, UsageEntry>>("usage_counts");
+
+export const recordUsage = (id: string) => invoke<UsageEntry>("record_usage", { id });
+
+export const clearUsage = () => invoke<void>("clear_usage");

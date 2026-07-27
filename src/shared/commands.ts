@@ -1503,6 +1503,187 @@ const LIST_COMMANDS: CommandDef[] = LIST_SPECS.map((spec) => ({
 }));
 
 // ---------------------------------------------------------------------------
+// Ranking
+// ---------------------------------------------------------------------------
+
+/**
+ * What Caduceus guesses you want, before it knows anything about you.
+ *
+ * These are the *starting* order only. Your own use overrules them — see
+ * `usageBoost` in `usage.ts`, whose scale is deliberately larger than the 0–100
+ * this spans, so anything you have actually run outranks anything you have not,
+ * however confidently it was ranked here.
+ *
+ * A command with no entry falls back to its group's baseline. That keeps this
+ * table to the commands worth holding an opinion about, rather than 124 guesses.
+ */
+const GROUP_BASELINE: Record<CommandGroupId, number> = {
+  windows: 55,
+  screen: 50,
+  developer: 40,
+  text: 38,
+  system: 36,
+  files: 34,
+  sound: 30,
+  network: 28,
+  devenv: 28,
+  utilities: 26,
+};
+
+const WEIGHTS: Record<string, number> = {
+  // Window snapping is the reason most people install something like this, and
+  // the two halves are most of the use between them.
+  "window.left_half": 100,
+  "window.right_half": 99,
+  "window.maximize": 96,
+  "window.center": 88,
+  "window.next_display": 80,
+  "window.top_half": 72,
+  "window.bottom_half": 70,
+  "window.almost_maximize": 68,
+  "window.toggle_full_screen": 66,
+  "window.first_two_thirds": 62,
+  "window.last_two_thirds": 60,
+  "window.top_left_quarter": 58,
+  "window.top_right_quarter": 58,
+  "window.bottom_left_quarter": 56,
+  "window.bottom_right_quarter": 56,
+  "window.larger": 52,
+  "window.smaller": 52,
+  "window.reasonable_size": 50,
+  "window.first_third": 48,
+  "window.last_third": 48,
+  "window.center_third": 44,
+  "window.previous_display": 40,
+
+  // Reading text off the screen has no alternative that is not a chore.
+  "screen.ocr": 94,
+  "screen.ocr-selection": 44,
+
+  // The everyday half of the developer toolbox.
+  "tool.uuid": 82,
+  "tool.json_format": 80,
+  "tool.base64_decode": 76,
+  "tool.base64_encode": 74,
+  "tool.jwt_decode": 72,
+  "tool.sha256": 66,
+  "tool.password": 64,
+  "tool.timestamp_convert": 60,
+  "tool.url_encode": 54,
+  "tool.url_decode": 54,
+  "tool.color_convert": 52,
+  "tool.timestamp_now": 50,
+  "tool.json_minify": 46,
+  "tool.number_base": 42,
+  "tool.random_number": 36,
+  "tool.md5": 34,
+  "tool.hex_encode": 30,
+  "tool.hex_decode": 30,
+  "tool.sha1": 28,
+  "tool.sha512": 26,
+  "tool.ulid": 26,
+  "tool.uuid_batch": 24,
+  "tool.nano_id": 20,
+  "tool.base64_url_encode": 20,
+  "tool.base64_url_decode": 20,
+  "tool.html_encode": 20,
+  "tool.html_decode": 20,
+  "tool.json_escape": 18,
+
+  // Case conversion is the single most-reached-for text tool.
+  "case.title": 68,
+  "case.lower": 64,
+  "case.upper": 62,
+  "case.sentence": 54,
+  "case.kebab": 46,
+  "case.snake": 46,
+  "case.camel": 42,
+  "case.pascal": 40,
+  "tool.text_stats": 56,
+  "tool.slugify": 50,
+  "tool.sort_lines": 48,
+  "tool.dedupe_lines": 46,
+  "tool.trim_lines": 36,
+  "tool.join_lines": 32,
+  "tool.count_occurrences": 28,
+  "tool.number_lines": 24,
+  "tool.reverse_lines": 22,
+  "tool.sort_lines_descending": 22,
+  "tool.lorem": 20,
+  "tool.shuffle_lines": 16,
+
+  // System: the toggles people actually toggle.
+  "system.toggle_dark_mode": 78,
+  "system.lock_screen": 64,
+  "system.toggle_mute": 58,
+  "system.sleep_display": 52,
+  "system.toggle_hidden_files": 48,
+  "system.volume_up": 44,
+  "system.volume_down": 44,
+  "system.empty_trash": 42,
+  "system.restart_finder": 40,
+  "system.toggle_desktop_icons": 36,
+  "system.brightness_up": 32,
+  "system.brightness_down": 32,
+  "system.restart_dock": 30,
+  "system.toggle_stage_manager": 26,
+  "system.restart_menu_bar": 24,
+  "system.start_screen_saver": 22,
+  "system.sleep_computer": 22,
+  // Bottom of the list on purpose. These sit one keystroke from "Sleep" in a
+  // fuzzy list, and ranking them low is a second line of defence behind the
+  // confirmation step.
+  "system.log_out": 10,
+  "system.restart_computer": 8,
+  "system.shut_down": 6,
+
+  // Files.
+  "list.files": 74,
+  "files.copy-path": 56,
+  "files.quicklook": 50,
+  "files.compress": 48,
+  "files.latest-download-open": 46,
+  "files.terminal": 44,
+  "files.expand": 40,
+  "files.trash": 34,
+  "files.latest-download-copy": 32,
+  "list.big": 30,
+
+  // Sound and media.
+  "list.output": 72,
+  "media.play_pause": 56,
+  "list.input": 50,
+  "media.now_playing": 40,
+  "media.next": 36,
+  "media.previous": 28,
+
+  // Network and environment.
+  "list.ports": 70,
+  "network.local": 54,
+  "list.repos": 52,
+  "network.wifi": 40,
+  "list.ssh": 36,
+  "network.public": 34,
+  "network.dns": 30,
+  "list.docker": 30,
+  "network.ping": 28,
+  "system.toggle_wifi": 38,
+
+  // Utilities.
+  "utility.define": 48,
+  "utility.caffeinate-on": 44,
+  "utility.machine": 34,
+  "utility.eject": 32,
+  "utility.permissions": 28,
+  "utility.caffeinate-off": 24,
+};
+
+/** The shipped ranking weight for a command. */
+export function commandWeight(command: CommandDef): number {
+  return WEIGHTS[command.id] ?? GROUP_BASELINE[command.group];
+}
+
+// ---------------------------------------------------------------------------
 // The registry
 // ---------------------------------------------------------------------------
 

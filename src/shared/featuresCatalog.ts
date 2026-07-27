@@ -17,13 +17,22 @@
  */
 
 import catalog from "../../website/features-catalog.json";
-import { COMMANDS, COMMAND_GROUPS } from "./commands";
+import { COMMANDS, COMMAND_GROUPS, commandWeight } from "./commands";
+import { usageBoost } from "./usage";
 
 const FIRST_PARTY_EXTENSIONS_ID = "first-party-extensions";
 
 export interface FeatureItem {
   name: string;
   detail: string;
+  /**
+   * The command's usage key, for items that are runnable.
+   *
+   * Absent on capabilities, which have nothing to count.
+   */
+  usageKey?: string;
+  /** The shipped ranking weight, used to order items before you have run any. */
+  weight?: number;
 }
 
 export interface FeatureSection {
@@ -52,6 +61,8 @@ const COMMAND_SECTIONS: FeatureSection[] = COMMAND_GROUPS.map((group) => ({
   items: COMMANDS.filter((command) => command.group === group.id).map((command) => ({
     name: command.trigger ? `${command.title}  ·  ${command.trigger} …` : command.title,
     detail: command.detail,
+    usageKey: `command:${command.id}`,
+    weight: commandWeight(command),
   })),
 })).filter((section) => section.items.length > 0);
 
@@ -85,4 +96,23 @@ export function countFeatures(): number {
 
 export function countCommands(): number {
   return COMMANDS.length;
+}
+
+/**
+ * Order a section's items the way the palette orders them: most used first,
+ * falling back to the shipped weight.
+ *
+ * Applied at render time rather than baked into `FEATURE_SECTIONS`, because the
+ * counts change while the window is open and a catalogue that disagreed with the
+ * palette about what comes first would be worse than one that never sorted.
+ * Capability sections have nothing to count and keep their authored order.
+ */
+export function rankItems(section: FeatureSection): FeatureItem[] {
+  if (!section.runnable) return section.items;
+
+  return [...section.items].sort((a, b) => {
+    const score = (item: FeatureItem) =>
+      (item.usageKey ? usageBoost(item.usageKey) : 0) + (item.weight ?? 0);
+    return score(b) - score(a);
+  });
 }

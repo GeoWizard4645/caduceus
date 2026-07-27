@@ -38,6 +38,7 @@ pub mod sysmon;
 pub mod tools;
 pub mod staff_mark;
 pub mod tray;
+pub mod usage;
 pub mod voice;
 pub mod window;
 
@@ -206,6 +207,10 @@ pub fn run() {
             commands::public_address,
             commands::dns_lookup,
             commands::ping_host,
+            // usage ranking
+            commands::usage_counts,
+            commands::record_usage,
+            commands::clear_usage,
             // misc
             commands::quit_app,
         ])
@@ -283,6 +288,10 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
             log::error!("chat history is unavailable: {e}");
         }
     }
+
+    // --- usage ranking -----------------------------------------------------
+    // Loaded before the windows so the palette's first render already has it.
+    app.manage(usage::UsageStore::open(data_dir.join(usage::USAGE_FILE)));
 
     // --- agents and voice -------------------------------------------------
     app.manage(agent::AgentRuntime::new());

@@ -102,6 +102,12 @@ your own in Settings, or delete the ones you don't use.
 
 ### 124 built-in commands
 
+Open the Command Center with nothing typed and the whole catalogue is there,
+ordered by how often *you* run each one. Counts live in a file next to your
+clipboard history, are never sent anywhere, and record only which built-in row
+was run — never what you typed. Settings → Command Center → Ranking clears them.
+
+
 Window management, on-device screen OCR, sound-device switching, encoders,
 hashes, JSON and JWT inspection, text surgery, Finder actions, ports,
 repositories, SSH hosts and containers — all in the *same* ranked list as your
