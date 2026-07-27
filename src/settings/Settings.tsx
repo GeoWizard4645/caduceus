@@ -1,9 +1,10 @@
 /**
- * The Settings window.
+ * Settings, as a tab in the Command Center.
  *
- * A sidebar of seven tabs over a single settings draft. Changes save
- * automatically 500ms after you stop typing — see `useDraft.ts` for why there is
- * no Save button.
+ * A sidebar of panes over a single settings draft. Changes save automatically
+ * 500ms after you stop typing — see `useDraft.ts` for why there is no Save
+ * button. This used to be its own window; it is now one tab among the rest, so
+ * `initialSection` is how "open Settings → Voice" arrives.
  */
 
 import { useEffect, useState } from "react";
@@ -43,9 +44,11 @@ const TABS = [
 
 type TabId = (typeof TABS)[number]["id"];
 
-export function Settings() {
+export function Settings({ initialSection }: { initialSection?: string } = {}) {
   const draft = useDraft();
-  const [tab, setTab] = useState<TabId>("general");
+  const [tab, setTab] = useState<TabId>(
+    () => (TABS.some((t) => t.id === initialSection) ? (initialSection as TabId) : "general"),
+  );
   const [hotkeyProblems, setHotkeyProblems] = useState<string[]>([]);
   // Which tutorial to open when another tab links into Learn. Cleared on the
   // way out so returning to Learn by hand does not re-open it.
@@ -61,6 +64,13 @@ export function Settings() {
     setLearnFocus(null);
     setTab(next as TabId);
   };
+
+  // Re-opening the tab with a different pane in mind should move to it.
+  useEffect(() => {
+    if (initialSection && TABS.some((t) => t.id === initialSection)) {
+      setTab(initialSection as TabId);
+    }
+  }, [initialSection]);
 
   const info = useAsync(() => api.getRuntimeInfo(), []);
 
@@ -90,9 +100,6 @@ export function Settings() {
     <div className="flex h-full w-full overflow-hidden bg-base text-ink">
       {/* --- sidebar --------------------------------------------------- */}
       <nav className="drag-region flex w-[210px] shrink-0 flex-col border-r border-line bg-surface/60">
-        {/* Space for the macOS traffic lights, which overlay the content. */}
-        <div className="h-11 shrink-0" />
-
         <div className="px-3 pb-3">
           <div className="row justify-between gap-2 px-2">
             <p className="text-[15px] font-semibold tracking-[-0.01em] text-ink">Caduceus</p>

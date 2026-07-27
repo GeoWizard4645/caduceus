@@ -26,6 +26,67 @@ use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
 use crate::settings::{FunctionKeyAction, SettingsManager};
 use crate::{voice, window};
 
+/// Combinations macOS keeps for itself, whatever an app asks for.
+///
+/// These are the reason a hotkey can look perfectly configured and simply never
+/// fire. `RegisterEventHotKey` **succeeds** for `Cmd+Space` — the OS accepts the
+/// registration and then routes the key to Spotlight anyway, because the system
+/// binding wins. Nothing in the registration result says so, so the only way to
+/// avoid shipping a dead shortcut is to know the list.
+///
+/// Normalised for comparison: modifiers sorted, `CommandOrControl` resolved to
+/// `Command` (this is the macOS-only path).
+#[cfg(target_os = "macos")]
+const SYSTEM_RESERVED: &[&str] = &[
+    "command+space",        // Spotlight
+    "command+alt+space",    // Finder search window
+    "command+tab",          // application switcher
+    "command+shift+tab",    // application switcher, backwards
+    "command+`",            // cycle windows in the active app
+    "control+up",           // Mission Control
+    "control+down",         // application windows
+    "control+left",         // move a space left
+    "control+right",        // move a space right
+    "command+h",            // hide the active app
+    "command+q",            // quit the active app
+    "command+shift+3",      // screenshot
+    "command+shift+4",      // screenshot selection
+    "command+shift+5",      // screenshot toolbar
+    "command+control+q",    // lock screen
+    "command+alt+esc",      // force quit
+    "fn+f",                 // not expressible, but rejected clearly if tried
+];
+
+/// Whether macOS will swallow this accelerator before Caduceus ever sees it.
+#[cfg(target_os = "macos")]
+fn is_system_reserved(accelerator: &str) -> bool {
+    let mut parts: Vec<String> = accelerator
+        .split('+')
+        .map(|part| match part.trim().to_lowercase().as_str() {
+            // Tauri's cross-platform alias resolves to Command on macOS.
+            "commandorcontrol" | "cmdorctrl" | "cmd" | "super" | "meta" => "command".to_string(),
+            "option" | "opt" => "alt".to_string(),
+            "ctrl" => "control".to_string(),
+            "escape" => "esc".to_string(),
+            other => other.to_string(),
+        })
+        .collect();
+
+    // The key is whatever is not a modifier; sort the modifiers so "Shift+Cmd+3"
+    // and "Cmd+Shift+3" compare equal.
+    let key = parts.pop().unwrap_or_default();
+    parts.sort();
+    parts.push(key);
+    let normalised = parts.join("+");
+
+    SYSTEM_RESERVED.iter().any(|reserved| *reserved == normalised)
+}
+
+#[cfg(not(target_os = "macos"))]
+fn is_system_reserved(_accelerator: &str) -> bool {
+    false
+}
+
 /// Accelerators tried, in order, when the configured one cannot be registered.
 ///
 /// Every entry is deliberately something no stock macOS install claims. The
@@ -84,11 +145,20 @@ pub fn register_all<R: Runtime>(app: &AppHandle<R>, settings: &SettingsManager) 
     let mut cfg = settings.get();
     let mut claimed: Vec<String> = Vec::new();
 
-    // Attempt one accelerator. `Ok(())` means the OS accepted it.
+    // Attempt one accelerator. `Ok(())` means the key will actually reach us.
+    //
+    // Registration succeeding is not the same as the key working: macOS accepts
+    // a registration for Cmd+Space and then hands the key to Spotlight anyway.
+    // A combination the system has claimed is therefore refused *here*, so it
+    // falls through to a working alternative instead of shipping a shortcut
+    // that silently does nothing.
     let try_register = |accelerator: &str| -> Result<(), String> {
         let accelerator = accelerator.trim();
         if accelerator.is_empty() {
             return Err("empty accelerator".into());
+        }
+        if is_system_reserved(accelerator) {
+            return Err(format!("{accelerator} is reserved by macOS"));
         }
         let shortcut = Shortcut::from_str(accelerator).map_err(|e| e.to_string())?;
         app.global_shortcut()
@@ -457,6 +527,12 @@ pub fn validate(accelerator: &str) -> Result<String, String> {
     if trimmed.is_empty() {
         return Ok(String::new());
     }
+    if is_system_reserved(trimmed) {
+        return Err(format!(
+            "\u{201c}{trimmed}\u{201d} belongs to macOS \u{2014} it would register without error \
+             and then never reach Caduceus. Pick something else."
+        ));
+    }
     Shortcut::from_str(trimmed)
         .map(|_| trimmed.to_string())
         .map_err(|e| format!("\u{201c}{trimmed}\u{201d} is not a valid shortcut: {e}"))
@@ -465,6 +541,68 @@ pub fn validate(accelerator: &str) -> Result<String, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn combinations_macos_keeps_for_itself_are_recognised() {
+        // Every one of these registers successfully and then never fires,
+        // which is the whole reason the list exists.
+        for reserved in [
+            "CommandOrControl+Space",
+            "Command+Space",
+            "Cmd+Space",
+            "Command+Tab",
+            "Command+Shift+3",
+            "Control+Left",
+            "CommandOrControl+Q",
+        ] {
+            assert!(is_system_reserved(reserved), "{reserved} should be reserved");
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn modifier_order_and_spelling_do_not_hide_a_reserved_combination() {
+        // All four spell the same key press.
+        for spelling in [
+            "Command+Shift+3",
+            "Shift+Command+3",
+            "Shift+Cmd+3",
+            "shift+commandorcontrol+3",
+        ] {
+            assert!(is_system_reserved(spelling), "{spelling} should be reserved");
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn ordinary_combinations_are_left_alone() {
+        for free in [
+            "Alt+Space",
+            "Control+Space",
+            "Alt+Shift+V",
+            "F12",
+            "F17",
+            "CommandOrControl+Alt+Space",
+            "Control+Shift+Space",
+        ] {
+            assert!(!is_system_reserved(free), "{free} should be usable");
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn every_command_center_fallback_is_actually_usable() {
+        // A fallback list containing a reserved combination would move a broken
+        // shortcut to a differently broken one.
+        for candidate in COMMAND_CENTER_FALLBACKS
+            .iter()
+            .chain(PUSH_TO_TALK_FALLBACKS)
+            .chain(TOGGLE_STAFF_FALLBACKS)
+        {
+            assert!(!is_system_reserved(candidate), "{candidate} is reserved by macOS");
+        }
+    }
 
     #[test]
     fn accepts_the_shipped_defaults() {

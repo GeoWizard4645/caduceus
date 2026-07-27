@@ -1385,3 +1385,13 @@ pub fn awake_status(
 pub fn open_manage_window<R: Runtime>(app: AppHandle<R>, page: Option<String>) -> Res<()> {
     window::open_manage(&app, page.as_deref())
 }
+
+/// Tell Rust whether the Command Center is currently just the palette.
+///
+/// The shell calls this whenever the tab set changes. Rust cannot work it out
+/// on its own — "is there anything open worth keeping" is a question about tab
+/// state, which lives in the webview.
+#[tauri::command]
+pub fn set_palette_floating<R: Runtime>(app: AppHandle<R>, floating: bool) -> Res<()> {
+    window::set_palette_floating(&app, floating)
+}

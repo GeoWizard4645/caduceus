@@ -504,6 +504,16 @@ export const awakeStop = () => invoke<ToolOutcome>("awake_stop");
 
 export const awakeStatus = () => invoke<import("./types").AwakeStatus>("awake_status");
 
-/** Open the Manage window, optionally on a named page ("awake", "sound", …). */
+/** Open a management tab ("awake", "sound", "ports", "docker", "machine"). */
 export const openManageWindow = (page?: string) =>
   invoke<void>("open_manage_window", { page: page ?? null });
+
+/**
+ * Tell Rust whether the window is currently just the palette.
+ *
+ * Decides three things it cannot work out for itself: whether clicking away
+ * dismisses, whether the window floats over full-screen apps, and whether
+ * Caduceus appears in the Dock.
+ */
+export const setPaletteFloating = (floating: boolean) =>
+  invoke<void>("set_palette_floating", { floating });

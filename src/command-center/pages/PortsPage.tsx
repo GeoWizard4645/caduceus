@@ -11,7 +11,7 @@ import * as api from "@/shared/api";
 import type { PortUser } from "@/shared/types";
 import { Button, Section } from "@/shared/ui";
 
-export function PortsPage() {
+export function PortsPage({ active }: { active: boolean }) {
   const [ports, setPorts] = useState<PortUser[]>([]);
   const [filter, setFilter] = useState("");
   const [message, setMessage] = useState<string | null>(null);
@@ -26,10 +26,11 @@ export function PortsPage() {
   }, []);
 
   useEffect(() => {
+    if (!active) return;
     void refresh();
     const timer = setInterval(() => void refresh(), 3000);
     return () => clearInterval(timer);
-  }, [refresh]);
+  }, [refresh, active]);
 
   const stop = async (entry: PortUser) => {
     // First click arms, second click fires — the same two-step the palette

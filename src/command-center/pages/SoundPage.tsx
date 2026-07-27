@@ -12,7 +12,7 @@ import * as api from "@/shared/api";
 import type { AudioDevice } from "@/shared/types";
 import { Button, Section, cx } from "@/shared/ui";
 
-export function SoundPage() {
+export function SoundPage({ active }: { active: boolean }) {
   const [devices, setDevices] = useState<AudioDevice[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -28,10 +28,11 @@ export function SoundPage() {
 
   // Devices come and go (AirPods, docks); poll gently rather than only on open.
   useEffect(() => {
+    if (!active) return;
     void refresh();
     const timer = setInterval(() => void refresh(), 4000);
     return () => clearInterval(timer);
-  }, [refresh]);
+  }, [refresh, active]);
 
   const pick = async (device: AudioDevice, input: boolean) => {
     try {

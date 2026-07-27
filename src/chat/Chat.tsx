@@ -17,7 +17,7 @@ import { ThemeToggle } from "@/shared/ThemeToggle";
 
 import { Thread } from "./Thread";
 
-export function Chat() {
+export function Chat({ initialConversationId }: { initialConversationId?: number } = {}) {
   const { settings } = useSettings();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeId, setActiveId] = useState<number | null>(null);
@@ -56,12 +56,16 @@ export function Chat() {
     void loadMessages(activeId);
   }, [activeId, loadMessages]);
 
-  // Opening the window from the palette lands on the thread being discussed.
-  useTauriEvent<number | null>(EVENTS.chatOpen, (id) => {
-    void loadConversations();
-    if (id != null) setActiveId(id);
-    inputRef.current?.focus();
-  });
+  // Opening the tab from the palette lands on the thread being discussed.
+  // A prop rather than an event now: the shell already knows which thread was
+  // asked for, and passing it down means no second channel to keep in sync.
+  useEffect(() => {
+    if (initialConversationId != null) {
+      void loadConversations();
+      setActiveId(initialConversationId);
+      inputRef.current?.focus();
+    }
+  }, [initialConversationId, loadConversations]);
 
   // The palette and this window write to the same threads.
   useTauriEvent<number>(EVENTS.chatChanged, (id) => {
@@ -144,14 +148,14 @@ export function Chat() {
 
   if (!settings) {
     return (
-      <div className="flex h-screen w-screen items-center justify-center bg-base text-ink-faint">
+      <div className="flex h-full w-full items-center justify-center bg-base text-ink-faint">
         <Spinner />
       </div>
     );
   }
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-base text-ink">
+    <div className="flex h-full w-full overflow-hidden bg-base text-ink">
       {/* --- thread list ------------------------------------------------- */}
       <aside className="flex w-[248px] shrink-0 flex-col border-r border-line bg-surface/60">
         {/* Room for the traffic lights: the title bar is an overlay. */}

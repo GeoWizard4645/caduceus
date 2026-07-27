@@ -114,6 +114,7 @@ pub fn run() {
             commands::awake_stop,
             commands::awake_status,
             commands::open_manage_window,
+            commands::set_palette_floating,
             commands::search_files,
             commands::define_word,
             commands::convert_image,
@@ -297,6 +298,7 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     // Loaded before the windows so the palette's first render already has it.
     app.manage(usage::UsageStore::open(data_dir.join(usage::USAGE_FILE)));
     app.manage(tools::awake::AwakeRuntime::new());
+    app.manage(window::PaletteFloating::default());
 
     // --- agents and voice -------------------------------------------------
     app.manage(agent::AgentRuntime::new());
@@ -314,10 +316,8 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         }
         window::configure_staff_floating(&staff);
     }
-    for label in [window::COMMAND_CENTER_WINDOW, window::SETTINGS_WINDOW, window::MANAGE_WINDOW] {
-        if let Some(w) = handle.get_webview_window(label) {
-            window::apply_vibrancy(&w);
-        }
+    if let Some(w) = handle.get_webview_window(window::COMMAND_CENTER_WINDOW) {
+        window::apply_vibrancy(&w);
     }
 
     let tracker = window::spawn_cursor_tracker(handle.clone(), manager.clone());
@@ -356,26 +356,35 @@ fn handle_window_event(window: &tauri::Window, event: &WindowEvent) {
             if window.label() != window::STAFF_WINDOW {
                 api.prevent_close();
                 let _ = window.hide();
+                // Closing the one window puts Caduceus back in the menu bar
+                // where it lives; the tabs are still there on the next open.
                 #[cfg(target_os = "macos")]
-                if window.label() == window::SETTINGS_WINDOW
-                    || window.label() == window::CHAT_WINDOW
-                    || window.label() == window::MANAGE_WINDOW
                 {
-                    window::on_dock_window_closed(window.app_handle(), window.label());
+                    let _ = window
+                        .app_handle()
+                        .set_activation_policy(tauri::ActivationPolicy::Accessory);
                 }
             }
         }
 
         // The palette is modal-feeling: clicking away dismisses it, the way
         // Spotlight and Raycast behave.
+        // Click-away dismissal is Spotlight behaviour, and it is right for a
+        // palette. It is wrong the moment the window is holding tabs you are
+        // working in — nobody wants Settings to vanish because they checked
+        // something in another app. `PaletteFloating` is the difference.
         WindowEvent::Focused(false) => {
             if window.label() == window::COMMAND_CENTER_WINDOW {
-                let hide = window
-                    .app_handle()
+                let app = window.app_handle();
+                let floating = app
+                    .try_state::<window::PaletteFloating>()
+                    .map(|state| state.get())
+                    .unwrap_or(true);
+                let dismisses = app
                     .try_state::<SettingsManager>()
                     .map(|s| s.with(|s| s.command_center.close_on_action))
                     .unwrap_or(true);
-                if hide {
+                if floating && dismisses {
                     let _ = window.hide();
                 }
             }

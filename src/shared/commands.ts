@@ -23,6 +23,7 @@
  */
 
 import * as api from "./api";
+import type { Tab } from "./tabs";
 import type { MediaAction, SystemAction, ToolId, WindowVerb } from "./types";
 
 // ---------------------------------------------------------------------------
@@ -41,8 +42,8 @@ export interface CommandActions {
   notify(message: string, tone?: "info" | "error"): void;
   showOutput(output: CommandOutput): void;
   setInput(value: string): void;
-  /** Switch the palette into one of its modes (clipboard, system monitor). */
-  setMode(mode: "default" | "clipboard" | "system"): void;
+  /** Open (or focus) a tab. */
+  openTab(request: Omit<Tab, "id">): void;
   close(): void;
 }
 
@@ -1325,8 +1326,8 @@ const OTHER_COMMANDS: CommandDef[] = [
         }
         return outcome(actions, "Stay awake", () => api.awakeStart(minutes));
       }
-      await api.openManageWindow("awake");
-      return true;
+      actions.openTab({ kind: "awake" });
+      return false;
     },
   },
   {
@@ -1402,8 +1403,7 @@ const OTHER_COMMANDS: CommandDef[] = [
       "maccy", "jumpcut", "flycut", "copyclip", "pastebot",
     ],
     run({ actions }) {
-      actions.setMode("clipboard");
-      actions.setInput("");
+      actions.openTab({ kind: "clipboard" });
       return false;
     },
   },
@@ -1418,8 +1418,7 @@ const OTHER_COMMANDS: CommandDef[] = [
       "activity monitor", "istat", "stats", "htop", "top",
     ],
     run({ actions }) {
-      actions.setMode("system");
-      actions.setInput("");
+      actions.openTab({ kind: "system" });
       return false;
     },
   },
@@ -1435,14 +1434,9 @@ const OTHER_COMMANDS: CommandDef[] = [
       "awake", "sound", "ports", "docker", "amphetamine",
     ],
     trigger: "manage",
-    async run({ actions }) {
-      try {
-        await api.openManageWindow();
-        return true;
-      } catch (error) {
-        actions.notify(api.errorMessage(error), "error");
-        return false;
-      }
+    run({ actions }) {
+      actions.openTab({ kind: "awake" });
+      return false;
     },
   },
 

@@ -1,7 +1,7 @@
 {
   "name": "caduceus",
   "private": true,
-  "version": "2.2.0",
+  "version": "2.3.0",
   "type": "module",
   "description": "Caduceus \u2014 a fast, local-first AI command center for your desktop.",
   "license": "MIT",
@@ -9,13 +9,14 @@
     "start": "tauri dev",
     "bundle": "tauri build",
     "dev": "vite",
-    "build": "npm run check:ipc && npm run check:ranking && npm run catalog && tsc --noEmit && vite build",
+    "build": "npm run check:ipc && npm run check:ranking && npm run check:tabs && npm run catalog && tsc --noEmit && vite build",
     "typecheck": "tsc --noEmit",
     "test:rust": "cd src-tauri && cargo test",
     "tauri": "tauri",
     "catalog": "node scripts/build-features-catalog.mjs",
     "check:ipc": "python3 scripts/check-ipc-enums.py",
-    "check:ranking": "node scripts/check-ranking.mjs"
+    "check:ranking": "node scripts/check-ranking.mjs",
+    "check:tabs": "node scripts/check-tabs.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.9.0",

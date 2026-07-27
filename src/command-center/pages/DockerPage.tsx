@@ -12,7 +12,7 @@ import * as api from "@/shared/api";
 import type { Container } from "@/shared/types";
 import { Button, Section, cx } from "@/shared/ui";
 
-export function DockerPage() {
+export function DockerPage({ active }: { active: boolean }) {
   const [containers, setContainers] = useState<Container[]>([]);
   const [unavailable, setUnavailable] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -28,10 +28,11 @@ export function DockerPage() {
   }, []);
 
   useEffect(() => {
+    if (!active) return;
     void refresh();
     const timer = setInterval(() => void refresh(), 4000);
     return () => clearInterval(timer);
-  }, [refresh]);
+  }, [refresh, active]);
 
   const act = async (container: Container, action: "start" | "stop" | "restart") => {
     setBusyId(container.id);

@@ -2,9 +2,9 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import { resolve } from "node:path";
 
-// Caduceus ships three separate webviews (staff / command center / settings), so Vite
-// is configured as a multi-page app. Each HTML file at the repo root is an entry
-// point that Tauri loads by path (see src-tauri/tauri.conf.json + window/mod.rs).
+// Caduceus ships two webviews: the always-on staff, and the Command Center that
+// holds everything else as tabs. Each HTML file at the repo root is an entry
+// point Tauri loads by path (see src-tauri/tauri.conf.json + window/mod.rs).
 export default defineConfig({
   plugins: [react()],
 
@@ -32,9 +32,6 @@ export default defineConfig({
       input: {
         staff: resolve(__dirname, "index.html"),
         commandCenter: resolve(__dirname, "command-center.html"),
-        settings: resolve(__dirname, "settings.html"),
-        chat: resolve(__dirname, "chat.html"),
-        manage: resolve(__dirname, "manage.html"),
       },
     },
   },

@@ -38,15 +38,51 @@ pub mod manage;
 
 pub const STAFF_WINDOW: &str = "staff";
 pub const COMMAND_CENTER_WINDOW: &str = "command-center";
-pub const SETTINGS_WINDOW: &str = "settings";
-pub const CHAT_WINDOW: &str = "chat";
-pub const MANAGE_WINDOW: &str = "manage";
 
-/// Asks the Manage window to open (or focus) a particular page's tab.
-pub const MANAGE_OPEN_EVENT: &str = "caduceus://manage-open";
+/// Asks the Command Center to open (or focus) a tab.
+///
+/// Everything Caduceus shows lives in one window now — Settings, chat, the
+/// clipboard, the management pages. The Rust side names a tab; the shell in the
+/// webview decides whether that means focusing an existing one or adding a new
+/// one, because "is this already open" is a question only it can answer.
+pub const TAB_OPEN_EVENT: &str = "caduceus://tab-open";
 
-/// Asks the chat window to open a particular thread.
-pub const CHAT_OPEN_EVENT: &str = "caduceus://chat-open";
+/// Which tab to open, and what to open it on.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TabRequest {
+    /// "home" | "clipboard" | "chat" | "settings" | "system" | "awake" |
+    /// "sound" | "ports" | "docker" | "machine". Validated in the shell.
+    pub kind: String,
+    /// For `settings`, the pane to select.
+    pub section: Option<String>,
+    /// For `chat`, the conversation to show.
+    pub conversation_id: Option<i64>,
+}
+
+/// Whether the Command Center is currently an overlay rather than a window.
+///
+/// True while it is just the palette: floats over everything, follows you into
+/// full-screen Spaces, and dismisses when you click away. False once it holds
+/// working tabs, when all three of those become wrong.
+#[derive(Debug)]
+pub struct PaletteFloating(pub std::sync::atomic::AtomicBool);
+
+impl Default for PaletteFloating {
+    fn default() -> Self {
+        Self(AtomicBool::new(true))
+    }
+}
+
+impl PaletteFloating {
+    pub fn get(&self) -> bool {
+        self.0.load(Ordering::Relaxed)
+    }
+    pub fn set(&self, floating: bool) {
+        self.0.store(floating, Ordering::Relaxed);
+    }
+}
+
 
 /// Emitted to the staff window as the pointer moves in and out.
 pub const STAFF_HOVER_EVENT: &str = "caduceus://staff-hover";
@@ -173,9 +209,6 @@ pub fn command_center<R: Runtime>(app: &AppHandle<R>) -> Option<WebviewWindow<R>
     app.get_webview_window(COMMAND_CENTER_WINDOW)
 }
 
-pub fn settings_window<R: Runtime>(app: &AppHandle<R>) -> Option<WebviewWindow<R>> {
-    app.get_webview_window(SETTINGS_WINDOW)
-}
 
 // ---------------------------------------------------------------------------
 // Staff
@@ -659,10 +692,23 @@ pub fn open_command_center<R: Runtime>(
     }
 
     window.show().map_err(|e| e.to_string())?;
+    window.unminimize().ok();
+
     // Not just `set_always_on_top`: on macOS that alone leaves the window at
     // floating level in whichever Space it was created in, so pressing the
     // hotkey inside another app's full-screen Space did nothing visible.
-    configure_command_center_floating(&window);
+    //
+    // And not just the level either. Caduceus is an Accessory app, so it is
+    // never the active application; raising a window without *activating* gives
+    // you a palette that is on screen, unfocused, and behind the full-screen app
+    // that owns the Space. Level and activation happen together, on the main
+    // thread, in that order.
+    #[cfg(target_os = "macos")]
+    macos::present_command_center(&window);
+    #[cfg(not(target_os = "macos"))]
+    {
+        configure_command_center_floating(&window);
+    }
     window.set_focus().map_err(|e| e.to_string())?;
     let source = payload.source.clone();
     window
@@ -706,47 +752,88 @@ pub fn toggle_command_center<R: Runtime>(app: &AppHandle<R>) -> Result<(), Strin
 // ---------------------------------------------------------------------------
 
 /// Show the Settings window, optionally jumping to a tab.
-pub fn open_settings<R: Runtime>(app: &AppHandle<R>, tab: Option<&str>) -> Result<(), String> {
-    let Some(window) = settings_window(app) else {
-        return Err("the Settings window is missing".into());
-    };
-    window.show().map_err(|e| e.to_string())?;
-    window.unminimize().ok();
-    window.set_focus().map_err(|e| e.to_string())?;
-    if let Some(tab) = tab {
-        let _ = window.emit("caduceus://settings-tab", tab);
-    }
+/// Open the Command Center on a particular tab.
+///
+/// The single entry point behind "open Settings", "open that conversation" and
+/// "show me the ports" — all of which used to be their own window.
+pub fn open_tab<R: Runtime>(app: &AppHandle<R>, request: TabRequest) -> Result<(), String> {
+    open_command_center(
+        app,
+        CommandCenterOpenPayload { source: "tab".into(), ..Default::default() },
+    )?;
 
-    // Settings is the one window that should look like a normal app window, so
-    // the Dock icon comes back while it is open (macOS accessory apps have no
-    // Dock presence otherwise, which makes the window hard to get back to).
+    let Some(window) = command_center(app) else {
+        return Err("the Command Center window is missing".into());
+    };
+    window.emit(TAB_OPEN_EVENT, request).map_err(|e| e.to_string())
+}
+
+pub fn open_settings<R: Runtime>(app: &AppHandle<R>, tab: Option<&str>) -> Result<(), String> {
+    open_tab(
+        app,
+        TabRequest {
+            kind: "settings".into(),
+            section: tab.map(str::to_string),
+            conversation_id: None,
+        },
+    )
+}
+
+pub fn open_chat<R: Runtime>(app: &AppHandle<R>, conversation_id: Option<i64>) -> Result<(), String> {
+    open_tab(
+        app,
+        TabRequest { kind: "chat".into(), section: None, conversation_id },
+    )
+}
+
+pub fn open_manage<R: Runtime>(app: &AppHandle<R>, page: Option<&str>) -> Result<(), String> {
+    open_tab(
+        app,
+        TabRequest {
+            kind: page.unwrap_or("awake").to_string(),
+            section: None,
+            conversation_id: None,
+        },
+    )
+}
+
+/// Switch the Command Center between overlay and ordinary-window behaviour.
+pub fn set_palette_floating<R: Runtime>(app: &AppHandle<R>, floating: bool) -> Result<(), String> {
+    if let Some(state) = app.try_state::<PaletteFloating>() {
+        state.set(floating);
+    }
+    let Some(window) = command_center(app) else {
+        return Ok(());
+    };
+
     #[cfg(target_os = "macos")]
     {
-        let _ = app.set_activation_policy(tauri::ActivationPolicy::Regular);
+        if floating {
+            macos::configure_command_center_window(&window);
+        } else {
+            macos::configure_normal_window(&window);
+        }
+        // A window you work in belongs in the Dock and the app switcher; an
+        // overlay does not.
+        let _ = app.set_activation_policy(if floating {
+            tauri::ActivationPolicy::Accessory
+        } else {
+            tauri::ActivationPolicy::Regular
+        });
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = window.set_always_on_top(floating);
     }
     Ok(())
 }
+
 
 /// Open the chat window, optionally on a specific thread.
 ///
 /// Like Settings, this is a window you read and type in for minutes at a time,
 /// so it gets a Dock icon while it is open — an accessory app's windows are
 /// otherwise unreachable once they lose focus.
-pub fn open_chat<R: Runtime>(app: &AppHandle<R>, conversation_id: Option<i64>) -> Result<(), String> {
-    let Some(window) = app.get_webview_window(CHAT_WINDOW) else {
-        return Err("the chat window is missing".into());
-    };
-    window.show().map_err(|e| e.to_string())?;
-    window.unminimize().ok();
-    window.set_focus().map_err(|e| e.to_string())?;
-    let _ = window.emit(CHAT_OPEN_EVENT, conversation_id);
-
-    #[cfg(target_os = "macos")]
-    {
-        let _ = app.set_activation_policy(tauri::ActivationPolicy::Regular);
-    }
-    Ok(())
-}
 
 /// Called when a window that earned a Dock icon closes: drop back to being a
 /// menu-bar-only app, unless another such window is still open.
@@ -755,40 +842,7 @@ pub fn open_chat<R: Runtime>(app: &AppHandle<R>, conversation_id: Option<i64>) -
 /// fires the window still reports itself visible, so counting it would keep the
 /// Dock icon forever.
 #[cfg(target_os = "macos")]
-/// Open the Manage window, optionally telling it which page to show.
-///
-/// Pages are tabs: opening one that is already open focuses its tab rather
-/// than duplicating it, which is the browser behaviour the window imitates.
-pub fn open_manage<R: Runtime>(app: &AppHandle<R>, page: Option<&str>) -> Result<(), String> {
-    let Some(window) = app.get_webview_window(MANAGE_WINDOW) else {
-        return Err("the manage window is missing".into());
-    };
-    window.show().map_err(|e| e.to_string())?;
-    window.unminimize().ok();
-    window.set_focus().map_err(|e| e.to_string())?;
-    let _ = window.emit(MANAGE_OPEN_EVENT, page.map(str::to_string));
 
-    // Like Settings and Chat: a real window deserves a Dock entry while open.
-    #[cfg(target_os = "macos")]
-    {
-        let _ = app.set_activation_policy(tauri::ActivationPolicy::Regular);
-    }
-    Ok(())
-}
-
-pub fn on_dock_window_closed<R: Runtime>(app: &AppHandle<R>, closing: &str) {
-    let others_visible = [SETTINGS_WINDOW, CHAT_WINDOW, MANAGE_WINDOW, COMMAND_CENTER_WINDOW]
-        .iter()
-        .filter(|label| **label != closing)
-        .any(|label| {
-            app.get_webview_window(label)
-                .and_then(|w| w.is_visible().ok())
-                .unwrap_or(false)
-        });
-    if !others_visible {
-        let _ = app.set_activation_policy(tauri::ActivationPolicy::Accessory);
-    }
-}
 
 /// Apply the platform's native background material to a window.
 ///

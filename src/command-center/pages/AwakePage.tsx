@@ -27,7 +27,7 @@ const PRESETS: { label: string; minutes: number }[] = [
   { label: "12 hours", minutes: 720 },
 ];
 
-export function AwakePage() {
+export function AwakePage({ active }: { active: boolean }) {
   const [status, setStatus] = useState<AwakeStatus | null>(null);
   const [displayMaySleep, setDisplayMaySleep] = useState(false);
   const [customMinutes, setCustomMinutes] = useState("");
@@ -45,12 +45,13 @@ export function AwakePage() {
   // One-second cadence while a session runs, lazier when idle. The interval is
   // in a ref-driven effect so switching tabs (which keeps this mounted but
   // hidden) does not stack timers.
-  const active = status?.active ?? false;
+  const running = status?.active ?? false;
   useEffect(() => {
+    if (!active) return;
     void refresh();
-    const timer = setInterval(() => void refresh(), active ? 1000 : 5000);
+    const timer = setInterval(() => void refresh(), running ? 1000 : 5000);
     return () => clearInterval(timer);
-  }, [refresh, active]);
+  }, [refresh, active, running]);
 
   const start = async (minutes: number | null) => {
     try {

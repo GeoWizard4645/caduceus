@@ -501,8 +501,8 @@ export const EVENTS = {
   voiceResult: "caduceus://voice-result",
   hotkeyProblems: "caduceus://hotkey-problems",
   chatChanged: "caduceus://chat-changed",
-  chatOpen: "caduceus://chat-open",
-  manageOpen: "caduceus://manage-open",
+  /** Rust asking the shell to open (or focus) a tab. */
+  tabOpen: "caduceus://tab-open",
 } as const;
 
 // --- keep-awake sessions -----------------------------------------------------

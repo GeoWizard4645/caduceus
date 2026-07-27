@@ -11,7 +11,7 @@ import * as api from "@/shared/api";
 import type { PermissionReport } from "@/shared/types";
 import { Button, Section, cx } from "@/shared/ui";
 
-export function MachinePage() {
+export function MachinePage({ active }: { active: boolean }) {
   const [summary, setSummary] = useState<string | null>(null);
   const [permissions, setPermissions] = useState<PermissionReport | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -30,8 +30,8 @@ export function MachinePage() {
   }, []);
 
   useEffect(() => {
-    void refresh();
-  }, [refresh]);
+    if (active) void refresh();
+  }, [refresh, active]);
 
   return (
     <div className="mx-auto max-w-[640px] px-6 py-5">

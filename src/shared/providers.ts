@@ -13,6 +13,7 @@ import * as api from "./api";
 import { COMMANDS, commandWeight, matchTrigger, type CommandOutput } from "./commands";
 import { usageBoost } from "./usage";
 import { fuzzyMatch, fuzzyScore } from "./fuzzy";
+import type { Tab } from "./tabs";
 import type {
   CalcResult,
   ClipboardEntry,
@@ -75,7 +76,8 @@ export interface ProviderContext {
 export interface PaletteActions {
   close: () => void;
   setInput: (value: string) => void;
-  setMode: (mode: "default" | "clipboard" | "system") => void;
+  /** Open (or focus) a tab. Anything with state worth keeping goes in one. */
+  openTab: (request: Omit<Tab, "id">) => void;
   notify: (message: string, tone?: "info" | "error") => void;
   /** Show text in the palette's output panel, with a copy button. */
   showOutput: (output: CommandOutput) => void;
@@ -142,13 +144,11 @@ function toItem(
       // These are handled here rather than in Rust because "switch the palette
       // into another mode" is a UI concept with no backend meaning.
       if (outcome.frontendAction === "clipboard_view") {
-        actions.setMode("clipboard");
-        actions.setInput("");
+        actions.openTab({ kind: "clipboard" });
         return false;
       }
       if (outcome.frontendAction === "system_monitor") {
-        actions.setMode("system");
-        actions.setInput("");
+        actions.openTab({ kind: "system" });
         return false;
       }
       if (!outcome.ok) {
