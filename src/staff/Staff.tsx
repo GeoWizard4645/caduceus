@@ -365,6 +365,26 @@ export function Staff() {
             onResizingChange={setResizing}
           />
 
+          {(hover.hovering || hover.expanded) && (
+            <button
+              type="button"
+              aria-label="Hide staff"
+              title="Hide staff"
+              onClick={() => void api.toggleStaff()}
+              style={{
+                top: staffSize * -0.08,
+                right: staffSize * -0.08,
+              }}
+              className={cx(
+                "absolute z-[60] flex h-[18px] w-[18px] items-center justify-center rounded-full",
+                "border border-black/25 bg-base/90 text-[10px] leading-none text-ink-soft shadow-sm",
+                "transition-opacity hover:bg-raised hover:text-ink",
+              )}
+            >
+              ✕
+            </button>
+          )}
+
           <button
             type="button"
             aria-label="Open the Caduceus Command Center"

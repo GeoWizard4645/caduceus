@@ -479,12 +479,7 @@ fn handle_window_event(window: &tauri::Window, event: &WindowEvent) {
             }
         }
 
-        // The palette is modal-feeling: clicking away dismisses it, the way
-        // Spotlight and Raycast behave.
-        // Click-away dismissal is Spotlight behaviour, and it is right for a
-        // palette. It is wrong the moment the window is holding tabs you are
-        // working in — nobody wants Settings to vanish because they checked
-        // something in another app. `PaletteFloating` is the difference.
+        // Clicking another app dismisses the Command Center (Spotlight-style).
         WindowEvent::Focused(false) => {
             if window.label() == window::COMMAND_CENTER_WINDOW {
                 let app = window.app_handle();
@@ -495,14 +490,7 @@ fn handle_window_event(window: &tauri::Window, event: &WindowEvent) {
                 if state.as_ref().is_some_and(|s| s.just_shown()) {
                     return;
                 }
-                let floating = state.map(|state| state.get()).unwrap_or(true);
-                let dismisses = app
-                    .try_state::<SettingsManager>()
-                    .map(|s| s.with(|s| s.command_center.close_on_action))
-                    .unwrap_or(true);
-                if floating && dismisses {
-                    let _ = window.hide();
-                }
+                let _ = window.hide();
             }
         }
 

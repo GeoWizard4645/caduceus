@@ -830,11 +830,10 @@ export const openManageWindow = (page?: string) =>
   invoke<void>("open_manage_window", { page: page ?? null });
 
 /**
- * Tell Rust whether the window is currently just the palette.
+ * Tell Rust whether the Command Center is in palette-only mode (lone Home tab).
  *
- * Decides three things it cannot work out for itself: whether clicking away
- * dismisses, whether the window floats over full-screen apps, and whether
- * Caduceus appears in the Dock.
+ * Used for window sizing on the frontend; macOS presentation stays consistent
+ * either way. Clicking another app always hides the Command Center.
  */
 export const setPaletteFloating = (floating: boolean) =>
   invoke<void>("set_palette_floating", { floating });

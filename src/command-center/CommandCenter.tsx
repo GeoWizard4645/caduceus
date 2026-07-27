@@ -9,16 +9,13 @@
  *
  * # Two personalities, one window
  *
- * A lone Home tab is a *palette*: it floats over full-screen apps, has no Dock
- * icon, and dismisses when you click away — Spotlight behaviour, which is right
- * for something you open to type six characters into.
+ * A lone Home tab is a *palette*: it floats over full-screen apps and has no
+ * Dock icon. The moment a second tab exists it grows into a larger *window*
+ * layout, but both dismiss when you click another app (unless you turn that off
+ * in Settings).
  *
- * The moment a second tab exists, it becomes a *window*: normal level, in the
- * Dock, and it stays put when you click elsewhere. Nobody wants Settings to
- * vanish because they checked something in another app.
- *
- * {@link isFloating} is the whole of that rule, and `set_palette_floating` tells
- * Rust which one is in force.
+ * {@link isFloating} still tracks “palette vs pages” for sizing; blur dismissal
+ * is independent of tab count.
  */
 
 import { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react";
@@ -98,8 +95,7 @@ export function CommandCenter() {
 
   const floating = isFloating(tabs);
 
-  // Tell Rust which personality is in force, so the blur handler knows whether
-  // clicking away should dismiss, and macOS knows the window level.
+  // Keeps the palette/page flag in sync for window sizing and future behaviour.
   useEffect(() => {
     void api.setPaletteFloating(floating).catch(() => {});
   }, [floating]);

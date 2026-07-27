@@ -66,9 +66,8 @@ pub struct TabRequest {
 
 /// Whether the Command Center is currently an overlay rather than a window.
 ///
-/// True while it is just the palette: floats over everything, follows you into
-/// full-screen Spaces, and dismisses when you click away. False once it holds
-/// working tabs, when all three of those become wrong.
+/// True while the Command Center is in “palette” mode (a lone Home tab). Used
+/// for frontend window sizing; click-away dismissal is independent of this flag.
 #[derive(Debug)]
 pub struct PaletteFloating {
     floating: AtomicBool,
