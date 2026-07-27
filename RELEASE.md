@@ -10,6 +10,8 @@ npm run release -- patch -m "fix a hotkey that could never fire"
 
 That is the whole thing. [`scripts/release.sh`](./scripts/release.sh) does every step below in order: bumps the three version files, runs the gates and the Rust tests, builds both architectures, `lipo`s them into one universal app, signs it, packs the DMG, commits, tags, pushes, creates the release with `--latest`, updates the Homebrew tap, and checks that `/releases/latest` now resolves to it.
 
+Releases are **ad-hoc signed** unless `CADUCEUS_SIGNING_IDENTITY` is set, in which case the DMG is also signed with a real Developer ID and notarized by Apple — see [Notarization](#notarization) at the end of this document.
+
 | | |
 |---|---|
 | `patch` \| `minor` \| `major` \| `2.4.0` | what to bump to |
@@ -32,6 +34,8 @@ The rest of this document is what the script does, for the times you need to do 
 - **Intel cross-target** (one-time): `rustup target add x86_64-apple-darwin`
 - **[GitHub CLI](https://cli.github.com/)** logged in: `gh auth login`
 - Write access to [GeoWizard4645/caduceus](https://github.com/GeoWizard4645/caduceus)
+
+Not required, and not currently used: an Apple Developer Program membership, a Developer ID certificate and notary credentials. With none of them a release is ad-hoc signed, which is the status quo. See [Notarization](#notarization).
 
 ## 1. Bump the version
 
@@ -204,6 +208,104 @@ Only for a hand-rolled release — `npm run release` enforces all of it.
 - [ ] `gh release create` with `Caduceus_<version>_universal.dmg` and `--latest`
 - [ ] Homebrew tap updated (`scripts/publish-cask.sh <version>`)
 - [ ] Installer or API check confirms `/releases/latest` is the new tag
+
+## Notarization
+
+Caduceus ships **ad-hoc signed** today, and nothing below is required to cut a release. This section is what it would take to ship a signed, notarized build instead, and how to actually run it once you have the credentials. The plumbing already exists: [`scripts/notarize.sh`](./scripts/notarize.sh), called automatically by `npm run release` when `CADUCEUS_SIGNING_IDENTITY` is set and skipped with a one-line log when it is not.
+
+### Why bother
+
+An ad-hoc signature is a hash of the binary. It belongs to nobody and it is different in every build, which costs users two things:
+
+- **The download is blocked.** Gatekeeper refuses an ad-hoc signed app that arrived from the internet. Right-click → Open, or `xattr -d com.apple.quarantine`, is the workaround people currently have to be told about.
+- **Privacy grants go stale on every update.** macOS keys TCC entries to the code signature, so Accessibility granted to 2.3.0 does not apply to 2.4.0 — the switch in System Settings stays on while `AXIsProcessTrusted()` returns false. That is the entire reason the "repair" button and `tccutil reset` exist; see the doc comment on [`src-tauri/src/window/grants.rs`](./src-tauri/src/window/grants.rs). A Developer ID signature is stable across builds, so the grant survives the update and that button becomes dead weight.
+
+### What you need, in order
+
+**1. An Apple Developer Program membership.** [developer.apple.com/programs](https://developer.apple.com/programs/) — $99/year, individual or organization. A free Apple developer account is not enough: Developer ID certificates and the notary service are both paid-tier only. Enrolment takes anywhere from a day to a couple of weeks if they ask for documentation.
+
+**2. A "Developer ID Application" certificate.** This is the specific certificate type for apps distributed outside the App Store; "Apple Development" and "Apple Distribution" are different things and will not notarize.
+
+The easy route, in Xcode: **Settings → Accounts → your Apple ID → Manage Certificates → + → Developer ID Application**. It lands in your login keychain ready to use.
+
+By hand: create a Certificate Signing Request in **Keychain Access → Certificate Assistant → Request a Certificate From a Certificate Authority** (saved to disk), upload it at [developer.apple.com/account/resources/certificates](https://developer.apple.com/account/resources/certificates/list) choosing *Developer ID Application*, then download the `.cer` and double-click it.
+
+Confirm it is installed and get the exact string to use:
+
+```bash
+security find-identity -v -p codesigning
+```
+
+The line you want reads `Developer ID Application: Your Name (ABCDE12345)`. The ten characters in parentheses are your Team ID.
+
+**3. Notary credentials.** Two options; the API key is better and the script prefers it.
+
+*App Store Connect API key (recommended).* At [appstoreconnect.apple.com/access/integrations/api](https://appstoreconnect.apple.com/access/integrations/api), Team Keys → **+** → role **Developer**. Download the `AuthKey_XXXXXXXXXX.p8` — **it can only be downloaded once**; store it somewhere durable and `chmod 600` it. You need three things from that page: the key file, the Key ID (the `XXXXXXXXXX` in the filename), and the Issuer ID (the UUID shown above the key list).
+
+*Apple ID with an app-specific password.* At [account.apple.com](https://account.apple.com) → Sign-In and Security → **App-Specific Passwords** → generate one for "Caduceus notarization". It looks like `abcd-efgh-ijkl-mnop`. Your real Apple ID password will not work, and this route puts a secret in the process table for the duration of the submission, which is the main reason to prefer the key.
+
+### The environment variables
+
+| Variable | What it is |
+|---|---|
+| `CADUCEUS_SIGNING_IDENTITY` | **The switch.** The full identity string, e.g. `Developer ID Application: Your Name (ABCDE12345)`. Unset ⇒ ad-hoc release, everything below ignored |
+| `CADUCEUS_NOTARY_KEY_PATH` | Path to `AuthKey_XXXXXXXXXX.p8` |
+| `CADUCEUS_NOTARY_KEY_ID` | The Key ID, `XXXXXXXXXX` |
+| `CADUCEUS_NOTARY_ISSUER_ID` | The Issuer UUID |
+| `CADUCEUS_NOTARY_APPLE_ID` | Apple ID — *alternative* to the three above |
+| `CADUCEUS_NOTARY_TEAM_ID` | Ten-character Team ID |
+| `CADUCEUS_NOTARY_PASSWORD` | App-specific password |
+
+Set the identity plus **one** complete trio. A partially-set trio is an error naming the missing variable, and an identity with no credentials at all is an error too — a Developer ID signature without a ticket still will not open on someone else's machine, so it is never what you meant.
+
+```bash
+export CADUCEUS_SIGNING_IDENTITY="Developer ID Application: Your Name (ABCDE12345)"
+export CADUCEUS_NOTARY_KEY_PATH="$HOME/.private_keys/AuthKey_ABCD123456.p8"
+export CADUCEUS_NOTARY_KEY_ID="ABCD123456"
+export CADUCEUS_NOTARY_ISSUER_ID="69a6de70-0000-0000-0000-000000000000"
+
+npm run release -- patch -m "notarized"
+```
+
+Keep these out of the repo — a shell profile, `direnv`, or `security add-generic-password`. There is no `.env` support and there should not be.
+
+### What the script does
+
+[`scripts/notarize.sh`](./scripts/notarize.sh) runs after the DMG is packed and before anything is committed or pushed, so a rejection costs a build rather than leaving a tag pointing at a DMG nobody can open. It can also be run by hand:
+
+```bash
+scripts/notarize.sh path/to/Caduceus.app path/to/Caduceus_2.4.0_universal.dmg
+```
+
+1. **Checks everything first** — `notarytool` is present, the identity is really in the keychain (it prints what *is* there if not), the credential trio is complete, the key file exists. Nothing is signed until all of it passes.
+2. **Signs inside-out.** The four Swift helpers under `Contents/Resources/bin/` are signed before the bundle around them, because a signature seals what it contains and an outer one applied first is void the moment an inner one is rewritten. Each helper **keeps the identifier `build.rs` gave it** — TCC keys grants to that string, and both speech helpers deliberately share one so dictation prompts for the microphone once rather than twice.
+3. **Hardened runtime, everywhere.** `--options runtime --timestamp --entitlements src-tauri/entitlements.plist`. The notary service rejects anything else. The entitlements file already carries `allow-jit` and `disable-library-validation` for Tauri's WKWebView, plus the audio-input entitlement the helpers need — under the hardened runtime, microphone access fails silently without it.
+4. **Submits the `.app`** (zipped with `ditto -c -k --keepParent`; `notarytool` will not take a bare bundle) and waits, up to 30 minutes.
+5. **Staples the ticket into the `.app`**, then **repacks the DMG** around the stapled copy. This step is the one that is easy to get wrong: a ticket stapled after the DMG was built is not *inside* the DMG, and the copy a user drags to `/Applications` is the copy inside the DMG. Skip it and the app only passes Gatekeeper while the machine is online.
+6. **Signs, submits and staples the DMG itself**, so the disk image is trusted as well as its contents.
+7. **Asks Gatekeeper** with `spctl --assess --type execute` on the app and `spctl --assess --type open --context context:primary-signature` on the DMG. The answer to look for is `source=Notarized Developer ID`.
+
+Because the DMG is repacked, the Homebrew cask checksum — computed afterwards, from the release asset — covers the notarized bytes automatically.
+
+### When it goes wrong
+
+A rejection prints Apple's own reasons: the script pulls `xcrun notarytool log <submission-id>` and shows it. The usual causes are a nested binary that missed the hardened runtime, a missing secure timestamp (the machine was offline), or a `get-task-allow` entitlement left over from a debug build.
+
+To inspect a build by hand:
+
+```bash
+codesign -dv --verbose=4 Caduceus.app          # Authority, TeamIdentifier, Timestamp, runtime flag
+codesign --verify --deep --strict --verbose=2 Caduceus.app
+xcrun stapler validate Caduceus.app            # is the ticket actually in there
+spctl --assess --type execute -vv Caduceus.app # what Gatekeeper would decide
+xcrun notarytool history --key … --key-id … --issuer …
+```
+
+### Also worth doing, once this is real
+
+- Drop `signingIdentity: "-"` from `src-tauri/tauri.conf.json` so plain `npm run tauri build` signs properly too — the release script signs over it either way.
+- Revisit the "repair permissions" button. It stops being necessary once signatures are stable, though leaving it costs nothing and still helps anyone on an older ad-hoc build.
+- The installer and the cask need no changes. Notarization is invisible to both; users simply stop being told to right-click.
 
 ## Related docs
 

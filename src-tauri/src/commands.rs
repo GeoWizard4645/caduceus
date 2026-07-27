@@ -29,6 +29,21 @@ use crate::window;
 
 type Res<T> = Result<T, String>;
 
+/// Run a tool on a blocking thread and hand back its outcome.
+///
+/// Tauri only moves a command off the calling thread when it is `async`, and on
+/// macOS the calling thread is the one drawing every window. Anything that
+/// shells out — AppleScript, `docker`, `lsof`, `dig` — therefore has to go
+/// through here, or one wedged subprocess beachballs the whole app.
+async fn blocking_outcome<F>(work: F) -> tools::ToolOutcome
+where
+    F: FnOnce() -> tools::ToolOutcome + Send + 'static,
+{
+    tauri::async_runtime::spawn_blocking(work)
+        .await
+        .unwrap_or_else(|e| tools::ToolOutcome::err(format!("It could not be run: {e}")))
+}
+
 // ---------------------------------------------------------------------------
 // Settings
 // ---------------------------------------------------------------------------
@@ -249,8 +264,11 @@ pub fn list_browsers() -> Vec<BrowserInstall> {
 
 /// Run a shell command and return its output, for the Settings "Test" button.
 ///
-/// Reachable only from the Settings window, and only for a command the user
-/// just typed there themselves.
+/// What bounds this is that it runs a command the user just typed into that
+/// field themselves — not the window it is called from. Tauri's ACL scopes
+/// plugin permissions per window; an app's own `#[tauri::command]`s are
+/// reachable from every window on the `windows` list in
+/// `capabilities/default.json`, and there is no per-route scoping at all.
 #[tauri::command]
 pub async fn test_command(command: String) -> ExecOutcome {
     shortcuts::exec::run_command_capture(&command, "", 20).await
@@ -682,7 +700,13 @@ pub async fn voice_stop(
     runtime: tauri::State<'_, voice::VoiceRuntime>,
     settings: tauri::State<'_, SettingsManager>,
 ) -> Res<Option<voice::RoutedText>> {
-    let Some(outcome) = runtime.stop() else {
+    // `stop` waits on the helper to flush its last transcript, which a wedged
+    // one never does — the same reason `stop_push_to_talk` steps off the thread.
+    let runtime = (*runtime).clone();
+    let Some(outcome) = tauri::async_runtime::spawn_blocking(move || runtime.stop())
+        .await
+        .map_err(|e| format!("The recording could not be stopped: {e}"))?
+    else {
         return Ok(None);
     };
     match outcome {
@@ -721,8 +745,14 @@ pub fn toggle_dictation<R: Runtime>(
 // ---------------------------------------------------------------------------
 
 #[tauri::command]
-pub fn capture_screenshot(save_to_downloads: Option<bool>) -> Res<capture::ScreenshotResult> {
-    capture::screenshot_full(save_to_downloads.unwrap_or(true))
+pub async fn capture_screenshot(save_to_downloads: Option<bool>) -> Res<capture::ScreenshotResult> {
+    // `screencapture` is a separate process that can wait on a TCC prompt, so it
+    // does not belong on the async runtime's threads.
+    tauri::async_runtime::spawn_blocking(move || {
+        capture::screenshot_full(save_to_downloads.unwrap_or(true))
+    })
+    .await
+    .map_err(|e| format!("The screenshot could not be taken: {e}"))?
 }
 
 #[tauri::command]
@@ -1164,9 +1194,16 @@ pub fn window_permission() -> bool {
 ///
 /// The fix for "it is ticked in System Settings and the app says it is not".
 /// See [`window::grants`] for why that state exists at all.
+///
+/// Off the main thread like every other command here that shells out: `tccutil`
+/// is given eight seconds to answer, and a sync command spends them frozen.
 #[tauri::command]
-pub fn repair_permission(grant: window::grants::Grant) -> window::grants::RepairOutcome {
-    window::grants::repair(grant)
+pub async fn repair_permission(
+    grant: window::grants::Grant,
+) -> Res<window::grants::RepairOutcome> {
+    tauri::async_runtime::spawn_blocking(move || window::grants::repair(grant))
+        .await
+        .map_err(|e| format!("The repair could not be run: {e}"))
 }
 
 /// The text selected in the frontmost app, or `null` if there is none.
@@ -1192,9 +1229,12 @@ pub fn run_tool(id: tools::dev::ToolId, input: String) -> tools::dev::ToolResult
 // System controls
 // ---------------------------------------------------------------------------
 
+/// Every one of these shells out — `osascript`, `pmset`, `networksetup` — and a
+/// sync command runs inline on the main thread, so "shut down" with one app
+/// showing a "Save changes?" sheet would freeze the whole of Caduceus behind it.
 #[tauri::command]
-pub fn system_action(action: tools::system::SystemAction) -> tools::ToolOutcome {
-    tools::system::run(action)
+pub async fn system_action(action: tools::system::SystemAction) -> tools::ToolOutcome {
+    blocking_outcome(move || tools::system::run(action)).await
 }
 
 #[tauri::command]
@@ -1203,18 +1243,18 @@ pub fn system_permissions() -> tools::system::PermissionReport {
 }
 
 #[tauri::command]
-pub fn machine_summary() -> tools::ToolOutcome {
-    tools::system::machine_summary()
+pub async fn machine_summary() -> tools::ToolOutcome {
+    blocking_outcome(tools::system::machine_summary).await
 }
 
 #[tauri::command]
-pub fn wifi_summary() -> tools::ToolOutcome {
-    tools::system::wifi_summary()
+pub async fn wifi_summary() -> tools::ToolOutcome {
+    blocking_outcome(tools::system::wifi_summary).await
 }
 
 #[tauri::command]
-pub fn media_action(action: tools::media::MediaAction) -> tools::ToolOutcome {
-    tools::media::run(action)
+pub async fn media_action(action: tools::media::MediaAction) -> tools::ToolOutcome {
+    blocking_outcome(move || tools::media::run(action)).await
 }
 
 // ---------------------------------------------------------------------------
@@ -1222,9 +1262,13 @@ pub fn media_action(action: tools::media::MediaAction) -> tools::ToolOutcome {
 // ---------------------------------------------------------------------------
 
 /// Drag a region of the screen and copy the text inside it.
+///
+/// `screencapture -i` blocks for as long as the user takes to drag the
+/// rectangle, so this waits on a blocking thread the way the colour picker does
+/// — running it inline would freeze the app for the whole of the selection.
 #[tauri::command]
-pub fn ocr_screen() -> tools::ToolOutcome {
-    tools::native::ocr_screen_selection()
+pub async fn ocr_screen() -> tools::ToolOutcome {
+    blocking_outcome(tools::native::ocr_screen_selection).await
 }
 
 // ---------------------------------------------------------------------------
@@ -1311,30 +1355,46 @@ pub async fn list_installed_app_sizes() -> Res<Vec<tools::cleaner::InstalledApp>
 
 /// Work out where everything in a folder would go. Changes nothing.
 #[tauri::command]
-pub fn sort_plan(directory: String, sort_by: tools::sorter::SortBy) -> Res<tools::sorter::SortPlan> {
-    tools::sorter::plan(&directory, sort_by)
+pub fn sort_plan(
+    session: tauri::State<'_, tools::sorter::Session>,
+    directory: String,
+    sort_by: tools::sorter::SortBy,
+) -> Res<tools::sorter::SortPlan> {
+    let plan = tools::sorter::plan(&directory, sort_by)?;
+    session.remember(&plan);
+    Ok(plan)
 }
 
 /// Carry out a plan the user has looked at.
 #[tauri::command]
-pub fn sort_apply(moves: Vec<serde_json::Value>) -> Res<tools::sorter::SortResult> {
-    let parsed = parse_moves(moves)?;
-    Ok(tools::sorter::apply(&parsed))
+pub fn sort_apply(
+    session: tauri::State<'_, tools::sorter::Session>,
+    moves: Vec<serde_json::Value>,
+) -> Res<tools::sorter::SortResult> {
+    let planned = session.planned(&parse_moves(moves)?)?;
+    let result = tools::sorter::apply(&planned);
+    session.record_applied(&result.moved);
+    Ok(result)
 }
 
 /// Put everything back.
 #[tauri::command]
-pub fn sort_revert(moves: Vec<serde_json::Value>) -> Res<tools::sorter::SortResult> {
-    let parsed = parse_moves(moves)?;
-    Ok(tools::sorter::revert(&parsed))
+pub fn sort_revert(
+    session: tauri::State<'_, tools::sorter::Session>,
+    moves: Vec<serde_json::Value>,
+) -> Res<tools::sorter::SortResult> {
+    let applied = session.applied(&parse_moves(moves)?)?;
+    let result = tools::sorter::revert(&applied);
+    session.record_reverted();
+    Ok(result)
 }
 
-/// `Move` is serialise-only on the Rust side, so the round trip is done by hand.
+/// Which rows of the plan the webview means, as `(from, to)` pairs.
 ///
-/// Keeping it that way is deliberate: it means the webview cannot invent a move
-/// with fields the planner never produced, and every path that gets acted on
-/// has been through `plan`.
-fn parse_moves(raw: Vec<serde_json::Value>) -> Res<Vec<tools::sorter::Move>> {
+/// Only the pair is read, and even that is looked up in the plan the backend
+/// still holds before anything is renamed. The webview naming two paths is not
+/// enough to move a file: an unrecognised pair is an error, not an instruction.
+fn parse_moves(raw: Vec<serde_json::Value>) -> Res<Vec<(String, String)>> {
     raw.into_iter()
         .map(|value| {
             let get = |key: &str| {
@@ -1344,15 +1404,58 @@ fn parse_moves(raw: Vec<serde_json::Value>) -> Res<Vec<tools::sorter::Move>> {
                     .map(str::to_string)
                     .ok_or_else(|| format!("a move is missing its {key}"))
             };
-            Ok(tools::sorter::Move {
-                from: get("from")?,
-                to: get("to")?,
-                folder: get("folder").unwrap_or_default(),
-                name: get("name").unwrap_or_default(),
-                bytes: value.get("bytes").and_then(|v| v.as_u64()).unwrap_or(0),
-            })
+            Ok((get("from")?, get("to")?))
         })
         .collect()
+}
+
+// ---------------------------------------------------------------------------
+// Desktop icon shapes
+// ---------------------------------------------------------------------------
+//
+// All three run on a blocking thread: reading the display layout hops to the
+// main thread and waits for it, and driving Finder is a round trip per icon.
+
+/// Where every Desktop icon would go. Moves nothing.
+#[tauri::command]
+pub async fn desktop_shape_plan<R: Runtime>(
+    app: AppHandle<R>,
+    shape: tools::shapes::Shape,
+) -> Res<tools::shapes::ShapePlan> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let area = tools::shapes::desktop_area(&app)?;
+        tools::shapes::plan(shape, area)
+    })
+    .await
+    .map_err(|e| format!("Could not read your Desktop: {e}"))?
+}
+
+/// Arrange the Desktop into a shape.
+///
+/// Takes the shape rather than the planned positions: the plan may have been on
+/// screen for a while, and the icons that exist now are the ones to place. The
+/// result carries every icon's previous position, for `desktop_shape_revert`.
+#[tauri::command]
+pub async fn desktop_shape_apply<R: Runtime>(
+    app: AppHandle<R>,
+    shape: tools::shapes::Shape,
+) -> Res<tools::shapes::ShapeResult> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let area = tools::shapes::desktop_area(&app)?;
+        tools::shapes::apply(shape, area)
+    })
+    .await
+    .map_err(|e| format!("Could not arrange your Desktop: {e}"))?
+}
+
+/// Put every icon back where it was.
+#[tauri::command]
+pub async fn desktop_shape_revert(
+    previous: Vec<tools::shapes::Spot>,
+) -> Res<tools::shapes::ShapeResult> {
+    tauri::async_runtime::spawn_blocking(move || tools::shapes::revert(&previous))
+        .await
+        .map_err(|e| format!("Could not put the icons back: {e}"))
 }
 
 // ---------------------------------------------------------------------------
@@ -1485,25 +1588,39 @@ pub async fn pick_screen_color<R: Runtime>(app: AppHandle<R>) -> Res<Option<Stri
 }
 
 /// Read the text out of an image file.
+///
+/// Off the async runtime for the same reason as the colour picker: the helper is
+/// a separate process, and waiting on it must not occupy a worker thread the
+/// rest of the app's IPC is sharing.
 #[tauri::command]
-pub fn ocr_image(path: String) -> tools::ToolOutcome {
-    match tools::native::ocr_image(&path) {
-        Ok(text) if !text.trim().is_empty() => {
+pub async fn ocr_image(path: String) -> tools::ToolOutcome {
+    let recognised =
+        tauri::async_runtime::spawn_blocking(move || tools::native::ocr_image(&path)).await;
+    match recognised {
+        Ok(Ok(text)) if !text.trim().is_empty() => {
             tools::ToolOutcome::copied(text, "Copied the recognised text")
         }
-        Ok(_) => tools::ToolOutcome::err("No text was found in that image."),
-        Err(e) => tools::ToolOutcome::err(e),
+        Ok(Ok(_)) => tools::ToolOutcome::err("No text was found in that image."),
+        Ok(Err(e)) => tools::ToolOutcome::err(e),
+        Err(e) => tools::ToolOutcome::err(format!("Text recognition could not be run: {e}")),
     }
 }
 
 #[tauri::command]
-pub fn audio_devices() -> Res<Vec<tools::native::AudioDevice>> {
-    tools::native::audio_devices()
+pub async fn audio_devices() -> Res<Vec<tools::native::AudioDevice>> {
+    tauri::async_runtime::spawn_blocking(tools::native::audio_devices)
+        .await
+        .map_err(|e| format!("The device list could not be read: {e}"))?
 }
 
 #[tauri::command]
-pub fn set_audio_device(uid: String, input: bool) -> tools::ToolOutcome {
-    tools::native::set_audio_device(&uid, input)
+pub async fn set_audio_device(uid: String, input: bool) -> tools::ToolOutcome {
+    match tauri::async_runtime::spawn_blocking(move || tools::native::set_audio_device(&uid, input))
+        .await
+    {
+        Ok(outcome) => outcome,
+        Err(e) => tools::ToolOutcome::err(format!("The device could not be changed: {e}")),
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1511,38 +1628,48 @@ pub fn set_audio_device(uid: String, input: bool) -> tools::ToolOutcome {
 // ---------------------------------------------------------------------------
 
 #[tauri::command]
-pub fn listening_ports(port: Option<u16>) -> Vec<tools::devenv::PortUser> {
-    tools::devenv::listening_ports(port)
+pub async fn listening_ports(port: Option<u16>) -> Vec<tools::devenv::PortUser> {
+    tauri::async_runtime::spawn_blocking(move || tools::devenv::listening_ports(port))
+        .await
+        .unwrap_or_default()
 }
 
 #[tauri::command]
-pub fn free_port(port: u16) -> tools::ToolOutcome {
-    tools::devenv::free_port(port)
+pub async fn free_port(port: u16) -> tools::ToolOutcome {
+    blocking_outcome(move || tools::devenv::free_port(port)).await
 }
 
 #[tauri::command]
-pub fn git_repos(limit: Option<usize>) -> Vec<tools::devenv::GitRepo> {
-    tools::devenv::git_repos(limit.unwrap_or(60))
+pub async fn git_repos(limit: Option<usize>) -> Vec<tools::devenv::GitRepo> {
+    tauri::async_runtime::spawn_blocking(move || tools::devenv::git_repos(limit.unwrap_or(60)))
+        .await
+        .unwrap_or_default()
 }
 
 #[tauri::command]
-pub fn git_status(path: String) -> Option<usize> {
-    tools::devenv::git_status(&path)
+pub async fn git_status(path: String) -> Option<usize> {
+    tauri::async_runtime::spawn_blocking(move || tools::devenv::git_status(&path))
+        .await
+        .unwrap_or_default()
 }
 
 #[tauri::command]
-pub fn ssh_hosts() -> Vec<tools::devenv::SshHost> {
-    tools::devenv::ssh_hosts()
+pub async fn ssh_hosts() -> Vec<tools::devenv::SshHost> {
+    tauri::async_runtime::spawn_blocking(tools::devenv::ssh_hosts)
+        .await
+        .unwrap_or_default()
 }
 
 #[tauri::command]
-pub fn docker_containers() -> Res<Vec<tools::devenv::Container>> {
-    tools::devenv::containers()
+pub async fn docker_containers() -> Res<Vec<tools::devenv::Container>> {
+    tauri::async_runtime::spawn_blocking(tools::devenv::containers)
+        .await
+        .map_err(|e| format!("Docker could not be asked: {e}"))?
 }
 
 #[tauri::command]
-pub fn docker_action(id: String, action: String) -> tools::ToolOutcome {
-    tools::devenv::container_action(&id, &action)
+pub async fn docker_action(id: String, action: String) -> tools::ToolOutcome {
+    blocking_outcome(move || tools::devenv::container_action(&id, &action)).await
 }
 
 // ---------------------------------------------------------------------------
@@ -1550,48 +1677,57 @@ pub fn docker_action(id: String, action: String) -> tools::ToolOutcome {
 // ---------------------------------------------------------------------------
 
 #[tauri::command]
-pub fn compress_selection() -> tools::ToolOutcome {
-    tools::files::compress_selection()
+pub async fn compress_selection() -> tools::ToolOutcome {
+    blocking_outcome(tools::files::compress_selection).await
 }
 
 #[tauri::command]
-pub fn expand_selection() -> tools::ToolOutcome {
-    tools::files::expand_selection()
+pub async fn expand_selection() -> tools::ToolOutcome {
+    blocking_outcome(tools::files::expand_selection).await
 }
 
 #[tauri::command]
-pub fn trash_selection() -> tools::ToolOutcome {
-    tools::files::trash_selection()
+pub async fn trash_selection() -> tools::ToolOutcome {
+    blocking_outcome(tools::files::trash_selection).await
 }
 
 #[tauri::command]
-pub fn quick_look_selection() -> tools::ToolOutcome {
-    tools::files::quick_look_selection()
+pub async fn quick_look_selection() -> tools::ToolOutcome {
+    blocking_outcome(tools::files::quick_look_selection).await
 }
 
 #[tauri::command]
-pub fn open_selection_in_terminal() -> tools::ToolOutcome {
-    tools::files::open_selection_in_terminal()
+pub async fn open_selection_in_terminal() -> tools::ToolOutcome {
+    blocking_outcome(tools::files::open_selection_in_terminal).await
 }
 
 #[tauri::command]
-pub fn largest_files(directory: Option<String>, limit: Option<usize>) -> Vec<tools::files::BigFile> {
-    tools::files::largest_files(&directory.unwrap_or_default(), limit.unwrap_or(40))
+pub async fn largest_files(
+    directory: Option<String>,
+    limit: Option<usize>,
+) -> Vec<tools::files::BigFile> {
+    tauri::async_runtime::spawn_blocking(move || {
+        tools::files::largest_files(&directory.unwrap_or_default(), limit.unwrap_or(40))
+    })
+    .await
+    .unwrap_or_default()
 }
 
 /// Support files an application has left behind. Reports only; removing is
 /// `trash_paths`, called with the list the user was shown.
 #[tauri::command]
-pub fn app_leftovers(app_path: String) -> Vec<tools::files::Leftover> {
-    match tools::files::bundle_id(&app_path) {
+pub async fn app_leftovers(app_path: String) -> Vec<tools::files::Leftover> {
+    tauri::async_runtime::spawn_blocking(move || match tools::files::bundle_id(&app_path) {
         Some(id) => tools::files::app_leftovers(&id),
         None => Vec::new(),
-    }
+    })
+    .await
+    .unwrap_or_default()
 }
 
 #[tauri::command]
-pub fn trash_paths(paths: Vec<String>) -> tools::ToolOutcome {
-    tools::files::trash_paths(&paths)
+pub async fn trash_paths(paths: Vec<String>) -> tools::ToolOutcome {
+    blocking_outcome(move || tools::files::trash_paths(&paths)).await
 }
 
 // ---------------------------------------------------------------------------
@@ -1599,8 +1735,8 @@ pub fn trash_paths(paths: Vec<String>) -> tools::ToolOutcome {
 // ---------------------------------------------------------------------------
 
 #[tauri::command]
-pub fn network_summary() -> tools::ToolOutcome {
-    tools::net::local_summary()
+pub async fn network_summary() -> tools::ToolOutcome {
+    blocking_outcome(tools::net::local_summary).await
 }
 
 #[tauri::command]
@@ -1609,31 +1745,31 @@ pub async fn public_address() -> tools::ToolOutcome {
 }
 
 #[tauri::command]
-pub fn dns_lookup(host: String) -> tools::ToolOutcome {
-    tools::net::dns_lookup(&host)
+pub async fn dns_lookup(host: String) -> tools::ToolOutcome {
+    blocking_outcome(move || tools::net::dns_lookup(&host)).await
 }
 
 #[tauri::command]
-pub fn ping_host(host: String) -> tools::ToolOutcome {
-    tools::net::ping(&host)
+pub async fn ping_host(host: String) -> tools::ToolOutcome {
+    blocking_outcome(move || tools::net::ping(&host)).await
 }
 
 /// Reveal a path in Finder. Only ever called with a path Caduceus itself listed.
 #[tauri::command]
-pub fn reveal_path(path: String) -> tools::ToolOutcome {
-    tools::files::reveal(&path)
+pub async fn reveal_path(path: String) -> tools::ToolOutcome {
+    blocking_outcome(move || tools::files::reveal(&path)).await
 }
 
 /// Open a folder in Terminal.
 #[tauri::command]
-pub fn open_path_in_terminal(path: String) -> tools::ToolOutcome {
-    tools::files::open_in_terminal(&path)
+pub async fn open_path_in_terminal(path: String) -> tools::ToolOutcome {
+    blocking_outcome(move || tools::files::open_in_terminal(&path)).await
 }
 
 /// Connect to a host from `~/.ssh/config`.
 #[tauri::command]
-pub fn ssh_connect(alias: String) -> tools::ToolOutcome {
-    tools::devenv::ssh_connect(&alias)
+pub async fn ssh_connect(alias: String) -> tools::ToolOutcome {
+    blocking_outcome(move || tools::devenv::ssh_connect(&alias)).await
 }
 
 // ---------------------------------------------------------------------------

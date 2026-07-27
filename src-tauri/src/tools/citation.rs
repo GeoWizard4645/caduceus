@@ -350,7 +350,8 @@ pub fn format_one(source: &Source, style: Style, accessed: &str) -> String {
         }
         Style::Bibtex => {
             let key = bibtex_key(source, &year);
-            let author = source.author.clone().unwrap_or_else(|| site.clone());
+            let author = escape_bibtex(&source.author.clone().unwrap_or_else(|| site.clone()));
+            let title = escape_bibtex(&title);
             format!(
                 "@misc{{{key},\n  title        = {{{title}}},\n  author       = {{{author}}},\n  \
                  howpublished = {{\\url{{{url}}}}},\n  year         = {{{year}}},\n  \
@@ -398,6 +399,25 @@ fn initials_first(name: &str) -> String {
         .map(|c| format!("{}.", c.to_uppercase()))
         .collect();
     format!("{} {last}", initials.join(" "))
+}
+
+/// Make text safe to sit inside a BibTeX `{…}` field.
+///
+/// A brace in a title — "Understanding {Java} Generics" is a real one — closes
+/// the field early, and most reference managers then refuse the whole file.
+/// `bibtex_key` already takes this care with the key; the title and author a
+/// person types by hand need it just as much.
+fn escape_bibtex(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for c in s.chars() {
+        match c {
+            '{' => out.push_str("\\{"),
+            '}' => out.push_str("\\}"),
+            '\\' => out.push_str("\\textbackslash{}"),
+            _ => out.push(c),
+        }
+    }
+    out
 }
 
 fn bibtex_key(source: &Source, year: &str) -> String {
@@ -520,6 +540,21 @@ mod tests {
         // Whether the tag survives the cut is not the point; not panicking is.
         assert!(!head.is_empty());
         assert_eq!(first_meta(&html, &["author"]).as_deref(), Some("Ana Muñoz"));
+    }
+
+    /// Braces are ordinary characters in a title people type, and an unbalanced
+    /// one makes the whole `.bib` file unreadable to a reference manager.
+    #[test]
+    fn braces_in_a_title_or_author_cannot_end_the_bibtex_field() {
+        let mut source = source();
+        source.title = "Understanding {Java} Generics".into();
+        source.author = Some(r"A. B. Curly}".into());
+
+        let entry = format_one(&source, Style::Bibtex, "1 January 2026");
+        assert!(entry.contains(r"Understanding \{Java\} Generics"), "{entry}");
+        assert!(entry.contains(r"A. B. Curly\}"), "{entry}");
+        // Nothing that could close a field early is left unescaped.
+        assert!(!entry.contains("Curly}}"), "{entry}");
     }
 
     #[test]

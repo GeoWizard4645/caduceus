@@ -20,32 +20,49 @@
  *
  * For a scratch surface people trust with notes taken during a meeting, that is
  * not an acceptable failure. This flushes instead of cancelling.
+ *
+ * # And the failure it makes visible
+ *
+ * `localStorage.setItem` throws once the origin's quota is full — one very
+ * large paste is enough. Swallowing that leaves the page saying "Saved as you
+ * type" while nothing is being saved, and the first anybody hears of it is a
+ * restart with the note truncated to the last write that fit. So both hooks
+ * report the failure back to the caller, whose job is to stop claiming the text
+ * is safe.
  */
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
+
+/** What the user is told when a write did not fit. */
+const FULL = "Could not save — this is too long for the app's storage. Copy it somewhere else.";
 
 /**
  * Persist `value` under `key`, debounced, flushing on unmount.
  *
- * Storage failures — quota, a restricted context — are swallowed on purpose.
- * What is on screen is still there and still editable; throwing an error box
- * over the top of somebody's notes does not save any of them.
+ * Returns a message to show when the last write failed, or `null` while it is
+ * being saved normally.
  */
-export function usePersisted(key: string, value: string, delayMs = 300): void {
+export function usePersisted(key: string, value: string, delayMs = 300): string | null {
   // Read through a ref so the unmount effect can see the latest value without
   // re-registering — and therefore re-running its cleanup — on every keystroke.
   const latest = useRef(value);
   latest.current = value;
+  const [failed, setFailed] = useState(false);
 
   useEffect(() => {
-    const timer = setTimeout(() => write(key, value), delayMs);
+    const timer = setTimeout(() => setFailed(!write(key, value)), delayMs);
     return () => clearTimeout(timer);
   }, [key, value, delayMs]);
 
-  // Runs once, on unmount, with whatever the last value was.
+  // Runs once, on unmount, with whatever the last value was. Nothing to report
+  // from here — there is no longer a page to report it to.
   useEffect(() => {
-    return () => write(key, latest.current);
+    return () => {
+      write(key, latest.current);
+    };
   }, [key]);
+
+  return failed ? FULL : null;
 }
 
 /** Read a string back, or the fallback if storage is unavailable or empty. */
@@ -74,32 +91,41 @@ export function readPersistedJson<T>(key: string, validate: (value: unknown) => 
   }
 }
 
-export function usePersistedJson(key: string, value: unknown, delayMs = 300): void {
+/** As [`usePersisted`], including the failure message it returns. */
+export function usePersistedJson(key: string, value: unknown, delayMs = 300): string | null {
   const latest = useRef(value);
   latest.current = value;
+  const [failed, setFailed] = useState(false);
 
   useEffect(() => {
-    const timer = setTimeout(() => writeJson(key, value), delayMs);
+    const timer = setTimeout(() => setFailed(!writeJson(key, value)), delayMs);
     return () => clearTimeout(timer);
   }, [key, value, delayMs]);
 
   useEffect(() => {
-    return () => writeJson(key, latest.current);
+    return () => {
+      writeJson(key, latest.current);
+    };
   }, [key]);
+
+  return failed ? FULL : null;
 }
 
-function write(key: string, value: string): void {
+/** `false` if the write did not happen — quota, or a restricted context. */
+function write(key: string, value: string): boolean {
   try {
     localStorage.setItem(key, value);
+    return true;
   } catch {
-    // See the note above: nothing useful to do, and a lot of harm available.
+    return false;
   }
 }
 
-function writeJson(key: string, value: unknown): void {
+function writeJson(key: string, value: unknown): boolean {
   try {
     localStorage.setItem(key, JSON.stringify(value));
+    return true;
   } catch {
-    // As above.
+    return false;
   }
 }

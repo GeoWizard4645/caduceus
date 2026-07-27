@@ -28,6 +28,7 @@ CHECKS = [
     ("SystemAction", "src-tauri/src/tools/system.rs", "SystemAction"),
     ("MediaAction", "src-tauri/src/tools/media.rs", "MediaAction"),
     ("WindowVerb", "src-tauri/src/window/manage.rs", "Verb"),
+    ("DesktopShape", "src-tauri/src/tools/shapes.rs", "Shape"),
 ]
 
 

@@ -103,10 +103,25 @@ export function RecordControls({
   const { status, error, saved, start, setPaused, stop } = recording;
   const active = status?.active ?? false;
   const paused = status?.paused ?? false;
+  // Only one capture runs at a time, and the other tool can be the one running
+  // it. Rendering its clock here as though it were ours invites someone to
+  // press "Stop and save" on a screen recording they meant to leave going.
+  const mine = !active || status?.mode === mode;
 
   return (
     <div className="rounded-cad border border-line bg-surface/50 p-4">
-      {!active ? (
+      {active && !mine ? (
+        <div className="row gap-2">
+          <span className="relative flex h-2.5 w-2.5" aria-hidden="true">
+            <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-ink-faint" />
+          </span>
+          <p className="text-[13px] text-ink-mute">
+            A {status?.mode === "screen" ? "screen recording" : "call recording"} is already
+            running ({clock(status?.seconds ?? 0)}). Stop it from the tab you started it in —
+            this Mac records one thing at a time.
+          </p>
+        </div>
+      ) : !active ? (
         <>
           <label className="row mb-3 cursor-pointer gap-2">
             <input

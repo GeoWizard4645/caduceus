@@ -206,6 +206,9 @@ pub fn run() {
             commands::sort_plan,
             commands::sort_apply,
             commands::sort_revert,
+            commands::desktop_shape_plan,
+            commands::desktop_shape_apply,
+            commands::desktop_shape_revert,
             commands::current_page,
             commands::enrich_citation,
             commands::format_citations,
@@ -356,6 +359,7 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     app.manage(usage::UsageStore::open(data_dir.join(usage::USAGE_FILE)));
     app.manage(tools::awake::AwakeRuntime::new());
     app.manage(tools::rates::RateCache::new());
+    app.manage(tools::sorter::Session::new());
     app.manage(window::PaletteFloating::default());
 
     // --- agents and voice -------------------------------------------------

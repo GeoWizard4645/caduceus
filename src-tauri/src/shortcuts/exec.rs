@@ -11,7 +11,7 @@ use serde::Serialize;
 use tokio::process::Command;
 
 use super::browser::{self, BrowserChoice};
-use super::{percent_encode, substitute_query, Shortcut, ShortcutKind};
+use super::{escape_applescript, percent_encode, substitute_query, Shortcut, ShortcutKind};
 
 /// What happened when a shortcut ran. Returned to the frontend so it can show a
 /// toast rather than failing silently.
@@ -116,7 +116,7 @@ pub async fn execute_shortcut(
             if !cfg!(target_os = "macos") {
                 return ExecOutcome::err("AppleScript shortcuts only run on macOS.");
             }
-            let source = substitute_query(&shortcut.target, query);
+            let source = substitute_query(&shortcut.target, &escape_applescript(query));
             match run_applescript(&source).await {
                 Ok(out) if out.trim().is_empty() => {
                     ExecOutcome::ok(format!("Ran \u{201c}{}\u{201d}", shortcut.label))
@@ -396,6 +396,9 @@ pub async fn run_applescript(source: &str) -> std::io::Result<String> {
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
+            // So the timeout below actually ends osascript rather than orphaning
+            // it: dropping the wait future is all we can do once it owns the child.
+            .kill_on_drop(true)
             .spawn()?;
 
         if let Some(mut stdin) = child.stdin.take() {
@@ -403,7 +406,22 @@ pub async fn run_applescript(source: &str) -> std::io::Result<String> {
             stdin.shutdown().await?;
         }
 
-        let out = child.wait_with_output().await?;
+        // An app showing a dialog — including the Automation prompt itself —
+        // never answers, and without a bound the shortcut stays "running" until
+        // Caduceus is restarted.
+        let out = match tokio::time::timeout(
+            std::time::Duration::from_secs(10),
+            child.wait_with_output(),
+        )
+        .await
+        {
+            Ok(out) => out?,
+            Err(_) => {
+                return Err(std::io::Error::other(
+                    "The other app did not answer. It may be showing a dialog that needs attention.",
+                ))
+            }
+        };
         if out.status.success() {
             Ok(String::from_utf8_lossy(&out.stdout).into_owned())
         } else {

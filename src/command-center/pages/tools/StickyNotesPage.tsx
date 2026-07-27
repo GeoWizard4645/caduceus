@@ -20,6 +20,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { ToolPageProps } from "../ToolPage";
+import { useEscape } from "@/shared/hooks";
 import { readPersistedJson, usePersistedJson } from "@/shared/persist";
 import { Button, cx } from "@/shared/ui";
 
@@ -36,9 +37,10 @@ const STORAGE_KEY = "caduceus.notes.v1";
 /** Deliberately muted: a wall of saturated squares is hard to read text on. */
 const COLOURS = ["#fde68a", "#bbf7d0", "#bfdbfe", "#fbcfe8", "#e9d5ff", "#fed7aa"];
 
-export function StickyNotesPage({ onSetTitle }: ToolPageProps) {
+export function StickyNotesPage({ active: pageActive, onSetTitle }: ToolPageProps) {
   const [notes, setNotes] = useState<Note[]>(() => load());
   const [activeId, setActiveId] = useState<string | null>(() => load()[0]?.id ?? null);
+  const [armedId, setArmedId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const editorRef = useRef<HTMLTextAreaElement>(null);
 
@@ -47,7 +49,7 @@ export function StickyNotesPage({ onSetTitle }: ToolPageProps) {
   // Debounced, and flushed on unmount — see `usePersistedJson`. Cancelling the
   // pending write in the cleanup, which is the obvious way to write this, loses
   // the last sentence typed before the tab was closed.
-  usePersistedJson(STORAGE_KEY, notes, 250);
+  const saveError = usePersistedJson(STORAGE_KEY, notes, 250);
 
   const active = notes.find((note) => note.id === activeId) ?? null;
 
@@ -71,12 +73,20 @@ export function StickyNotesPage({ onSetTitle }: ToolPageProps) {
       ),
     );
 
-  const remove = (id: string) =>
-    setNotes((current) => {
-      const remaining = current.filter((note) => note.id !== id);
-      if (activeId === id) setActiveId(remaining[0]?.id ?? null);
-      return remaining;
-    });
+  const remove = (id: string) => {
+    // The next note comes from the list on screen, not from `notes`: with a
+    // search active, the first raw note is very often one the filter is hiding,
+    // and opening it leaves the editor showing a note with no row beside it.
+    if (activeId === id) setActiveId(shown.find((note) => note.id !== id)?.id ?? null);
+    setNotes((current) => current.filter((note) => note.id !== id));
+  };
+
+  // Escape means "not that one after all" before it means "close the tab".
+  useEscape(pageActive, () => {
+    if (!armedId) return false;
+    setArmedId(null);
+    return true;
+  });
 
   const shown = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -93,6 +103,12 @@ export function StickyNotesPage({ onSetTitle }: ToolPageProps) {
             type="search"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key !== "Escape" || !query) return;
+              // Escape clears the search first; unclaimed it closes the tab.
+              e.preventDefault();
+              setQuery("");
+            }}
             placeholder="Search notes…"
             className="min-w-0 flex-1 rounded-lg border border-line bg-base/40 px-2.5 py-1.5 text-2xs text-ink placeholder:text-ink-faint focus:border-accent/50 focus:outline-none"
           />
@@ -111,7 +127,10 @@ export function StickyNotesPage({ onSetTitle }: ToolPageProps) {
               <button
                 key={note.id}
                 type="button"
-                onClick={() => setActiveId(note.id)}
+                onClick={() => {
+                  setActiveId(note.id);
+                  setArmedId(null);
+                }}
                 className={cx(
                   "mb-1.5 block w-full rounded-lg border px-2.5 py-2 text-left transition-colors",
                   note.id === activeId
@@ -167,8 +186,22 @@ export function StickyNotesPage({ onSetTitle }: ToolPageProps) {
               >
                 Copy
               </Button>
-              <Button size="sm" tone="danger" onClick={() => remove(active.id)}>
-                Delete
+              <Button
+                size="sm"
+                tone="danger"
+                onClick={() => {
+                  // A note is only text, but it is text with nowhere to be
+                  // recovered from — so, like every other destructive action
+                  // here, it takes a second click.
+                  if (armedId !== active.id) {
+                    setArmedId(active.id);
+                    return;
+                  }
+                  setArmedId(null);
+                  remove(active.id);
+                }}
+              >
+                {armedId === active.id ? "Sure?" : "Delete"}
               </Button>
             </div>
           </div>
@@ -187,8 +220,13 @@ export function StickyNotesPage({ onSetTitle }: ToolPageProps) {
             }}
           />
 
-          <p className="shrink-0 border-t border-line px-5 py-1.5 text-2xs text-ink-faint">
-            Saved as you type · edited {relative(active.updatedAt)} · {count(active.text)}
+          <p
+            className={cx(
+              "shrink-0 border-t border-line px-5 py-1.5 text-2xs",
+              saveError ? "text-danger" : "text-ink-faint",
+            )}
+          >
+            {saveError ?? `Saved as you type · edited ${relative(active.updatedAt)} · ${count(active.text)}`}
           </p>
         </div>
       ) : (

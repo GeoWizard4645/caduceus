@@ -616,6 +616,47 @@ export interface WindowOutcome {
 }
 
 // ---------------------------------------------------------------------------
+// Desktop icon shapes
+// ---------------------------------------------------------------------------
+
+/** Mirrors `tools::shapes::Shape`. */
+export type DesktopShape = "circle" | "grid" | "heart" | "line" | "spiral";
+
+/** One icon's centre, in points from the top-left of the main display. */
+export interface DesktopSpot {
+  name: string;
+  x: number;
+  y: number;
+}
+
+/** Mirrors `tools::shapes::Arrangement` — Finder's Sort By for the Desktop. */
+export interface DesktopArrangement {
+  label: string;
+  /** Finder discards explicit positions in this mode, so arranging is futile. */
+  blocks: boolean;
+  /** Positions are honoured, then pulled onto the icon grid. */
+  snaps: boolean;
+  /** The menu that turns it off. Empty when there is nothing to turn off. */
+  fix: string;
+}
+
+export interface DesktopShapePlan {
+  shape: DesktopShape;
+  /** The rectangle the shape is drawn in, for the preview to scale to. */
+  area: { x: number; y: number; width: number; height: number };
+  spots: DesktopSpot[];
+  current: DesktopSpot[];
+  arrangement: DesktopArrangement;
+}
+
+export interface DesktopShapeResult {
+  ok: boolean;
+  message: string;
+  /** Where every icon was before this ran. Feed it back to undo. */
+  previous: DesktopSpot[];
+}
+
+// ---------------------------------------------------------------------------
 // Developer toolbox
 // ---------------------------------------------------------------------------
 

@@ -41,10 +41,14 @@ const MISSING: &str =
 
 fn invoke(args: &[&str]) -> Result<String, String> {
     let helper = helper_path().ok_or(MISSING)?;
-    let output = Command::new(&helper)
-        .args(args)
-        .output()
-        .map_err(|e| format!("Could not start the native helper: {e}"))?;
+    // Bounded like every other subprocess: Vision on a pathological image or a
+    // CoreAudio call that never returns would otherwise hold this thread — and
+    // these run on the shared runtime's blocking pool — forever.
+    let output = super::output_with_timeout(
+        Command::new(&helper).args(args),
+        super::TOOL_TIMEOUT,
+        "The native helper stopped responding.",
+    )?;
 
     if output.status.success() {
         Ok(String::from_utf8_lossy(&output.stdout).trim_end().to_string())

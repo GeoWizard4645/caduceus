@@ -15,6 +15,7 @@
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
+use std::sync::Mutex;
 
 use serde::{Deserialize, Serialize};
 
@@ -191,6 +192,78 @@ pub fn revert(moves: &[Move]) -> SortResult {
         },
         moved: done,
     }
+}
+
+/// The plan currently on screen, and the moves that were last carried out.
+///
+/// [`apply`] and [`revert`] rename files, and a pair of arbitrary paths is a
+/// rename primitive over everything the user can write. The webview is
+/// therefore not trusted to supply them: it sends back which rows it means, and
+/// the paths that actually get used are the ones [`plan`] chose here.
+#[derive(Default)]
+pub struct Session {
+    inner: Mutex<Held>,
+}
+
+#[derive(Default)]
+struct Held {
+    planned: Vec<Move>,
+    applied: Vec<Move>,
+}
+
+impl Session {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Remember a plan as the only one that may be applied.
+    pub fn remember(&self, plan: &SortPlan) {
+        let mut held = self.inner.lock().unwrap();
+        held.planned = plan.moves.clone();
+        held.applied.clear();
+    }
+
+    /// The planned moves the webview asked for, refusing anything else.
+    pub fn planned(&self, asked: &[(String, String)]) -> Result<Vec<Move>, String> {
+        matching(&self.inner.lock().unwrap().planned, asked)
+    }
+
+    /// The carried-out moves the webview asked to undo, refusing anything else.
+    pub fn applied(&self, asked: &[(String, String)]) -> Result<Vec<Move>, String> {
+        matching(&self.inner.lock().unwrap().applied, asked)
+    }
+
+    /// Record what [`apply`] actually did, so it — and only it — can be undone.
+    pub fn record_applied(&self, moved: &[Move]) {
+        let mut held = self.inner.lock().unwrap();
+        held.planned.clear();
+        held.applied = moved.to_vec();
+    }
+
+    pub fn record_reverted(&self) {
+        self.inner.lock().unwrap().applied.clear();
+    }
+}
+
+/// Look each requested pair up in what is held.
+///
+/// A subset is fine — the plan on screen can have lost rows — but a pair that
+/// was never planned is refused outright rather than quietly dropped: a request
+/// to move something the user was never shown is not a stale plan.
+fn matching(known: &[Move], asked: &[(String, String)]) -> Result<Vec<Move>, String> {
+    asked
+        .iter()
+        .map(|(from, to)| {
+            known
+                .iter()
+                .find(|m| &m.from == from && &m.to == to)
+                .cloned()
+                .ok_or_else(|| {
+                    "That plan is out of date — look at the folder again before applying."
+                        .to_string()
+                })
+        })
+        .collect()
 }
 
 fn plural(n: usize) -> &'static str {
@@ -401,5 +474,31 @@ mod tests {
     #[test]
     fn a_missing_folder_is_an_error_rather_than_an_empty_plan() {
         assert!(plan("/nowhere/at/all", SortBy::Kind).is_err());
+    }
+
+    /// The webview naming a pair of paths must not be enough to rename a file:
+    /// only the plan the backend produced can be carried out.
+    #[test]
+    fn a_move_that_was_never_planned_is_refused() {
+        let dir = scratch();
+        std::fs::write(dir.join("a.png"), b"x").unwrap();
+
+        let session = Session::new();
+        let plan = plan(&dir.to_string_lossy(), SortBy::Kind).unwrap();
+        session.remember(&plan);
+
+        let real = (plan.moves[0].from.clone(), plan.moves[0].to.clone());
+        assert_eq!(session.planned(&[real.clone()]).unwrap().len(), 1);
+
+        let invented = ("/Users/someone/.ssh/known_hosts".to_string(), "/tmp/taken".to_string());
+        assert!(session.planned(&[invented.clone()]).is_err());
+        assert!(
+            session.planned(&[real, invented]).is_err(),
+            "one invented move must reject the whole batch"
+        );
+
+        // Undo can only put back what apply actually did.
+        assert!(session.applied(&[(plan.moves[0].to.clone(), plan.moves[0].from.clone())]).is_err());
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

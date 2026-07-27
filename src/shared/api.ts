@@ -19,6 +19,10 @@ import type {
   BrowserInstall,
   ClipboardEntry,
   ClipboardStats,
+  DesktopShape,
+  DesktopShapePlan,
+  DesktopShapeResult,
+  DesktopSpot,
   DispatchOutcome,
   ExecOutcome,
   ChatMessage,
@@ -540,6 +544,24 @@ export const sortPlan = (directory: string, sortBy: SortBy) =>
 export const sortApply = (moves: SortMove[]) => invoke<SortResult>("sort_apply", { moves });
 
 export const sortRevert = (moves: SortMove[]) => invoke<SortResult>("sort_revert", { moves });
+
+// --- desktop icon shapes ----------------------------------------------------
+
+/** Where every Desktop icon would go. Moves nothing. */
+export const desktopShapePlan = (shape: DesktopShape) =>
+  invoke<DesktopShapePlan>("desktop_shape_plan", { shape });
+
+/**
+ * Arrange the Desktop.
+ *
+ * Takes the shape rather than the positions the preview showed: Rust re-reads
+ * the Desktop, so the icons that exist *now* are the ones that get placed.
+ */
+export const desktopShapeApply = (shape: DesktopShape) =>
+  invoke<DesktopShapeResult>("desktop_shape_apply", { shape });
+
+export const desktopShapeRevert = (previous: DesktopSpot[]) =>
+  invoke<DesktopShapeResult>("desktop_shape_revert", { previous });
 
 // --- citations --------------------------------------------------------------
 

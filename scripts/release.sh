@@ -10,6 +10,11 @@
 # architectures, lipo them into one universal app, sign it, pack the DMG,
 # commit, tag, push, and create the GitHub release the installer reads.
 #
+# If CADUCEUS_SIGNING_IDENTITY is set it also hands the build to
+# scripts/notarize.sh for a real Developer ID signature and an Apple ticket.
+# Unset — which is the default — the release is ad-hoc signed exactly as it has
+# always been. See RELEASE.md § Notarization.
+#
 # # The rules it enforces
 #
 # * **Nothing ships from a tree you have not looked at.** A dirty working tree
@@ -281,6 +286,20 @@ run hdiutil create -volname "Caduceus" -srcfolder "$STAGE" -ov -format UDZO "$DM
 if ! (( DRY_RUN )); then
   [[ -f "$DMG" ]] || die "the DMG was not produced at $DMG"
   note "$DMG ($(du -h "$DMG" | cut -f1))"
+fi
+
+# --- notarization ----------------------------------------------------------
+
+# Before the commit and the push, like everything else that can fail: Apple
+# rejecting the build should cost you a build, not leave a tag pointing at a
+# DMG nobody can open. The script re-signs the app with the real identity,
+# repacks this DMG around the stapled result, and staples that too.
+if [[ -n "${CADUCEUS_SIGNING_IDENTITY:-}" ]]; then
+  step "Signing and notarizing"
+  run bash "$ROOT/scripts/notarize.sh" "$UNIVERSAL" "$DMG"
+else
+  step "Not notarizing"
+  note "ad-hoc signed — set CADUCEUS_SIGNING_IDENTITY to notarize"
 fi
 
 # --- notes -----------------------------------------------------------------

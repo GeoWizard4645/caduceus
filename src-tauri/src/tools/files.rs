@@ -7,16 +7,22 @@
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::time::Duration;
 
 use serde::Serialize;
 
 use super::ToolOutcome;
 
-fn run_tool(program: &str, args: &[&str]) -> Result<String, String> {
-    let out = Command::new(program)
-        .args(args)
-        .output()
-        .map_err(|e| format!("could not run {program}: {e}"))?;
+/// Zipping a folder of videos is the one thing here that can honestly take
+/// minutes, so it gets its own deadline rather than the shared one.
+const ARCHIVE_TIMEOUT: Duration = Duration::from_secs(600);
+
+fn run_tool(program: &str, args: &[&str], timeout: Duration) -> Result<String, String> {
+    let out = super::output_with_timeout(
+        Command::new(program).args(args),
+        timeout,
+        &format!("{program} did not answer in time."),
+    )?;
     if out.status.success() {
         Ok(String::from_utf8_lossy(&out.stdout).trim().to_string())
     } else {
@@ -25,7 +31,7 @@ fn run_tool(program: &str, args: &[&str]) -> Result<String, String> {
 }
 
 fn osa(script: &str) -> Result<String, String> {
-    run_tool("osascript", &["-e", script]).map_err(|e| {
+    run_tool("osascript", &["-e", script], super::TOOL_TIMEOUT).map_err(|e| {
         if e.contains("-1743") {
             "Caduceus is not allowed to control Finder yet. Grant it in System Settings → \
              Privacy & Security → Automation."
@@ -90,7 +96,7 @@ pub fn compress_selection() -> ToolOutcome {
     args.push(destination.to_string_lossy().to_string());
 
     let refs: Vec<&str> = args.iter().map(String::as_str).collect();
-    match run_tool("ditto", &refs) {
+    match run_tool("ditto", &refs, ARCHIVE_TIMEOUT) {
         Ok(_) => {
             let size = std::fs::metadata(&destination).map(|m| m.len()).unwrap_or(0);
             ToolOutcome::copied(
@@ -124,6 +130,7 @@ pub fn expand_selection() -> ToolOutcome {
         match run_tool(
             "ditto",
             &["-x", "-k", &path.to_string_lossy(), &destination.to_string_lossy()],
+            ARCHIVE_TIMEOUT,
         ) {
             Ok(_) => expanded += 1,
             Err(_) => failed.push(path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default()),
@@ -206,7 +213,7 @@ pub fn open_selection_in_terminal() -> ToolOutcome {
         None => return ToolOutcome::err("Select a folder in Finder first."),
     };
 
-    match run_tool("open", &["-a", "Terminal", &target.to_string_lossy()]) {
+    match run_tool("open", &["-a", "Terminal", &target.to_string_lossy()], super::TOOL_TIMEOUT) {
         Ok(_) => ToolOutcome::ok(format!(
             "Opened {} in Terminal",
             target.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default()
@@ -241,7 +248,9 @@ pub fn largest_files(directory: &str, limit: usize) -> Vec<BigFile> {
     };
 
     // 100 MB and up; below that "large file" is not a useful category.
-    let Ok(output) = run_tool("mdfind", &["-onlyin", &root, "kMDItemFSSize > 100000000"]) else {
+    let Ok(output) =
+        run_tool("mdfind", &["-onlyin", &root, "kMDItemFSSize > 100000000"], super::TOOL_TIMEOUT)
+    else {
         return Vec::new();
     };
 
@@ -300,7 +309,12 @@ pub struct Leftover {
 /// identifier is the only thing [`app_leftovers`] can safely match on.
 pub fn bundle_id(app_path: &str) -> Option<String> {
     let plist = Path::new(app_path).join("Contents/Info");
-    let id = run_tool("defaults", &["read", &plist.to_string_lossy(), "CFBundleIdentifier"]).ok()?;
+    let id = run_tool(
+        "defaults",
+        &["read", &plist.to_string_lossy(), "CFBundleIdentifier"],
+        super::TOOL_TIMEOUT,
+    )
+    .ok()?;
     let id = id.trim();
     (!id.is_empty() && id.contains('.')).then(|| id.to_string())
 }
@@ -393,6 +407,17 @@ pub fn empty_trash() -> Result<(), String> {
     osa(r#"tell application "Finder" to empty trash"#).map(|_| ())
 }
 
+/// Make a path safe to sit inside an AppleScript string literal.
+///
+/// The backslash has to go first: escaping the quote first would turn a real
+/// `\"` in a filename into `\\"`, which AppleScript reads as a literal
+/// backslash followed by the end of the string — and everything after it as
+/// code. Only `/` and NUL are forbidden in a macOS filename, so a downloaded
+/// file can be named exactly that.
+fn escape_applescript(s: &str) -> String {
+    s.replace('\\', "\\\\").replace('"', "\\\"")
+}
+
 pub fn trash_paths(paths: &[String]) -> ToolOutcome {
     if paths.is_empty() {
         return ToolOutcome::err("Nothing to remove.");
@@ -401,7 +426,7 @@ pub fn trash_paths(paths: &[String]) -> ToolOutcome {
     let quoted: Vec<String> = paths
         .iter()
         .filter(|path| Path::new(path).exists())
-        .map(|path| format!("POSIX file \"{}\"", path.replace('"', "\\\"")))
+        .map(|path| format!("POSIX file \"{}\"", escape_applescript(path)))
         .collect();
 
     if quoted.is_empty() {
@@ -494,6 +519,23 @@ mod tests {
         assert!(!trash_paths(&[]).ok);
         assert!(!trash_paths(&["/no/such/path/anywhere".to_string()]).ok);
     }
+
+    /// A downloaded file whose name carries a backslash and a quote would
+    /// otherwise close the AppleScript string early and run the rest as code.
+    #[test]
+    fn a_filename_cannot_break_out_of_the_delete_script() {
+        let evil = r#"/tmp/a\" & (do shell script "rm -rf /") & ""#;
+        let escaped = escape_applescript(evil);
+
+        assert_eq!(escape_applescript(r"back\slash"), r"back\\slash");
+        // Every quote survives with an escape of its own, and no backslash of
+        // the original is left standing in front of one.
+        assert_eq!(
+            escaped.replace("\\\\", "").matches("\\\"").count(),
+            evil.matches('"').count()
+        );
+        assert!(!escaped.replace("\\\\", "").replace("\\\"", "").contains('"'));
+    }
 }
 
 /// Show a path in Finder, or open it if it is a folder.
@@ -508,7 +550,7 @@ pub fn reveal(path: &str) -> ToolOutcome {
     }
 
     let args: Vec<&str> = if target.is_dir() { vec![path] } else { vec!["-R", path] };
-    match run_tool("open", &args) {
+    match run_tool("open", &args, super::TOOL_TIMEOUT) {
         Ok(_) => ToolOutcome::ok(format!(
             "Opened {}",
             target.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| path.into())
@@ -523,7 +565,7 @@ pub fn open_in_terminal(path: &str) -> ToolOutcome {
     if !target.is_dir() {
         return ToolOutcome::err("That is not a folder.");
     }
-    match run_tool("open", &["-a", "Terminal", path]) {
+    match run_tool("open", &["-a", "Terminal", path], super::TOOL_TIMEOUT) {
         Ok(_) => ToolOutcome::ok(format!(
             "Opened {} in Terminal",
             target.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| path.into())

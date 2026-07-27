@@ -15,10 +15,11 @@ use serde::Serialize;
 use super::ToolOutcome;
 
 fn run_tool(program: &str, args: &[&str]) -> Result<String, String> {
-    let out = Command::new(program)
-        .args(args)
-        .output()
-        .map_err(|e| format!("could not run {program}: {e}"))?;
+    let out = super::output_with_timeout(
+        Command::new(program).args(args),
+        super::TOOL_TIMEOUT,
+        &format!("{program} did not answer in time."),
+    )?;
     let stdout = String::from_utf8_lossy(&out.stdout).trim().to_string();
     if out.status.success() {
         Ok(stdout)
@@ -152,8 +153,10 @@ pub fn dns_lookup(host: &str) -> ToolOutcome {
     if host.is_empty() {
         return ToolOutcome::err("Type a hostname to look up.");
     }
-    // `dig +short` gives the answer with none of the surrounding report.
-    match run_tool("dig", &["+short", host]) {
+    // `dig +short` gives the answer with none of the surrounding report, and
+    // the two bounds keep an unreachable resolver from sitting there for the
+    // default 15 seconds a try.
+    match run_tool("dig", &["+short", "+time=2", "+tries=1", host]) {
         Ok(answer) if !answer.is_empty() => {
             ToolOutcome::copied(answer.clone(), format!("{host} → {}", answer.replace('\n', ", ")))
         }
@@ -168,7 +171,9 @@ pub fn ping(host: &str) -> ToolOutcome {
     if host.is_empty() {
         return ToolOutcome::err("Type a host to ping.");
     }
-    match run_tool("ping", &["-c", "5", "-t", "10", host]) {
+    // ping's own deadline is kept under the shared one so a host that never
+    // answers still comes back as "did not answer" rather than as a kill.
+    match run_tool("ping", &["-c", "5", "-t", "8", host]) {
         Ok(output) => {
             // The last two lines carry the loss percentage and the timings.
             let summary: Vec<&str> = output

@@ -12,9 +12,10 @@
  * read what it decided is not a feature.
  */
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import * as api from "@/shared/api";
+import { useDebounced } from "@/shared/hooks";
 import { Button, Select, cx } from "@/shared/ui";
 import type { ToolPageProps } from "../ToolPage";
 
@@ -33,29 +34,49 @@ const PLACES = [
   { label: "Documents", path: "~/Documents" },
 ];
 
-export function DesktopSortPage({ onSetTitle }: ToolPageProps) {
+export function DesktopSortPage({ onOpenTab, onSetTitle }: ToolPageProps) {
   const [directory, setDirectory] = useState("~/Desktop");
   const [sortBy, setSortBy] = useState<api.SortBy>("kind");
   const [plan, setPlan] = useState<api.SortPlan | null>(null);
   const [undo, setUndo] = useState<api.SortMove[] | null>(null);
   const [note, setNote] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  /**
+   * Which question the plan on screen is allowed to be the answer to.
+   *
+   * A slow scan for the folder you were typing a moment ago can land after the
+   * fast one for the folder you are looking at now. Each move carries the
+   * absolute path it was planned from, so Apply would then move files out of a
+   * folder the page is not showing — the one thing this page promises cannot
+   * happen.
+   */
+  const asked = useRef("");
+
+  // Planning is a real directory scan, so it waits for the typing to stop
+  // rather than starting one per character of "~/Projects/some-nested-folder".
+  // The quick-pick buttons still feel instant at this delay.
+  const settled = useDebounced(directory, 150);
 
   useEffect(() => onSetTitle("Tidy a folder"), [onSetTitle]);
 
   const preview = useCallback(async () => {
+    const question = `${settled}\n${sortBy}`;
+    asked.current = question;
     setBusy(true);
     setNote(null);
     setUndo(null);
     try {
-      setPlan(await api.sortPlan(directory, sortBy));
+      const next = await api.sortPlan(settled, sortBy);
+      if (asked.current !== question) return;
+      setPlan(next);
     } catch (e) {
+      if (asked.current !== question) return;
       setPlan(null);
       setNote(api.errorMessage(e));
     } finally {
-      setBusy(false);
+      if (asked.current === question) setBusy(false);
     }
-  }, [directory, sortBy]);
+  }, [settled, sortBy]);
 
   // Re-plan whenever the question changes. Planning moves nothing, so there is
   // no reason to make people press a button to see the answer.
@@ -131,6 +152,13 @@ export function DesktopSortPage({ onSetTitle }: ToolPageProps) {
             value={directory}
             spellCheck={false}
             onChange={(e) => setDirectory(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key !== "Escape" || directory === "~/Desktop") return;
+              // Escape puts the field back to where it started rather than
+              // going unclaimed and closing the tab.
+              e.preventDefault();
+              setDirectory("~/Desktop");
+            }}
             placeholder="~/somewhere/else"
             className="min-w-[200px] flex-1 rounded-lg border border-line bg-base/40 px-3 py-1.5 font-mono text-2xs text-ink placeholder:text-ink-faint focus:border-accent/50 focus:outline-none"
           />
@@ -146,6 +174,26 @@ export function DesktopSortPage({ onSetTitle }: ToolPageProps) {
             />
           </div>
         </div>
+
+        {directory === "~/Desktop" && (
+          <p className="mt-2 text-2xs text-ink-faint">
+            Would rather keep the files where they are?{" "}
+            <button
+              type="button"
+              onClick={() =>
+                onOpenTab({
+                  kind: "tool",
+                  commandId: "page.desktop-shapes",
+                  title: "Desktop icon shapes",
+                })
+              }
+              className="text-accent underline underline-offset-2"
+            >
+              Arrange the icons into a shape
+            </button>{" "}
+            instead.
+          </p>
+        )}
 
         {note && <p className="mt-2 text-2xs text-ink-mute">{note}</p>}
       </div>

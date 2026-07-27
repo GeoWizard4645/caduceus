@@ -230,6 +230,21 @@ const options = (units: Unit[]) =>
  * came from and what day they are for, because a currency answer with no date
  * on it is a guess wearing a decimal point.
  */
+/**
+ * The currencies the ECB publishes, listed here so the selectors work before
+ * anything has been fetched.
+ *
+ * Without it the only options are whatever the two selects already hold, so
+ * someone wanting GBP → JPY has to convert an unrelated pair first to unlock
+ * their own. A fetched table replaces this — it remains the authority on which
+ * rates exist.
+ */
+const ECB_CODES = [
+  "AUD", "BGN", "BRL", "CAD", "CHF", "CNY", "CZK", "DKK", "EUR", "GBP", "HKD",
+  "HUF", "IDR", "ILS", "INR", "ISK", "JPY", "KRW", "MXN", "MYR", "NOK", "NZD",
+  "PHP", "PLN", "RON", "SEK", "SGD", "THB", "TRY", "USD", "ZAR",
+];
+
 function CurrencyPanel() {
   const [amount, setAmount] = useState("100");
   const [from, setFrom] = useState("USD");
@@ -254,7 +269,10 @@ function CurrencyPanel() {
   const value = Number.parseFloat(amount.replace(/,/g, ""));
   const rate = table && table.base === from ? table.rates[to] : undefined;
   const converted = rate !== undefined && Number.isFinite(value) ? value * rate : null;
-  const codes = table ? [table.base, ...Object.keys(table.rates)].sort() : [from, to];
+  const available = table ? [table.base, ...Object.keys(table.rates)] : ECB_CODES;
+  // The current pair is always listed, so a select can never hold a value it
+  // does not offer.
+  const codes = [...new Set([...available, from, to])].sort();
 
   return (
     <div className="rounded-cad border border-line bg-surface/50 p-4">

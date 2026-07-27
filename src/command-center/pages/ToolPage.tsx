@@ -37,7 +37,7 @@ import {
   type FieldValues,
 } from "@/shared/commands";
 import { PERMISSIONS, permissionFromMessage } from "@/shared/permissions";
-import { useDebounced } from "@/shared/hooks";
+import { useDebounced, useEscape } from "@/shared/hooks";
 import type { PermissionId, Tab } from "@/shared/tabs";
 import { ShortcutIcon } from "@/shared/ShortcutIcon";
 import { Button, Callout, EmptyState, Spinner, cx } from "@/shared/ui";
@@ -114,6 +114,8 @@ function FormTool({
   const [wall, setWall] = useState<PermissionId | null>(null);
   const [busy, setBusy] = useState(false);
   const [armed, setArmed] = useState(false);
+  /** Which required field ⌘↵ was refused for, once it has been refused. */
+  const [nudge, setNudge] = useState<string | null>(null);
   /** Show the raw text instead of the pretty rows. Copy is unaffected. */
   const [raw, setRaw] = useState(false);
 
@@ -126,6 +128,9 @@ function FormTool({
   const setValue = useCallback((id: string, value: string) => {
     setValues((current) => ({ ...current, [id]: value }));
     setArmed(false);
+    // Already `null` on almost every keystroke, and React skips the render when
+    // it is — so this costs nothing and stops the nudge outliving its reason.
+    setNudge(null);
   }, []);
 
   const actions = useMemo<CommandActions>(
@@ -193,8 +198,24 @@ function FormTool({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [debounced, form.live, ready]);
 
+  // A command that asked "are you sure?" has to be cancellable without taking
+  // the tab — and everything typed into it — down with the answer.
+  useEscape(active, () => {
+    if (!armed) return false;
+    setArmed(false);
+    return true;
+  });
+
   const submit = () => {
-    if (!ready) return;
+    if (!ready) {
+      // The Run button explains itself by being visibly disabled. ⌘↵ has
+      // nothing to grey out, so refusing silently is the whole of the feedback
+      // — say which field, and put the cursor in it.
+      const first = missing[0];
+      setNudge(`Fill in ${first.label} first.`);
+      document.getElementById(`field-${first.id}`)?.focus();
+      return;
+    }
     if (command.confirm && !armed) {
       setArmed(true);
       return;
@@ -264,6 +285,7 @@ function FormTool({
         {command.confirm && armed && (
           <span className="text-2xs text-danger">{command.confirm}</span>
         )}
+        {nudge && <span className="text-2xs text-danger">{nudge}</span>}
         {busy && <Spinner className="text-accent" />}
       </div>
 

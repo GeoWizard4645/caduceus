@@ -45,11 +45,13 @@ pub fn add(title: &str, body: &str) -> Result<String, String> {
         body = escape_applescript(&html),
     );
 
-    let out = Command::new("osascript")
-        .arg("-e")
-        .arg(&script)
-        .output()
-        .map_err(|e| format!("Could not run osascript: {e}"))?;
+    // Bounded: Notes showing an iCloud prompt would otherwise leave osascript —
+    // and the thread waiting on it — blocked for good.
+    let out = crate::tools::output_with_timeout(
+        Command::new("osascript").arg("-e").arg(&script),
+        crate::tools::TOOL_TIMEOUT,
+        "Notes did not answer. It may be showing a dialog that needs attention.",
+    )?;
 
     if out.status.success() {
         return Ok(title);

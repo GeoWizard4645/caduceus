@@ -45,15 +45,29 @@ export function CommandFields({
 }) {
   if (fields.length === 0) return null;
 
+  // ⌘↵ submits from anywhere in the form. Plain Enter cannot: half of these
+  // fields are multi-line and the newline is the point.
+  //
+  // Listened for here rather than on each control, because "anywhere" has to
+  // include the ones that are not text boxes: a `<select>` or a toggle would
+  // otherwise swallow the shortcut the docstring above promises, and neither
+  // takes an `onKeyDown` at all. Keydown bubbles, so one listener covers every
+  // control there will ever be.
+  const onKeyDown = (event: React.KeyboardEvent) => {
+    if (event.key === "Enter" && event.metaKey) {
+      event.preventDefault();
+      onSubmit();
+    }
+  };
+
   return (
-    <div className="space-y-3">
+    <div className="space-y-3" onKeyDown={onKeyDown}>
       {fields.map((field, index) => (
         <FieldRow
           key={field.id}
           field={field}
           value={values[field.id] ?? ""}
           onChange={(next) => onChange(field.id, next)}
-          onSubmit={onSubmit}
           autoFocus={autoFocus && index === 0}
         />
       ))}
@@ -65,24 +79,13 @@ function FieldRow({
   field,
   value,
   onChange,
-  onSubmit,
   autoFocus,
 }: {
   field: Field;
   value: string;
   onChange: (value: string) => void;
-  onSubmit: () => void;
   autoFocus?: boolean;
 }) {
-  // ⌘↵ submits from anywhere in the form. Plain Enter cannot: half of these
-  // fields are multi-line and the newline is the point.
-  const onKeyDown = (event: React.KeyboardEvent) => {
-    if (event.key === "Enter" && event.metaKey) {
-      event.preventDefault();
-      onSubmit();
-    }
-  };
-
   return (
     <div>
       <div className="mb-1.5 flex items-baseline justify-between gap-3">
@@ -98,13 +101,7 @@ function FieldRow({
         )}
       </div>
 
-      <FieldControl
-        field={field}
-        value={value}
-        onChange={onChange}
-        onKeyDown={onKeyDown}
-        autoFocus={autoFocus}
-      />
+      <FieldControl field={field} value={value} onChange={onChange} autoFocus={autoFocus} />
 
       {field.hint && <p className="mt-1 text-2xs text-ink-faint">{field.hint}</p>}
     </div>
@@ -115,13 +112,11 @@ function FieldControl({
   field,
   value,
   onChange,
-  onKeyDown,
   autoFocus,
 }: {
   field: Field;
   value: string;
   onChange: (value: string) => void;
-  onKeyDown: (event: React.KeyboardEvent) => void;
   autoFocus?: boolean;
 }) {
   const box =
@@ -139,7 +134,6 @@ function FieldControl({
           autoFocus={autoFocus}
           placeholder={field.placeholder ?? field.label}
           onChange={(e) => onChange(e.target.value)}
-          onKeyDown={onKeyDown}
           className={cx(box, "resize-y leading-relaxed", field.mono && "font-mono text-2xs")}
         />
       ) : (
@@ -151,7 +145,6 @@ function FieldControl({
           autoFocus={autoFocus}
           placeholder={field.placeholder ?? field.label}
           onChange={(e) => onChange(e.target.value)}
-          onKeyDown={onKeyDown}
           className={cx(box, field.mono && "font-mono")}
         />
       );
@@ -167,7 +160,6 @@ function FieldControl({
           step={field.step}
           autoFocus={autoFocus}
           onChange={(e) => onChange(e.target.value)}
-          onKeyDown={onKeyDown}
           className={cx(box, "tabular-nums")}
         />
       );
@@ -206,7 +198,6 @@ function FieldControl({
             spellCheck={false}
             placeholder="#3b82f6, rgb(59 130 246), hsl(217 91% 60%)"
             onChange={(e) => onChange(e.target.value)}
-            onKeyDown={onKeyDown}
             className={cx(box, "font-mono")}
           />
         </div>

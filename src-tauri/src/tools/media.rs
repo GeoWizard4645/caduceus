@@ -24,10 +24,11 @@ pub enum MediaAction {
 const PLAYERS: [&str; 2] = ["Spotify", "Music"];
 
 fn run_tool(program: &str, args: &[&str]) -> Result<String, String> {
-    let out = Command::new(program)
-        .args(args)
-        .output()
-        .map_err(|e| format!("could not run {program}: {e}"))?;
+    let out = super::output_with_timeout(
+        Command::new(program).args(args),
+        super::TOOL_TIMEOUT,
+        &format!("{program} did not answer in time."),
+    )?;
     if out.status.success() {
         Ok(String::from_utf8_lossy(&out.stdout).trim().to_string())
     } else {

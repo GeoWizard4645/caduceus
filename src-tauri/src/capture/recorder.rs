@@ -120,8 +120,7 @@ impl RecorderRuntime {
 
     /// Begin recording. `Err` if one is already running.
     pub fn start(&self, mode: RecordMode, with_microphone: bool) -> Result<String, String> {
-        let mut guard = self.session.lock();
-        if guard.is_some() {
+        if self.session.lock().is_some() {
             return Err("Something is already being recorded.".into());
         }
 
@@ -159,6 +158,16 @@ impl RecorderRuntime {
 
         let stdin = child.stdin.take().ok_or("the recorder has no stdin")?;
         let stdout = child.stdout.take().ok_or("the recorder has no stdout")?;
+
+        // Taken only now: `status()` is polled continuously by the HUD, and the
+        // spawn above can take a moment the first time macOS verifies the
+        // helper's signature.
+        let mut guard = self.session.lock();
+        if guard.is_some() {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err("Something is already being recorded.".into());
+        }
 
         *self.error.lock() = None;
         self.ready.store(false, Ordering::SeqCst);

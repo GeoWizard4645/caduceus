@@ -58,12 +58,14 @@ pub fn screenshot_full(save_to_downloads: bool) -> Result<ScreenshotResult, Stri
             chrono::Local::now().format("%Y%m%d-%H%M%S")
         ));
 
-        let status = Command::new("screencapture")
-            .arg("-x")
-            .arg(&path)
-            .status()
-            .map_err(|e| format!("Could not run screencapture: {e}"))?;
-        if !status.success() {
+        // Bounded: without the Screen Recording grant, `screencapture` can sit
+        // waiting on macOS's consent machinery rather than returning.
+        let output = crate::tools::output_with_timeout(
+            Command::new("screencapture").arg("-x").arg(&path),
+            crate::tools::TOOL_TIMEOUT,
+            "The screenshot took too long. Grant Screen Recording permission in System Settings.",
+        )?;
+        if !output.status.success() {
             return Err(
                 "Screenshot failed. Grant Screen Recording permission in System Settings.".into(),
             );

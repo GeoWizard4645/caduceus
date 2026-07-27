@@ -29,7 +29,13 @@ export function SystemTabPage({ active }: { active: boolean }) {
           ref={inputRef}
           value={query}
           onChange={(event) => setQuery(event.target.value)}
-          onKeyDown={(event) => event.key === "Escape" && setQuery("")}
+          onKeyDown={(event) => {
+            if (event.key !== "Escape" || !query) return;
+            // Claimed, or the shell's handler closes the whole tab in the same
+            // keypress — clearing the filter and losing the page with it.
+            event.preventDefault();
+            setQuery("");
+          }}
           placeholder="Filter processes…"
           spellCheck={false}
           autoComplete="off"

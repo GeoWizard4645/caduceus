@@ -1116,6 +1116,10 @@
           "detail": "Files a messy Desktop (or any folder) into subfolders by what things are, when they were changed, or how big they are. Shows you the plan first and moves nothing until you say so — and Undo puts every file back."
         },
         {
+          "name": "Arrange desktop icons into a shape",
+          "detail": "Lays the icons on your Desktop out in a circle, a heart, a spiral, an even grid or a single line, scaled to fit your screen between the menu bar and the Dock. Shows the arrangement before it happens, and Undo puts every icon back exactly where it was. Needs Automation permission for Finder, and Finder's own Sort By has to be set to None — this says so if it is not."
+        },
+        {
           "name": "Empty the Trash",
           "detail": "Empties the Trash through Finder, so the usual warnings about locked items still apply."
         },

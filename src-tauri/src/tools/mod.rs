@@ -17,14 +17,60 @@ pub mod media;
 pub mod native;
 pub mod net;
 pub mod rates;
+pub mod shapes;
 pub mod sorter;
 pub mod system;
 pub mod text;
 
 use std::path::PathBuf;
 use std::process::Command;
+use std::time::Duration;
 
 use serde::Serialize;
+
+/// How long a command-line tool gets before it is assumed wedged.
+///
+/// Everything in here shells out to something that can stop answering forever:
+/// Finder with a modal dialog open, a Docker daemon that has hung, a resolver
+/// that never replies. An unbounded subprocess freezes whichever thread is
+/// waiting on it, so every one of them is given a deadline.
+pub const TOOL_TIMEOUT: Duration = Duration::from_secs(10);
+
+/// Run a command, killing it if it outstays `timeout`.
+///
+/// `wedged` is what the user is told when the deadline passes, because "it
+/// timed out" does not say which of their apps is holding things up.
+pub fn output_with_timeout(
+    command: &mut Command,
+    timeout: Duration,
+    wedged: &str,
+) -> Result<std::process::Output, String> {
+    use std::process::Stdio;
+
+    let mut child = command
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|e| format!("Could not start it: {e}"))?;
+
+    let deadline = std::time::Instant::now() + timeout;
+    loop {
+        match child.try_wait() {
+            Ok(Some(_)) => break,
+            Ok(None) => {}
+            Err(e) => return Err(format!("Could not wait for it: {e}")),
+        }
+        if std::time::Instant::now() >= deadline {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err(wedged.to_string());
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    }
+
+    child.wait_with_output().map_err(|e| format!("Could not read the result: {e}"))
+}
 
 /// The result of a one-shot utility, shaped for a palette toast.
 #[derive(Debug, Clone, Serialize)]

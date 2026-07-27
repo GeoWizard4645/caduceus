@@ -10,13 +10,14 @@
  *    on your behalf what you were not using. This one lists what it found, what
  *    each thing is, and what removing it costs — and waits.
  * 3. **Only regenerable things are offered.** Caches, logs, build
- *    intermediates. The three categories that could hold something you meant to
- *    keep are marked, and can never be selected by "select all".
+ *    intermediates. The ones that could hold something you meant to keep carry
+ *    a "look first" badge, and there is no select-all to sweep them up with.
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import * as api from "@/shared/api";
+import { useEscape } from "@/shared/hooks";
 import type { Leftover } from "@/shared/types";
 import { Button, Spinner, cx } from "@/shared/ui";
 import type { ToolPageProps } from "../ToolPage";
@@ -39,7 +40,12 @@ export function StoragePage({ active, onSetTitle }: ToolPageProps) {
     setNote(null);
     try {
       const [junk, installed] = await Promise.all([api.scanJunk(), api.listInstalledAppSizes()]);
-      setGroups(junk.filter((g) => g.bytes > 0));
+      const found = junk.filter((g) => g.bytes > 0);
+      setGroups(found);
+      // A category that has since emptied is gone from the list, and a tick
+      // that outlives its row makes the footer count disagree with its own byte
+      // total: "2 categories · 1.4 GB" with one category on screen.
+      setChosen((current) => new Set([...current].filter((kind) => found.some((g) => g.kind === kind))));
       setApps(installed);
     } catch (e) {
       setNote(api.errorMessage(e));
@@ -65,6 +71,15 @@ export function StoragePage({ active, onSetTitle }: ToolPageProps) {
       setArmed(false);
       return next;
     });
+
+  // An armed "Yes — move it all to the Trash" is exactly what Escape means to
+  // cancel; without this the shell reads it as "close the tab" and the
+  // selection goes with it.
+  useEscape(active, () => {
+    if (!armed) return false;
+    setArmed(false);
+    return true;
+  });
 
   const clean = async () => {
     if (!armed) {
@@ -101,7 +116,12 @@ export function StoragePage({ active, onSetTitle }: ToolPageProps) {
             <button
               key={key}
               type="button"
-              onClick={() => setTab(key)}
+              onClick={() => {
+                setTab(key);
+                // The armed button lives in the Reclaim tab's footer. Left
+                // armed, it is off screen but still eats the next Escape.
+                setArmed(false);
+              }}
               className={cx(
                 "rounded-full border px-3 py-1 text-2xs transition-colors",
                 tab === key
@@ -176,7 +196,7 @@ export function StoragePage({ active, onSetTitle }: ToolPageProps) {
         ) : apps === null ? (
           <p className="py-10 text-center text-2xs text-ink-faint">Measuring…</p>
         ) : (
-          <AppList apps={apps} onChanged={() => void scan()} />
+          <AppList active={active} apps={apps} onChanged={() => void scan()} />
         )}
       </div>
 
@@ -209,9 +229,11 @@ export function StoragePage({ active, onSetTitle }: ToolPageProps) {
  * place.
  */
 function AppList({
+  active,
   apps,
   onChanged,
 }: {
+  active: boolean;
   apps: api.InstalledAppSize[];
   onChanged: () => void;
 }) {
@@ -226,9 +248,24 @@ function AppList({
     return needle ? apps.filter((a) => a.name.toLowerCase().includes(needle)) : apps;
   }, [apps, filter]);
 
+  useEscape(active, () => {
+    if (armed) {
+      setArmed(false);
+      return true;
+    }
+    if (filter) {
+      setFilter("");
+      return true;
+    }
+    return false;
+  });
+
   const inspect = async (app: api.InstalledAppSize) => {
     if (open === app.path) {
       setOpen(null);
+      // Collapsing hides the confirm button; an armed flag surviving that would
+      // silently swallow an Escape with nothing on screen changing.
+      setArmed(false);
       return;
     }
     setOpen(app.path);
@@ -270,6 +307,9 @@ function AppList({
       {note && <p className="mb-2 text-2xs text-ink-mute">{note}</p>}
 
       <div className="space-y-1">
+        {shown.length === 0 && (
+          <p className="py-10 text-center text-2xs text-ink-faint">Nothing matches that.</p>
+        )}
         {shown.map((app) => (
           <div key={app.path} className="rounded-lg border border-line bg-surface/40">
             <button

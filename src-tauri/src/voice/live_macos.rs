@@ -21,6 +21,16 @@ const FINALISE_TIMEOUT: Duration = Duration::from_secs(6);
 /// How long to wait for a killed helper to actually die before giving up on it.
 const REAP_TIMEOUT: Duration = Duration::from_millis(600);
 
+/// What the reader thread saw before the session was up and running.
+enum Handshake {
+    Ready,
+    /// macOS is asking the user for microphone or speech access.
+    Prompting,
+    Failed(String),
+    /// The helper closed its output without ever saying it was ready.
+    Gone,
+}
+
 pub struct LiveSession {
     child: Child,
     stdin: ChildStdin,
@@ -84,41 +94,6 @@ impl LiveSession {
         let stdout = child.stdout.take().ok_or("no stdout")?;
         let stdin = child.stdin.take().ok_or("no stdin")?;
 
-        let mut reader = BufReader::new(stdout);
-        let mut ready = false;
-        let mut line = String::new();
-        // Long enough for the microphone to spin up, short enough that a broken
-        // helper does not leave the UI hanging.
-        let mut deadline = std::time::Instant::now() + Duration::from_secs(15);
-        while std::time::Instant::now() < deadline {
-            line.clear();
-            if reader.read_line(&mut line).map_err(|e| e.to_string())? == 0 {
-                break;
-            }
-            let trimmed = line.trim();
-            if trimmed == "ready" {
-                ready = true;
-                break;
-            }
-            // First run only: macOS is showing its permission sheets and the
-            // clock should be the user's, not ours.
-            if trimmed == "prompting" {
-                deadline = std::time::Instant::now() + Duration::from_secs(180);
-                continue;
-            }
-            if let Some(msg) = trimmed.strip_prefix("error\t") {
-                return Err(msg.to_string());
-            }
-        }
-        if !ready {
-            return Err(
-                "Live speech helper did not become ready. If macOS never asked for \
-                 microphone or speech-recognition access, enable Caduceus under System \
-                 Settings → Privacy & Security for both."
-                    .into(),
-            );
-        }
-
         let wav_path = Arc::new(Mutex::new(None::<PathBuf>));
         let final_text = Arc::new(Mutex::new(None::<String>));
         let last_partial = Arc::new(Mutex::new(None::<String>));
@@ -126,10 +101,45 @@ impl LiveSession {
         let final_slot = final_text.clone();
         let partial_slot = last_partial.clone();
 
+        // The handshake is read on the reader thread rather than here, and
+        // reported back over a channel.
+        //
+        // `read_line` on a pipe has no deadline of its own, so a loop that only
+        // checks the clock *between* reads is not bounded at all: a helper that
+        // wedges after spawn without writing a line and without closing stdout
+        // parks the caller inside the read for ever, which is the hang this
+        // whole file exists to make impossible. `recv_timeout` is bounded even
+        // when the read is not.
+        let (handshake, answered) = std::sync::mpsc::channel::<Handshake>();
+
         thread::spawn(move || {
+            let mut reader = BufReader::new(stdout);
             let mut line = String::new();
+            let mut ready = false;
+
             while reader.read_line(&mut line).ok().filter(|&n| n > 0).is_some() {
                 let trimmed = line.trim();
+
+                if !ready {
+                    match trimmed {
+                        "ready" => {
+                            ready = true;
+                            let _ = handshake.send(Handshake::Ready);
+                        }
+                        "prompting" => {
+                            let _ = handshake.send(Handshake::Prompting);
+                        }
+                        _ => {
+                            if let Some(msg) = trimmed.strip_prefix("error\t") {
+                                let _ = handshake.send(Handshake::Failed(msg.to_string()));
+                                return;
+                            }
+                        }
+                    }
+                    line.clear();
+                    continue;
+                }
+
                 let mut parts = trimmed.splitn(2, '\t');
                 let kind = parts.next().unwrap_or("");
                 let payload = parts.next().unwrap_or("").to_string();
@@ -147,7 +157,51 @@ impl LiveSession {
                 }
                 line.clear();
             }
+
+            if !ready {
+                let _ = handshake.send(Handshake::Gone);
+            }
         });
+
+        // Long enough for the microphone to spin up, short enough that a broken
+        // helper does not leave the UI hanging.
+        let mut deadline = std::time::Instant::now() + Duration::from_secs(15);
+        let mut ready = false;
+        loop {
+            let left = deadline.saturating_duration_since(std::time::Instant::now());
+            if left.is_zero() {
+                break;
+            }
+            match answered.recv_timeout(left) {
+                Ok(Handshake::Ready) => {
+                    ready = true;
+                    break;
+                }
+                // First run only: macOS is showing its permission sheets and the
+                // clock should be the user's, not ours.
+                Ok(Handshake::Prompting) => {
+                    deadline = std::time::Instant::now() + Duration::from_secs(180)
+                }
+                Ok(Handshake::Failed(msg)) => {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    return Err(msg);
+                }
+                Ok(Handshake::Gone) | Err(_) => break,
+            }
+        }
+        if !ready {
+            // Killing it closes stdout, which is also what ends the reader
+            // thread — and stops a wedged helper holding the microphone open.
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err(
+                "Live speech helper did not become ready. If macOS never asked for \
+                 microphone or speech-recognition access, enable Caduceus under System \
+                 Settings → Privacy & Security for both."
+                    .into(),
+            );
+        }
 
         Ok(Self {
             child,

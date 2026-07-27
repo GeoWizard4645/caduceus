@@ -454,11 +454,16 @@ pub fn installed_apps() -> Vec<InstalledApp> {
 /// `mdls` rather than the file's own timestamps: an app's mtime is when it was
 /// installed or updated, which says nothing about whether anyone has opened it.
 fn last_opened(path: &Path) -> Option<u64> {
-    let out = std::process::Command::new("mdls")
-        .args(["-raw", "-name", "kMDItemLastUsedDate"])
-        .arg(path)
-        .output()
-        .ok()?;
+    // Bounded per app: this runs once for every application installed, so one
+    // volume Spotlight is still indexing must not stall the whole scan.
+    let out = super::output_with_timeout(
+        std::process::Command::new("mdls")
+            .args(["-raw", "-name", "kMDItemLastUsedDate"])
+            .arg(path),
+        std::time::Duration::from_secs(2),
+        "mdls did not answer",
+    )
+    .ok()?;
     let text = String::from_utf8_lossy(&out.stdout);
     let trimmed = text.trim();
     if trimmed.is_empty() || trimmed == "(null)" {

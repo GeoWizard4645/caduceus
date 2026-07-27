@@ -317,7 +317,10 @@ pub async fn dispatch<R: tauri::Runtime>(
             let Some(rule) = &parsed.rule else {
                 return DispatchOutcome::simple(false, action, "This prefix has no script.", false);
             };
-            let source = shortcuts::substitute_query(&rule.target, &parsed.remainder);
+            let source = shortcuts::substitute_query(
+                &rule.target,
+                &shortcuts::escape_applescript(&parsed.remainder),
+            );
             match shortcuts::exec::run_applescript(&source).await {
                 Ok(out) => DispatchOutcome::simple(
                     true,

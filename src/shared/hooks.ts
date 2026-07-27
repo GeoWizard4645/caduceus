@@ -133,6 +133,34 @@ export function useToasts(timeoutMs = 3200) {
   return { toasts, notify, dismiss };
 }
 
+/**
+ * Claim Escape before the tab shell gets it.
+ *
+ * `CommandCenter`'s fallback closes the whole tab on any Escape nobody claimed,
+ * which is wrong while a page is holding something Escape obviously means:
+ * an armed "Sure?" confirmation, a filter with text in it. `claim` returns
+ * whether this keypress was the page's; anything it declines still closes the
+ * tab, exactly as `HomeTab` does it.
+ *
+ * The listener sits on `document`, inside the shell's `window` one on the
+ * bubble path, so the propagation order — not which effect ran first — is what
+ * gives the page first refusal. Background tabs stay mounted, hence `active`.
+ */
+export function useEscape(active: boolean, claim: () => boolean): void {
+  const latest = useRef(claim);
+  latest.current = claim;
+
+  useEffect(() => {
+    if (!active) return;
+    const listener = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || event.defaultPrevented) return;
+      if (latest.current()) event.preventDefault();
+    };
+    document.addEventListener("keydown", listener);
+    return () => document.removeEventListener("keydown", listener);
+  }, [active]);
+}
+
 /** Read a value once on mount, with loading and error state. */
 export function useAsync<T>(
   load: () => Promise<T>,

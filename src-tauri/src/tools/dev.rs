@@ -523,6 +523,12 @@ fn hex_decode(input: &str) -> Result<Vec<u8>, String> {
         .collect();
     let cleaned = cleaned.strip_prefix("0x").unwrap_or(&cleaned);
 
+    // Before any slicing, not after: `&cleaned[i..i + 2]` below is a *byte*
+    // slice, and landing inside a multi-byte character panics rather than
+    // erroring — which, with `panic = "abort"`, takes the whole app with it.
+    if let Some(bad) = cleaned.chars().find(|c| !c.is_ascii_hexdigit()) {
+        return Err(format!("'{bad}' is not a hex digit."));
+    }
     if cleaned.len() % 2 != 0 {
         return Err("Hex needs an even number of digits.".into());
     }
@@ -1152,6 +1158,14 @@ mod tests {
         assert_eq!(hex_decode("68:69").unwrap(), b"hi");
         assert_eq!(hex_decode("0x6869").unwrap(), b"hi");
         assert!(hex_decode("689").is_err());
+    }
+
+    #[test]
+    fn hex_with_a_multi_byte_character_errors_rather_than_panicking() {
+        // '€' is three bytes, so "0€12" is six bytes long — an even *byte*
+        // count whose two-byte slices land inside a character.
+        assert!(hex_decode("0\u{20ac}12").is_err());
+        assert!(hex_decode("\u{20ac}").is_err());
     }
 
     #[test]

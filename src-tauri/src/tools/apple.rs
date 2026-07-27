@@ -10,14 +10,16 @@
 //! "next track" meant, so every caller guards on `is running` first.
 
 use std::process::Command;
-use std::time::Duration;
 
 /// How long to give a script before assuming the other app has wedged.
 ///
 /// AppleScript blocks until the target answers, and an app showing a modal
 /// dialog never answers. Without a bound, one confused copy of Word freezes the
 /// palette.
-const TIMEOUT: Duration = Duration::from_secs(10);
+const TIMEOUT: std::time::Duration = super::TOOL_TIMEOUT;
+
+/// What the user is told when [`TIMEOUT`] expires, wherever it expires.
+const WEDGED: &str = "The other app did not answer. It may be showing a dialog that needs attention.";
 
 /// Run a script and return its output.
 pub fn run_script(script: &str) -> Result<String, String> {
@@ -91,36 +93,15 @@ pub fn list_shortcuts() -> Result<Vec<String>, String> {
 
 /// Run a command, killing it if it outstays [`TIMEOUT`].
 fn spawn_with_timeout(command: &mut Command) -> Result<std::process::Output, String> {
-    use std::process::Stdio;
-
-    let mut child = command
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .map_err(|e| format!("Could not start it: {e}"))?;
-
-    let deadline = std::time::Instant::now() + TIMEOUT;
-    loop {
-        match child.try_wait() {
-            Ok(Some(_)) => break,
-            Ok(None) => {}
-            Err(e) => return Err(format!("Could not wait for it: {e}")),
-        }
-        if std::time::Instant::now() >= deadline {
-            let _ = child.kill();
-            let _ = child.wait();
-            return Err(
-                "The other app did not answer. It may be showing a dialog that needs attention."
-                    .into(),
-            );
-        }
-        std::thread::sleep(Duration::from_millis(20));
-    }
-
-    child.wait_with_output().map_err(|e| format!("Could not read the result: {e}"))
+    super::output_with_timeout(command, TIMEOUT, WEDGED)
 }
 
+/// The same bound, for the one path that has to keep stdin.
+///
+/// [`super::output_with_timeout`] nulls stdin, so a shortcut being fed text
+/// cannot use it — and a shortcut that pipes input is exactly the kind that
+/// then sits waiting on a dialog. Without the deadline it holds a blocking-pool
+/// worker, and the `invoke()` behind it, for ever.
 fn spawn_with_stdin(command: &mut Command, input: &str) -> Result<std::process::Output, String> {
     use std::io::Write;
     use std::process::Stdio;
@@ -132,8 +113,25 @@ fn spawn_with_stdin(command: &mut Command, input: &str) -> Result<std::process::
         .spawn()
         .map_err(|e| format!("Could not start it: {e}"))?;
 
+    // Dropped at the end of this block, which closes the pipe: a shortcut
+    // reading its input to EOF never gets there otherwise.
     if let Some(mut stdin) = child.stdin.take() {
         let _ = stdin.write_all(input.as_bytes());
+    }
+
+    let deadline = std::time::Instant::now() + TIMEOUT;
+    loop {
+        match child.try_wait() {
+            Ok(Some(_)) => break,
+            Ok(None) => {}
+            Err(e) => return Err(format!("Could not wait for it: {e}")),
+        }
+        if std::time::Instant::now() >= deadline {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err(WEDGED.to_string());
+        }
+        std::thread::sleep(std::time::Duration::from_millis(20));
     }
 
     child.wait_with_output().map_err(|e| format!("Could not read the result: {e}"))

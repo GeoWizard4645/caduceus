@@ -305,6 +305,14 @@ fn is_excluded(cfg: &crate::settings::ClipboardSettings, source: Option<&str>) -
 // Platform probes (all best-effort — see docs/PLATFORM_SUPPORT.md)
 // ---------------------------------------------------------------------------
 
+/// How long a probe gets before its answer is given up on.
+///
+/// These run inline on the watcher's own thread every time the clipboard
+/// changes, so one wedged `lsappinfo` or `osascript` would stop the loop from
+/// ever reaching its sleep again — clipboard history would silently die for the
+/// rest of the session. Short, because the loop ticks every few hundred ms.
+const PROBE_TIMEOUT: Duration = Duration::from_secs(2);
+
 /// Name of the frontmost application, used for the exclusion list and the
 /// "copied from" label.
 ///
@@ -315,15 +323,22 @@ fn detect_frontmost_app() -> Option<String> {
     #[cfg(target_os = "macos")]
     {
         use std::process::Command;
-        let front = Command::new("lsappinfo").arg("front").output().ok()?;
+        let front = crate::tools::output_with_timeout(
+            Command::new("lsappinfo").arg("front"),
+            PROBE_TIMEOUT,
+            "lsappinfo did not answer",
+        )
+        .ok()?;
         let asn = String::from_utf8_lossy(&front.stdout).trim().to_string();
         if asn.is_empty() {
             return None;
         }
-        let info = Command::new("lsappinfo")
-            .args(["info", "-only", "name", &asn])
-            .output()
-            .ok()?;
+        let info = crate::tools::output_with_timeout(
+            Command::new("lsappinfo").args(["info", "-only", "name", &asn]),
+            PROBE_TIMEOUT,
+            "lsappinfo did not answer",
+        )
+        .ok()?;
         // Output looks like: "LSDisplayName"="Safari"
         let text = String::from_utf8_lossy(&info.stdout);
         let name = text.split('=').nth(2)?.trim().trim_matches('"').to_string();
@@ -367,10 +382,11 @@ var t = $.NSPasteboard.generalPasteboard.types;
 var out = [];
 for (var i = 0; i < t.count; i++) { out.push(ObjC.unwrap(t.objectAtIndex(i))); }
 out.join(',')"#;
-        let Ok(out) = Command::new("osascript")
-            .args(["-l", "JavaScript", "-e", SCRIPT])
-            .output()
-        else {
+        let Ok(out) = crate::tools::output_with_timeout(
+            Command::new("osascript").args(["-l", "JavaScript", "-e", SCRIPT]),
+            PROBE_TIMEOUT,
+            "osascript did not answer",
+        ) else {
             return false;
         };
         let types = String::from_utf8_lossy(&out.stdout).to_lowercase();

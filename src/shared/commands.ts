@@ -238,6 +238,7 @@ export type ToolPageId =
   | "processes"
   | "storage"
   | "desktop-sort"
+  | "desktop-shapes"
   | "citations"
   | "meeting"
   | "screen-record";
@@ -2254,6 +2255,28 @@ const PAGE_COMMANDS: CommandDef[] = [
     reach: 80,
     run: ({ actions }) => {
       actions.openTab({ kind: "tool", commandId: "page.desktop-sort", title: "Tidy a folder" });
+      return false;
+    },
+  },
+  {
+    id: "page.desktop-shapes",
+    title: "Arrange desktop icons into a shape",
+    detail:
+      "Lays the icons on your Desktop out in a circle, a heart, a spiral, an even grid or a single line, scaled to fit your screen between the menu bar and the Dock. Shows the arrangement before it happens, and Undo puts every icon back exactly where it was. Needs Automation permission for Finder, and Finder's own Sort By has to be set to None — this says so if it is not.",
+    group: "files",
+    icon: "◌",
+    keywords: [
+      "desktop", "icons", "shape", "circle", "heart", "spiral", "grid", "line", "arrange",
+      "rearrange", "layout", "position", "fun", "pattern", "align",
+    ],
+    page: "desktop-shapes",
+    reach: 34,
+    run: ({ actions }) => {
+      actions.openTab({
+        kind: "tool",
+        commandId: "page.desktop-shapes",
+        title: "Desktop icon shapes",
+      });
       return false;
     },
   },

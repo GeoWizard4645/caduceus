@@ -116,6 +116,15 @@ impl SttBackend for DisabledStt {
 
 pub struct SystemNativeStt;
 
+/// A hard bound on the Swift helper, above its own internal ones.
+///
+/// The helper already gives itself sixty seconds for authorisation and two
+/// attempts of two minutes each at recognition, so nothing legitimate reaches
+/// this. It exists for the case where those bounds stop being honoured —
+/// Speech deadlocking, the host process killed but not reaped — because without
+/// it the HUD sits on "Transcribing…" for the life of the app.
+const HELPER_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(330);
+
 /// Locate the bundled Swift helper.
 ///
 /// Checked in two places so it works both from an installed `.app` and from
@@ -178,11 +187,18 @@ impl SttBackend for SystemNativeStt {
         if !settings.stt_language.trim().is_empty() {
             command.arg(settings.stt_language.trim());
         }
+        // Abandoning the future below has to actually end the process, or the
+        // timeout would only hide the wedged helper rather than stop it.
+        command.kill_on_drop(true);
 
-        let output = command.output().await;
+        let output = tokio::time::timeout(HELPER_TIMEOUT, command.output()).await;
+        // Runs whether the helper answered, failed or was killed: a hung helper
+        // used to leave its recording in the temp directory for good.
         let _ = tokio::fs::remove_file(&path).await;
 
-        let output = output.map_err(|e| SttError::Failed(format!("could not run the speech helper: {e}")))?;
+        let output = output
+            .map_err(|_| SttError::Failed("the speech helper did not answer".into()))?
+            .map_err(|e| SttError::Failed(format!("could not run the speech helper: {e}")))?;
 
         if !output.status.success() {
             return Err(SttError::Failed(

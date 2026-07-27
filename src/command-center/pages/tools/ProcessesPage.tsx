@@ -21,6 +21,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import * as api from "@/shared/api";
+import { useEscape } from "@/shared/hooks";
 import type { ProcessRow, SystemSnapshot } from "@/shared/types";
 import { Button, cx } from "@/shared/ui";
 import type { ToolPageProps } from "../ToolPage";
@@ -67,6 +68,20 @@ export function ProcessesPage({ active, onSetTitle }: ToolPageProps) {
       : b.cpu - a.cpu,
     );
   }, [snapshot, filter, sort]);
+
+  // Escape means "not that one after all" long before it means "close the tab",
+  // and losing an armed Stop along with the whole page is the worst reading of it.
+  useEscape(active, () => {
+    if (armed) {
+      setArmed(null);
+      return true;
+    }
+    if (filter) {
+      setFilter("");
+      return true;
+    }
+    return false;
+  });
 
   const end = async (row: ProcessRow, force: boolean) => {
     if (armed?.pid !== row.pid || armed.force !== force) {

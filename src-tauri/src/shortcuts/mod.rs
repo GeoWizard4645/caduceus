@@ -263,6 +263,15 @@ pub fn substitute_query(template: &str, query: &str) -> String {
     template.replace("{query}", query)
 }
 
+/// Escape a string so AppleScript reads it as literal text inside `"…"`.
+///
+/// Without this a query containing a double quote closes the literal it was
+/// substituted into and the rest is parsed as source — and AppleScript's
+/// `do shell script` turns that into arbitrary command execution.
+pub fn escape_applescript(input: &str) -> String {
+    input.replace('\\', "\\\\").replace('"', "\\\"")
+}
+
 /// Percent-encode a string for use inside a URL query component.
 ///
 /// Implemented inline rather than pulling in `urlencoding` — it is twenty lines
@@ -337,6 +346,16 @@ mod tests {
         assert_eq!(percent_encode("a&b=c"), "a%26b%3Dc");
         assert_eq!(percent_encode("caf\u{e9}"), "caf%C3%A9");
         assert_eq!(percent_encode("a-b_c.d~e"), "a-b_c.d~e");
+    }
+
+    #[test]
+    fn applescript_escaping_neutralises_injection() {
+        assert_eq!(escape_applescript("hello"), "hello");
+        assert_eq!(escape_applescript(r"a\b"), r"a\\b");
+        assert_eq!(
+            escape_applescript(r#"" & (do shell script "id") & ""#),
+            r#"\" & (do shell script \"id\") & \""#
+        );
     }
 
     #[test]

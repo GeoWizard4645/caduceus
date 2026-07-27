@@ -203,6 +203,8 @@ final class Recorder: NSObject, SCStreamOutput, SCStreamDelegate {
     private var engine: AVAudioEngine?
     private let paused = NSLock()
     private var isPaused = false
+    private let stopping = NSLock()
+    private var isStopping = false
     private var lastLevelEmit = Date.distantPast
 
     func start() async throws {
@@ -338,11 +340,25 @@ final class Recorder: NSObject, SCStreamOutput, SCStreamDelegate {
 
     func stream(_ stream: SCStream, didStopWithError error: Error) {
         emit("error", error.localizedDescription)
+        // A stopped stream never resumes, so finish the file and go. Without
+        // this the writer is never finalised — leaving an unplayable moov-less
+        // file — and the process sits on the stream until something kills it.
+        Task { await stop() }
     }
 
     // --- teardown ---------------------------------------------------------
 
     func stop() async {
+        // The stream failing and the parent closing stdin can both arrive; the
+        // second teardown would finish an already-finished writer.
+        stopping.lock()
+        if isStopping {
+            stopping.unlock()
+            return
+        }
+        isStopping = true
+        stopping.unlock()
+
         engine?.inputNode.removeTap(onBus: 0)
         engine?.stop()
         if let stream { try? await stream.stopCapture() }

@@ -18,6 +18,7 @@ import type { ToolPageProps } from "../ToolPage";
 import { CitationsPage } from "./CitationsPage";
 import { ColorsPage } from "./ColorsPage";
 import { ConvertPage } from "./ConvertPage";
+import { DesktopShapesPage } from "./DesktopShapesPage";
 import { DesktopSortPage } from "./DesktopSortPage";
 import { MeetingPage } from "./MeetingPage";
 import { ProcessesPage } from "./ProcessesPage";
@@ -32,6 +33,7 @@ export const TOOL_PAGES: Record<ToolPageId, ComponentType<ToolPageProps>> = {
   processes: ProcessesPage,
   storage: StoragePage,
   "desktop-sort": DesktopSortPage,
+  "desktop-shapes": DesktopShapesPage,
   citations: CitationsPage,
   meeting: MeetingPage,
   "screen-record": ScreenRecordPage,
