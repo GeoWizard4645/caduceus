@@ -120,7 +120,8 @@
 
   /* --- install -------------------------------------------------------- */
 
-  /* Three install paths stacked so option 2's checklist is never crushed. */
+  /* Install paths stacked rather than side by side, so the full-stack option's
+     checklist is never crushed into a column. */
   .install {
     margin-top: 40px;
     max-width: 660px;
@@ -210,6 +211,16 @@
     text-transform: uppercase;
     color: var(--ink-faint);
     vertical-align: 0.05em;
+  }
+
+  /* The second command inside an option card — "or with Homebrew". */
+  .install-alt-label {
+    margin: 18px 0 8px;
+    font-size: 0.74rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    font-weight: 600;
   }
 
   .install-follow {
@@ -751,7 +762,7 @@
       <span class="badge">No tracking</span>
       <span class="badge">macOS 11+</span>
       <span class="badge">Apple Silicon &amp; Intel</span>
-      <span class="badge">MIT licensed</span>
+      <span class="badge">GPL-3.0 licensed</span>
       <span class="badge">~10 MB</span>
     </div>
 
@@ -775,10 +786,13 @@
     <div class="install" id="install">
       <p class="install-label">Install</p>
       <p class="install-choices">
-        Pick one path — <strong>Caduceus only</strong>, the <strong>full local stack</strong>
+        Pick one path — <strong>Caduceus only</strong>, the
+        <strong>full local stack</strong>
         (app + <a href="https://ollama.com/" rel="noopener">Ollama</a> +
         <a href="https://hermes-agent.nousresearch.com/" rel="noopener">Hermes Agent</a> + models),
-        or the <strong>.dmg</strong>.
+        or the <strong>.dmg</strong>. The first two each work with
+        <strong>curl</strong> or <strong>Homebrew</strong>, whichever you prefer;
+        it is the same app either way.
       </p>
 
       <div class="install-grid">
@@ -796,6 +810,22 @@
         <p class="cmd-meta" id="cmd-meta">
           <strong>~10 MB</strong> download · <strong>~10 s</strong> on a fast connection ·
           <strong>Idempotent</strong> — safe to run again; re-running just reinstalls the latest release.
+        </p>
+
+        <p class="install-alt-label">or with Homebrew</p>
+        <div class="cmd">
+          <code id="brew-cmd"><span class="prompt">$ </span>brew install --cask geowizard4645/caduceus/caduceus</code>
+          <button class="copy" id="brew-copy" type="button">Copy</button>
+        </div>
+        <p class="cmd-meta">
+          Taps <a href="https://github.com/GeoWizard4645/homebrew-caduceus" rel="noopener">geowizard4645/caduceus</a>
+          on the way through, so there is nothing to add first.
+          <strong><code>brew upgrade --cask caduceus</code></strong> to update ·
+          <strong><code>brew uninstall --cask caduceus</code></strong> to remove it, or
+          <code>--zap</code> as well to take your settings and clipboard history with it.
+          The cask clears the quarantine flag the same way the script above does — read it in
+          <a href="https://github.com/GeoWizard4645/caduceus/blob/main/homebrew/caduceus.rb" rel="noopener">the cask</a>,
+          or pass <code>--no-quarantine</code> to approve the app yourself.
         </p>
       </div>
 
@@ -820,8 +850,9 @@
             and
             <a href="https://github.com/NousResearch/hermes-agent" rel="noopener">Hermes Agent on GitHub</a>
             if you prefer to install by hand).
-            <strong>Do not worry if you picked option 1 first</strong> — you can run this same command later;
-            it skips what is already installed and only fills in AI pieces.
+            <strong>Do not worry if you installed Caduceus already</strong> — by any of the other
+            routes — you can run this same command later; it skips what is already installed and
+            only fills in the AI pieces.
           </p>
 
           <ul class="opts" id="opts"></ul>
@@ -833,6 +864,17 @@
 
           <p class="cmd-meta" id="bundle-meta"></p>
           <p class="opts-note" id="opts-note"></p>
+
+          <p class="install-alt-label">or with Homebrew</p>
+          <div class="cmd">
+            <code id="brew-stack-cmd"><span class="prompt">$ </span>brew install --cask geowizard4645/caduceus/caduceus &amp;&amp; brew install ollama &amp;&amp; curl -fsSL https://vivaanshahani.com/caduceus/install.sh | bash -s -- --with=hermes --pull=qwen3.5:4b --ai=qwen3.5:4b</code>
+            <button class="copy" id="brew-stack-copy" type="button">Copy</button>
+          </div>
+          <p class="cmd-meta">
+            Homebrew installs the app and Ollama; the script still does the model pull and the
+            wiring, because those are not things a package manager knows how to do. Same result,
+            and <code>brew upgrade</code> keeps the two of them current afterwards.
+          </p>
           <p class="install-follow">
             Would rather use your own AI CLI or cloud API?
             <a href="https://caduceus.vivaanshahani.com/configure-ai">Learn how to configure that with Caduceus</a>.
@@ -853,9 +895,17 @@
           <a href="https://github.com/GeoWizard4645/caduceus/releases/latest">Get the latest .dmg</a>
           — one universal build, Apple Silicon and Intel. Drag Caduceus to Applications, then run
           this once. Caduceus is not signed with an Apple Developer certificate yet, so macOS
-          quarantines it until you trust it. Options 1 and 2 run this for you.
+          quarantines it until you trust it. Every other option runs this line for you.
         </p>
         <pre>xattr -dr com.apple.quarantine /Applications/Caduceus.app</pre>
+        <p class="install-follow">
+          <strong>Need an older version?</strong>
+          <a href="https://github.com/GeoWizard4645/caduceus/releases" rel="noopener">Every release
+          is still there</a>, each with its universal <code>.dmg</code> attached — useful if a new
+          version breaks something you depend on, or if you are on an older macOS. Downgrading is
+          just installing the older <code>.dmg</code> over the top; your settings, shortcuts and
+          clipboard history live outside the app bundle and are left alone.
+        </p>
         <p class="install-follow">
           Would rather compile it? Add <code>--from-source</code> to the command in option 1 and the
           installer builds it on your Mac instead — it fetches Rust and Node and takes a few minutes.
@@ -875,7 +925,7 @@
       <div class="card">
         <h3><span class="glyph">⌘</span> Fully open source</h3>
         <p>
-          MIT-licensed from top to bottom. Read the Rust, the UI, and the installer
+          GPL-3.0 from top to bottom. Read the Rust, the UI, and the installer
           on <a href="https://github.com/GeoWizard4645/caduceus">GitHub</a> — or build
           the app yourself and run only what you compiled.
         </p>
@@ -1060,7 +1110,7 @@
             <td>Built into macOS — fast file and app search.</td>
             <td>Launcher + workflows; Powerpack unlocks the deep stuff.</td>
             <td>Modern launcher with extensions, clipboard, and AI features.</td>
-            <td class="col-caduceus">Launcher, staff shortcuts, clipboard, voice, system commands, optional agent — one MIT app.</td>
+            <td class="col-caduceus">Launcher, staff shortcuts, clipboard, voice, system commands, optional agent — one open-source app.</td>
           </tr>
           <tr>
             <td class="topic">Price</td>
@@ -1257,7 +1307,7 @@ export default async function (input, ctx) {
       <a href="https://caduceus.vivaanshahani.com/docs">Docs</a> ·
       <a href="mailto:caduceus@vivaanshahani.com">Contact</a>
     </p>
-    <p>MIT licensed. Built by Vivaan Shahani.</p>
+    <p>GPL-3.0 licensed. Built by Vivaan Shahani.</p>
   </div>
 </footer>
 
@@ -1506,7 +1556,13 @@ export default async function (input, ctx) {
 
   // Copy buttons. The command text is read from the DOM rather than duplicated
   // in JS, so there is only one place to change it.
-  for (const [buttonId, codeId] of [["copy", "cmd"], ["copy2", "cmd2"], ["bundle-copy", "bundle-cmd"]]) {
+  for (const [buttonId, codeId] of [
+    ["copy", "cmd"],
+    ["brew-copy", "brew-cmd"],
+    ["brew-stack-copy", "brew-stack-cmd"],
+    ["copy2", "cmd2"],
+    ["bundle-copy", "bundle-cmd"],
+  ]) {
     const button = document.getElementById(buttonId);
     const code = document.getElementById(codeId);
     if (!button || !code) continue;

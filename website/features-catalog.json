@@ -709,6 +709,10 @@
       "blurb": "macOS settings, the Finder, power and the session — driven by the tools macOS already ships, so none of it needs anything installed.",
       "items": [
         {
+          "name": "Force quit something",
+          "detail": "Every running process, sorted by what is actually costing you, refreshed as you watch. Stop sends SIGTERM so a program can save first; Force is a second, separate choice."
+        },
+        {
           "name": "Toggle dark mode",
           "detail": "Switches macOS between light and dark appearance. Needs permission to control System Events, which macOS asks for the first time."
         },
@@ -814,6 +818,42 @@
         {
           "name": "What is playing",
           "detail": "Copies the current track and artist."
+        },
+        {
+          "name": "Spotify: play or pause",
+          "detail": "Toggles playback without switching to Spotify. Needs Automation permission for Spotify, which macOS asks for once."
+        },
+        {
+          "name": "Spotify: next track",
+          "detail": "Skips forward. Needs Automation permission for Spotify, which macOS asks for once."
+        },
+        {
+          "name": "Spotify: previous track",
+          "detail": "Back one track. Needs Automation permission for Spotify, which macOS asks for once."
+        },
+        {
+          "name": "Spotify: what is playing",
+          "detail": "The current track, artist and album, ready to paste. Needs Automation permission for Spotify, which macOS asks for once."
+        },
+        {
+          "name": "Spotify: copy a link to this track",
+          "detail": "The share URL for whatever is playing. Needs Automation permission for Spotify, which macOS asks for once."
+        },
+        {
+          "name": "Spotify: toggle shuffle",
+          "detail": "Turns shuffle on or off. Needs Automation permission for Spotify, which macOS asks for once."
+        },
+        {
+          "name": "Spotify: toggle repeat",
+          "detail": "Turns repeat on or off. Needs Automation permission for Spotify, which macOS asks for once."
+        },
+        {
+          "name": "Spotify: louder",
+          "detail": "Raises Spotify's own volume by ten, without touching the system volume. Needs Automation permission for Spotify, which macOS asks for once."
+        },
+        {
+          "name": "Spotify: quieter",
+          "detail": "Lowers Spotify's own volume by ten. Needs Automation permission for Spotify, which macOS asks for once."
         }
       ]
     },
@@ -822,6 +862,10 @@
       "title": "Screen & text",
       "blurb": "Capture the screen and read text off it. Recognition runs on-device through Apple's Vision framework; no image leaves the machine.",
       "items": [
+        {
+          "name": "Record the screen",
+          "detail": "Screen video with the audio your Mac is playing — the thing ⇧⌘5 cannot do without an audio driver. Your microphone goes on its own track. Needs macOS 13 and the Screen Recording permission."
+        },
         {
           "name": "Copy text from the screen",
           "detail": "Drag a box over anything on screen — a screenshot, a video still, an error dialog — and the text inside it is recognised and copied. Recognition runs on-device through Apple's Vision framework, and the capture is deleted as soon as it has been read."
@@ -1044,6 +1088,14 @@
       "blurb": "Actions on the current Finder selection. Deletion always means the Trash, never an unrecoverable remove.",
       "items": [
         {
+          "name": "Free up disk space",
+          "detail": "What is taking your disk, and getting it back. Caches, logs, build intermediates and the leftovers of apps you removed — measured, explained one by one, and moved to the Trash rather than deleted. Also uninstalls an app properly, with everything it scattered through your Library."
+        },
+        {
+          "name": "Tidy a folder",
+          "detail": "Files a messy Desktop (or any folder) into subfolders by what things are, when they were changed, or how big they are. Shows you the plan first and moves nothing until you say so — and Undo puts every file back."
+        },
+        {
           "name": "Empty the Trash",
           "detail": "Empties the Trash through Finder, so the usual warnings about locked items still apply."
         },
@@ -1149,6 +1201,26 @@
       "blurb": "The small things that are faster to type than to go and find.",
       "items": [
         {
+          "name": "Sticky notes",
+          "detail": "Somewhere to put four words before you lose them. Saves as you type, survives a restart, and never asks you to name a file."
+        },
+        {
+          "name": "Colors",
+          "detail": "Pick a colour from anywhere on screen, or type any notation, and get every other notation, its name, its tints and shades, what goes with it, and whether text on it passes WCAG. Pull a palette out of an image too."
+        },
+        {
+          "name": "Convert units",
+          "detail": "Length, weight, temperature, volume, area, speed, time, data, pressure, energy and angle — all offline arithmetic on definitions. Currency too, which is the one thing here that needs the internet and says so."
+        },
+        {
+          "name": "Meeting notes",
+          "detail": "Records both sides of a call — the room through system audio, you through the microphone — transcribes on-device as it goes, and keeps your notes beside the transcript. Nothing is uploaded and no bot joins the meeting."
+        },
+        {
+          "name": "Cite this page",
+          "detail": "Reads whatever your browser has in front and writes the citation in MLA, APA, Chicago, Harvard, IEEE, Vancouver and BibTeX at once. Fills in the author and date from the page when you ask it to, and admits when it cannot rather than inventing one."
+        },
+        {
           "name": "Eject all disks",
           "detail": "Ejects every removable volume under /Volumes, and says which ones refused."
         },
@@ -1183,6 +1255,42 @@
         {
           "name": "Open the Manage window  ·  manage …",
           "detail": "The tabbed window for everything with live state: keep-awake sessions, sound devices, listening ports, Docker containers and this Mac's details. Tabs stay open while you use another, like a browser — ⌘1–⌘5 switch, ⌘W closes."
+        },
+        {
+          "name": "Chrome: new tab",
+          "detail": "Opens a tab in the front window. Needs Automation permission for Google Chrome, which macOS asks for once."
+        },
+        {
+          "name": "Chrome: new window",
+          "detail": "A fresh window. Needs Automation permission for Google Chrome, which macOS asks for once."
+        },
+        {
+          "name": "Chrome: new incognito window",
+          "detail": "A window that keeps no history. Needs Automation permission for Google Chrome, which macOS asks for once."
+        },
+        {
+          "name": "Chrome: copy this page's address",
+          "detail": "The URL of the tab in front. Needs Automation permission for Google Chrome, which macOS asks for once."
+        },
+        {
+          "name": "Chrome: copy this page's title",
+          "detail": "The title of the tab in front. Needs Automation permission for Google Chrome, which macOS asks for once."
+        },
+        {
+          "name": "Chrome: copy every open tab",
+          "detail": "Title and address of every tab in the front window, one per line. Needs Automation permission for Google Chrome, which macOS asks for once."
+        },
+        {
+          "name": "Safari: copy this page's address",
+          "detail": "The URL of the tab in front. Needs Automation permission for Safari, which macOS asks for once."
+        },
+        {
+          "name": "Run an Apple Shortcut  ·  shortcut …",
+          "detail": "Runs any shortcut from the Shortcuts app by name, with optional text as its input. Everything you have already built in Shortcuts is reachable from the search bar."
+        },
+        {
+          "name": "List your Apple Shortcuts",
+          "detail": "Every shortcut the Shortcuts app knows about, so you can see what is runnable."
         }
       ]
     }

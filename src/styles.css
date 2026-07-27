@@ -39,6 +39,13 @@
   /* Glass tuning — referenced by the .glass utility below. */
   --c-glass-tint: 18 19 27;
   --c-glass-alpha: 0.72;
+
+  /* Command Center customisation, written by `applyAppearance`. Declared here
+     so every surface has a sane value before settings have loaded. */
+  --cad-radius: 14px;
+  --cad-scale: 1;
+  --cad-backdrop-opacity: 0.35;
+  --cad-backdrop-blur: 8px;
   --c-glass-hair: 255 255 255;
   --c-glass-hair-alpha: 0.08;
 }
@@ -155,6 +162,30 @@
 @layer components {
   /* The core "pane" look: a translucent, blurred slab with a top hairline that
      fakes a light source from above. Used by every floating surface. */
+  /* The user's own background image, if they have chosen one.
+     A pseudo-element rather than a background on the element itself: the image
+     needs its own opacity and blur without dragging the text on top into them,
+     and `filter` on a parent applies to every child. */
+  .has-backdrop::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    background-image: var(--cad-backdrop);
+    background-size: cover;
+    background-position: center;
+    opacity: var(--cad-backdrop-opacity);
+    filter: blur(var(--cad-backdrop-blur));
+    border-radius: inherit;
+  }
+
+  /* Everything that is not the backdrop sits above it. */
+  .has-backdrop > * {
+    position: relative;
+    z-index: 1;
+  }
+
   .glass {
     background: rgb(var(--c-glass-tint) / var(--c-glass-alpha));
     backdrop-filter: blur(32px) saturate(180%);

@@ -84,6 +84,54 @@ export function applyAppearance(appearance: AppearanceSettings): void {
 
   // Solid surfaces instead of translucent ones.
   root.style.setProperty("--c-glass-alpha", appearance.reduceTransparency ? "1" : mode === "dark" ? "0.72" : "0.78");
+
+  // --- the knobs that only shape the Command Center ------------------------
+  root.style.setProperty("--cad-radius", `${clamp(appearance.windowRadius ?? 14, 0, 28)}px`);
+  root.style.setProperty("--cad-scale", String(clamp(appearance.uiScale ?? 1, 0.85, 1.4)));
+  root.style.setProperty(
+    "--cad-backdrop-opacity",
+    String(clamp(appearance.backgroundOpacity ?? 0.35, 0, 1)),
+  );
+  root.style.setProperty("--cad-backdrop-blur", `${clamp(appearance.backgroundBlur ?? 8, 0, 40)}px`);
+}
+
+const clamp = (value: number, low: number, high: number) =>
+  Number.isFinite(value) ? Math.min(high, Math.max(low, value)) : low;
+
+/**
+ * Point the document at the chosen background image, or clear it.
+ *
+ * Separate from [`applyAppearance`] because it has to ask Rust where the file
+ * is — asynchronous work the synchronous every-render path must not wait on.
+ *
+ * Served through Tauri's asset protocol, the same route custom shortcut icons
+ * already take (see `ShortcutIcon`), so the file never has to be read into the
+ * webview as a base64 string.
+ */
+export async function applyBackdrop(
+  token: string,
+  resolve: (token: string) => Promise<string | null>,
+): Promise<void> {
+  const root = document.documentElement;
+
+  if (!token) {
+    root.style.removeProperty("--cad-backdrop");
+    return;
+  }
+
+  try {
+    const path = await resolve(token);
+    if (!path) {
+      root.style.removeProperty("--cad-backdrop");
+      return;
+    }
+    const { convertFileSrc } = await import("@tauri-apps/api/core");
+    root.style.setProperty("--cad-backdrop", `url("${convertFileSrc(path)}")`);
+  } catch {
+    // A background that will not load is a cosmetic failure. Leaving the
+    // variable unset means no image, which is a perfectly good window.
+    root.style.removeProperty("--cad-backdrop");
+  }
 }
 
 /**

@@ -29,6 +29,9 @@ pub const VOICE_RESULT_EVENT: &str = "caduceus://voice-result";
 pub enum VoiceState {
     Idle,
     Recording,
+    /// Held: the session is alive and the transcript is intact, but no audio is
+    /// reaching the recogniser.
+    Paused,
     Transcribing,
 }
 
@@ -49,6 +52,8 @@ pub struct VoiceRuntime {
     /// is torn down the moment it finishes instead of becoming a recording
     /// nobody asked for.
     abandon: Arc<AtomicBool>,
+    /// Whether the live session is currently held. Read by the recording HUD.
+    paused: Arc<AtomicBool>,
 }
 
 impl VoiceRuntime {
@@ -141,8 +146,42 @@ impl VoiceRuntime {
         if self.starting.load(Ordering::SeqCst) {
             self.abandon.store(true, Ordering::SeqCst);
         }
+        self.paused.store(false, Ordering::SeqCst);
         if let Some(active) = self.active.lock().take() {
             close_session(active);
+        }
+    }
+
+    pub fn is_paused(&self) -> bool {
+        self.paused.load(Ordering::SeqCst)
+    }
+
+    /// Hold the recording without ending it.
+    ///
+    /// The session, the microphone tap and everything said so far stay exactly
+    /// where they are; only the feed into the recogniser stops. That is what
+    /// makes "hold space to pause" usable — a pause that discarded the
+    /// transcript would be a cancel with a friendlier name.
+    ///
+    /// Only the live macOS backend can do this. Batch capture is a single
+    /// recording with no seam to pause at, so it reports honestly rather than
+    /// pretending.
+    pub fn set_paused(&self, paused: bool) -> Result<bool, String> {
+        let mut guard = self.active.lock();
+        let Some(active) = guard.as_mut() else {
+            return Err("Nothing is recording.".into());
+        };
+        match active {
+            #[cfg(target_os = "macos")]
+            ActiveRecording::Live(live) => {
+                live.set_paused(paused)?;
+                self.paused.store(paused, Ordering::SeqCst);
+                Ok(paused)
+            }
+            ActiveRecording::Batch(_) => {
+                Err("Pausing needs the on-device speech backend; this recording cannot be held."
+                    .into())
+            }
         }
     }
 }

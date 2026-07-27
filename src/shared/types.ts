@@ -213,6 +213,16 @@ export interface AppearanceSettings {
   reduceTransparency: boolean;
   staffIdleAnimation: boolean;
   staffMarkIcon: string;
+  /** Empty for none; `image:command-center-background.png` once chosen. */
+  commandCenterBackground: string;
+  /** 0–1. Low by default: decoration must not cost readability. */
+  backgroundOpacity: number;
+  /** Pixels, 0–40. What makes an arbitrary photograph usable behind text. */
+  backgroundBlur: number;
+  /** Command Center corner radius, 0–28px. */
+  windowRadius: number;
+  /** Command Center font scale, 0.85–1.4. */
+  uiScale: number;
 }
 
 export interface Settings {
@@ -463,7 +473,7 @@ export type AgentStep =
 // Voice
 // ---------------------------------------------------------------------------
 
-export type VoiceState = "idle" | "recording" | "transcribing";
+export type VoiceState = "idle" | "recording" | "paused" | "transcribing";
 
 export interface RoutedText {
   route: RouteTarget;

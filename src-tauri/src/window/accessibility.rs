@@ -67,6 +67,14 @@ extern "C" {
     fn CFArrayGetValueAtIndex(array: CFArrayRef, index: CFIndex) -> CFTypeRef;
 
     fn CFDictionaryGetValue(dict: CFDictionaryRef, key: CFTypeRef) -> CFTypeRef;
+    fn CFDictionaryCreate(
+        allocator: CFTypeRef,
+        keys: *const CFTypeRef,
+        values: *const CFTypeRef,
+        num_values: CFIndex,
+        key_callbacks: *const c_void,
+        value_callbacks: *const c_void,
+    ) -> CFDictionaryRef;
 
     fn CFNumberGetValue(number: CFTypeRef, the_type: i32, value: *mut c_void) -> bool;
 
@@ -276,6 +284,7 @@ pub struct CGSize {
 #[link(name = "ApplicationServices", kind = "framework")]
 extern "C" {
     fn AXIsProcessTrusted() -> bool;
+    fn AXIsProcessTrustedWithOptions(options: CFDictionaryRef) -> bool;
     fn AXUIElementCreateSystemWide() -> AXUIElementRef;
     fn AXUIElementCreateApplication(pid: i32) -> AXUIElementRef;
     fn AXUIElementCopyAttributeValue(
@@ -304,6 +313,48 @@ extern "C" {
 pub fn is_trusted() -> bool {
     // SAFETY: no arguments, no ownership, safe to call from any thread.
     unsafe { AXIsProcessTrusted() }
+}
+
+/// Ask macOS to show its own "allow Caduceus to control this computer" prompt.
+///
+/// Used only after [`reset_grant`], and only because the pair of them together
+/// are the fix for the failure people actually hit:
+///
+/// > *Caduceus is ticked in the Accessibility list. Caduceus says Accessibility
+/// > is switched off.*
+///
+/// Both are telling the truth. macOS records the grant against the app's code
+/// signature, and Caduceus is signed ad-hoc — it has no Developer ID — so the
+/// signature changes with **every build**. Update the app and the tick stays on
+/// screen while the entry behind it now describes a binary that no longer
+/// exists. There is no API to repair that from inside the process, and toggling
+/// the switch by hand is the usual advice, which is a lot to ask of somebody who
+/// can see it is already on.
+///
+/// So: delete the stale entry, then ask again, and macOS adds a fresh one for
+/// the build that is actually running.
+pub fn prompt_for_trust() -> bool {
+    let key = CfString::new("AXTrustedCheckOptionPrompt");
+    // SAFETY: a one-entry dictionary of CFString → CFBoolean, both of which
+    // outlive the call; `AXIsProcessTrustedWithOptions` only reads it.
+    unsafe {
+        let keys = [key.as_ptr()];
+        let values = [cf_boolean(true)];
+        let options = CFDictionaryCreate(
+            std::ptr::null(),
+            keys.as_ptr(),
+            values.as_ptr(),
+            1,
+            std::ptr::null(),
+            std::ptr::null(),
+        );
+        if options.is_null() {
+            return AXIsProcessTrusted();
+        }
+        let trusted = AXIsProcessTrustedWithOptions(options);
+        CFRelease(options);
+        trusted
+    }
 }
 
 /// An owned `AXUIElement`.

@@ -252,10 +252,14 @@ export function CommandCenter() {
   return (
     <div
       className={cx(
-        "relative flex h-full w-full flex-col overflow-hidden rounded-cad-lg shadow-float",
+        "has-backdrop relative flex h-full w-full flex-col overflow-hidden shadow-float",
         floating ? "glass" : "bg-base",
       )}
+      // The radius is a setting, so it cannot be a Tailwind class.
+      style={{ borderRadius: "var(--cad-radius)", fontSize: "calc(1em * var(--cad-scale))" }}
     >
+      <DragHandle />
+
       {/* Always. The tab strip used to appear only once a second tab existed,
           which meant the window you opened with the hotkey had no visible tabs,
           no + button and nothing to suggest ⌘T would do anything — and then
@@ -289,6 +293,8 @@ export function CommandCenter() {
         })}
       </div>
 
+      <ResizeGrip />
+
       <div className="pointer-events-none absolute bottom-12 left-1/2 z-50 flex -translate-x-1/2 flex-col items-center gap-2">
         {toasts.map((toast) => (
           <div
@@ -302,6 +308,80 @@ export function CommandCenter() {
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Window chrome
+// ---------------------------------------------------------------------------
+
+/**
+ * The grab bar above the tabs.
+ *
+ * The window is borderless — no title bar, which is what makes the palette look
+ * like a palette — so there is nothing that says "you can move me". The whole
+ * strip has always been draggable; this is the two millimetres of dots that
+ * admit it.
+ */
+function DragHandle() {
+  return (
+    <div
+      data-tauri-drag-region
+      title="Drag to move"
+      className="drag-region flex h-4 shrink-0 cursor-grab items-center justify-center active:cursor-grabbing"
+    >
+      <span
+        aria-hidden="true"
+        className="pointer-events-none flex gap-[3px] opacity-40 transition-opacity hover:opacity-70"
+      >
+        {[0, 1, 2].map((i) => (
+          <span key={i} className="h-[3px] w-[3px] rounded-full bg-ink-faint" />
+        ))}
+      </span>
+    </div>
+  );
+}
+
+/**
+ * The corner you drag to resize.
+ *
+ * Same problem as the drag handle: a borderless window has resizable edges and
+ * no way of saying so. macOS draws no grow box on a window with no frame, so
+ * this is one.
+ *
+ * `startResizeDragging` hands the gesture to the window manager, which is what
+ * makes the resize track the pointer at the compositor's frame rate instead of
+ * ours — dragging a corner by setting the window size from mouse events looks
+ * like it is lagging, because it is.
+ */
+function ResizeGrip() {
+  const onPointerDown = async (event: React.PointerEvent) => {
+    // Left button only: a right-drag on the corner should open nothing and
+    // resize nothing.
+    if (event.button !== 0) return;
+    event.preventDefault();
+    try {
+      const { getCurrentWindow } = await import("@tauri-apps/api/window");
+      await getCurrentWindow().startResizeDragging("SouthEast");
+    } catch {
+      // Not in a Tauri window, or the runtime refused. The window is still
+      // resizable from its edges either way.
+    }
+  };
+
+  return (
+    <div
+      onPointerDown={(event) => void onPointerDown(event)}
+      title="Drag to resize"
+      aria-hidden="true"
+      className="no-drag absolute bottom-0 right-0 z-50 h-4 w-4 cursor-nwse-resize"
+    >
+      {/* Three lines, shortest at the corner — the shape every resize grip has
+          had since the classic Mac OS grow box. */}
+      <svg viewBox="0 0 16 16" className="h-4 w-4 stroke-ink-faint opacity-50">
+        <path d="M15 5 L5 15 M15 9 L9 15 M15 13 L13 15" strokeWidth="1.2" strokeLinecap="round" />
+      </svg>
     </div>
   );
 }

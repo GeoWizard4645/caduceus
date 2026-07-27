@@ -60,6 +60,7 @@ Options:
       --notes-file F   Use F as the release notes body instead of the commit log.
       --draft          Create the GitHub release as a draft.
       --skip-tests     Skip the gates and the Rust tests. For re-runs only.
+      --skip-cask      Do not update the Homebrew tap.
   -n, --dry-run        Print every step; change nothing, push nothing.
   -h, --help           This.
 
@@ -76,6 +77,7 @@ NOTES_FILE=""
 COMMIT_ALL=0
 DRAFT=0
 SKIP_TESTS=0
+SKIP_CASK=0
 DRY_RUN=0
 
 while [[ $# -gt 0 ]]; do
@@ -85,6 +87,7 @@ while [[ $# -gt 0 ]]; do
     -a|--all)        COMMIT_ALL=1; shift ;;
     --draft)         DRAFT=1; shift ;;
     --skip-tests)    SKIP_TESTS=1; shift ;;
+    --skip-cask)     SKIP_CASK=1; shift ;;
     -n|--dry-run)    DRY_RUN=1; shift ;;
     -h|--help)       usage; exit 0 ;;
     -*)              die "unknown option $1 (try --help)" ;;
@@ -338,6 +341,28 @@ fi
 
 run gh "${GH_ARGS[@]}"
 
+# --- homebrew --------------------------------------------------------------
+
+# After the release, not before: the cask's checksum is of the asset attached to
+# it, and a tap pointing at a download that does not exist yet is worse than a
+# tap that is a minute behind.
+if (( SKIP_CASK )); then
+  step "Skipping the Homebrew tap (--skip-cask)"
+elif (( DRAFT )); then
+  step "Skipping the Homebrew tap (this is a draft)"
+  note "publish the draft, then: scripts/publish-cask.sh $VERSION"
+elif (( DRY_RUN )); then
+  step "Updating the Homebrew tap"
+  note "would run: scripts/publish-cask.sh $VERSION $DMG"
+else
+  # A tap that fails to update is a bad afternoon, not a bad release: the DMG,
+  # the tag and the installer are all already live. Report it and carry on.
+  if ! bash "$ROOT/scripts/publish-cask.sh" "$VERSION" "$DMG"; then
+    printf '\n%swarning:%s the Homebrew tap was not updated. The release itself is fine.\n' "$RED" "$OFF" >&2
+    printf '    Retry with: scripts/publish-cask.sh %s\n' "$VERSION" >&2
+  fi
+fi
+
 # --- verify ----------------------------------------------------------------
 
 if (( DRY_RUN )); then
@@ -371,3 +396,4 @@ fi
 step "Released $TAG"
 note "https://github.com/$REPO/releases/tag/$TAG"
 note "curl -fsSL https://vivaanshahani.com/caduceus/install.sh | bash"
+(( SKIP_CASK )) || note "brew install --cask geowizard4645/caduceus/caduceus"

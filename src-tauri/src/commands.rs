@@ -415,6 +415,22 @@ pub fn clear_staff_mark<R: Runtime>(app: AppHandle<R>) -> Res<()> {
     crate::staff_mark::clear_mark(&app)
 }
 
+/// Where the Command Center's background image is on disk, if there is one.
+#[tauri::command]
+pub fn resolve_backdrop<R: Runtime>(app: AppHandle<R>, token: String) -> Res<Option<String>> {
+    Ok(crate::backdrop::resolve_path(&app, &token).map(|p| p.to_string_lossy().into_owned()))
+}
+
+#[tauri::command]
+pub fn import_backdrop<R: Runtime>(app: AppHandle<R>, source_path: String) -> Res<String> {
+    crate::backdrop::import(&app, std::path::Path::new(&source_path))
+}
+
+#[tauri::command]
+pub fn clear_backdrop<R: Runtime>(app: AppHandle<R>) -> Res<()> {
+    crate::backdrop::clear(&app)
+}
+
 // ---------------------------------------------------------------------------
 // Clipboard
 // ---------------------------------------------------------------------------
@@ -620,18 +636,45 @@ pub fn agent_backend_templates() -> Vec<BackendConfig> {
 // ---------------------------------------------------------------------------
 
 /// Start recording from a UI button rather than the hotkey.
+///
+/// Routed through the same non-blocking path the hotkey uses, so the recording
+/// indicator is up before the helper handshake begins rather than after it.
 #[tauri::command]
 pub fn voice_start<R: Runtime>(
     app: AppHandle<R>,
-    runtime: tauri::State<'_, voice::VoiceRuntime>,
     settings: tauri::State<'_, SettingsManager>,
 ) -> Res<()> {
-    let emit = app.clone();
-    runtime
-        .start(&settings, move |text| {
-            let _ = emit.emit(voice::VOICE_PARTIAL_EVENT, text);
-        })
-        .map_err(|e| e.to_string())
+    crate::hotkeys::start_push_to_talk(&app, &settings);
+    Ok(())
+}
+
+/// Hold the recording, or let it go again. Returns the new paused state.
+#[tauri::command]
+pub fn voice_pause<R: Runtime>(
+    app: AppHandle<R>,
+    runtime: tauri::State<'_, voice::VoiceRuntime>,
+    paused: bool,
+) -> Res<bool> {
+    let now = runtime.set_paused(paused)?;
+    let _ = app.emit(
+        voice::VOICE_STATE_EVENT,
+        if now { voice::VoiceState::Paused } else { voice::VoiceState::Recording },
+    );
+    Ok(now)
+}
+
+/// End the recording and transcribe, from the recording HUD.
+///
+/// Deliberately not the same as [`voice_stop`]: this returns immediately and
+/// lets the result arrive on `VOICE_RESULT_EVENT`, so the HUD's Stop button can
+/// never be the thing that is waiting on transcription.
+#[tauri::command]
+pub fn voice_finish<R: Runtime>(
+    app: AppHandle<R>,
+    settings: tauri::State<'_, SettingsManager>,
+) -> Res<()> {
+    crate::hotkeys::stop_push_to_talk(&app, &settings);
+    Ok(())
 }
 
 #[tauri::command]
@@ -1117,6 +1160,15 @@ pub fn window_permission() -> bool {
     window::manage::permission_granted()
 }
 
+/// Clear a stale privacy grant and ask macOS for it again.
+///
+/// The fix for "it is ticked in System Settings and the app says it is not".
+/// See [`window::grants`] for why that state exists at all.
+#[tauri::command]
+pub fn repair_permission(grant: window::grants::Grant) -> window::grants::RepairOutcome {
+    window::grants::repair(grant)
+}
+
 /// The text selected in the frontmost app, or `null` if there is none.
 #[tauri::command]
 pub fn selected_text() -> Option<String> {
@@ -1173,6 +1225,251 @@ pub fn media_action(action: tools::media::MediaAction) -> tools::ToolOutcome {
 #[tauri::command]
 pub fn ocr_screen() -> tools::ToolOutcome {
     tools::native::ocr_screen_selection()
+}
+
+// ---------------------------------------------------------------------------
+// Other applications
+// ---------------------------------------------------------------------------
+
+/// Run AppleScript and return what it printed.
+///
+/// # What this is and is not
+///
+/// This executes an arbitrary script, which is worth being precise about. The
+/// scripts come from Caduceus's own command registry — a compiled-in table in
+/// `shared/commands.ts` — and the webview that calls this loads nothing from the
+/// network (see the CSP in `tauri.conf.json`). So the trust boundary is the
+/// bundle itself, which is the same boundary as the rest of the app.
+///
+/// **If the extension system ever runs third-party JavaScript in this webview,
+/// this command must be gated behind a permission before that ships.** Running
+/// AppleScript is equivalent to driving every app on the Mac.
+///
+/// Automation failures are translated, because "-1743" is not an explanation.
+#[tauri::command]
+pub async fn run_apple_script(script: String) -> Res<String> {
+    tauri::async_runtime::spawn_blocking(move || tools::apple::run_script(&script))
+        .await
+        .map_err(|e| format!("Could not run the script: {e}"))?
+}
+
+/// Run a shortcut from the Shortcuts app, optionally with text as its input.
+#[tauri::command]
+pub async fn run_apple_shortcut(name: String, input: String) -> Res<String> {
+    tauri::async_runtime::spawn_blocking(move || tools::apple::run_shortcut(&name, &input))
+        .await
+        .map_err(|e| format!("Could not run the shortcut: {e}"))?
+}
+
+/// Every shortcut the Shortcuts app knows about.
+#[tauri::command]
+pub async fn list_apple_shortcuts() -> Res<Vec<String>> {
+    tauri::async_runtime::spawn_blocking(tools::apple::list_shortcuts)
+        .await
+        .map_err(|e| format!("Could not ask the Shortcuts app: {e}"))?
+}
+
+// ---------------------------------------------------------------------------
+// Storage and cleaning
+// ---------------------------------------------------------------------------
+
+/// Measure everything reclaimable. Reads only.
+///
+/// Blocking, and genuinely slow on a full disk — it walks the trees rather than
+/// estimating, because a cleaner whose numbers are guesses is asking you to
+/// delete things on the strength of a guess.
+#[tauri::command]
+pub async fn scan_junk() -> Res<Vec<tools::cleaner::JunkGroup>> {
+    tauri::async_runtime::spawn_blocking(tools::cleaner::scan)
+        .await
+        .map_err(|e| format!("The scan could not be run: {e}"))
+}
+
+/// Every installed application, with its real size and when it was last opened.
+#[tauri::command]
+pub async fn list_installed_app_sizes() -> Res<Vec<tools::cleaner::InstalledApp>> {
+    tauri::async_runtime::spawn_blocking(tools::cleaner::installed_apps)
+        .await
+        .map_err(|e| format!("The scan could not be run: {e}"))
+}
+
+// ---------------------------------------------------------------------------
+// Folder sorting
+// ---------------------------------------------------------------------------
+
+/// Work out where everything in a folder would go. Changes nothing.
+#[tauri::command]
+pub fn sort_plan(directory: String, sort_by: tools::sorter::SortBy) -> Res<tools::sorter::SortPlan> {
+    tools::sorter::plan(&directory, sort_by)
+}
+
+/// Carry out a plan the user has looked at.
+#[tauri::command]
+pub fn sort_apply(moves: Vec<serde_json::Value>) -> Res<tools::sorter::SortResult> {
+    let parsed = parse_moves(moves)?;
+    Ok(tools::sorter::apply(&parsed))
+}
+
+/// Put everything back.
+#[tauri::command]
+pub fn sort_revert(moves: Vec<serde_json::Value>) -> Res<tools::sorter::SortResult> {
+    let parsed = parse_moves(moves)?;
+    Ok(tools::sorter::revert(&parsed))
+}
+
+/// `Move` is serialise-only on the Rust side, so the round trip is done by hand.
+///
+/// Keeping it that way is deliberate: it means the webview cannot invent a move
+/// with fields the planner never produced, and every path that gets acted on
+/// has been through `plan`.
+fn parse_moves(raw: Vec<serde_json::Value>) -> Res<Vec<tools::sorter::Move>> {
+    raw.into_iter()
+        .map(|value| {
+            let get = |key: &str| {
+                value
+                    .get(key)
+                    .and_then(|v| v.as_str())
+                    .map(str::to_string)
+                    .ok_or_else(|| format!("a move is missing its {key}"))
+            };
+            Ok(tools::sorter::Move {
+                from: get("from")?,
+                to: get("to")?,
+                folder: get("folder").unwrap_or_default(),
+                name: get("name").unwrap_or_default(),
+                bytes: value.get("bytes").and_then(|v| v.as_u64()).unwrap_or(0),
+            })
+        })
+        .collect()
+}
+
+// ---------------------------------------------------------------------------
+// Citations
+// ---------------------------------------------------------------------------
+
+/// The page in the frontmost browser.
+#[tauri::command]
+pub async fn current_page() -> Res<tools::citation::Source> {
+    tauri::async_runtime::spawn_blocking(tools::citation::current_page)
+        .await
+        .map_err(|e| format!("Could not ask the browser: {e}"))?
+}
+
+/// Fill in author and date by fetching the page. Only ever on request.
+#[tauri::command]
+pub async fn enrich_citation(source: tools::citation::Source) -> Res<tools::citation::Source> {
+    Ok(tools::citation::enrich(source).await)
+}
+
+/// One source, in every style.
+#[tauri::command]
+pub fn format_citations(
+    source: tools::citation::Source,
+    accessed: String,
+) -> Vec<tools::citation::Citation> {
+    tools::citation::format_all(&source, &accessed)
+}
+
+// ---------------------------------------------------------------------------
+// Recording
+// ---------------------------------------------------------------------------
+
+#[tauri::command]
+pub fn recording_start<R: Runtime>(
+    app: AppHandle<R>,
+    runtime: tauri::State<'_, capture::recorder::RecorderRuntime>,
+    mode: capture::recorder::RecordMode,
+    microphone: bool,
+) -> Res<String> {
+    let path = runtime.start(mode, microphone)?;
+    let _ = app.emit(RECORDING_EVENT, runtime.status());
+    Ok(path)
+}
+
+#[tauri::command]
+pub fn recording_pause<R: Runtime>(
+    app: AppHandle<R>,
+    runtime: tauri::State<'_, capture::recorder::RecorderRuntime>,
+    paused: bool,
+) -> Res<bool> {
+    let now = runtime.set_paused(paused)?;
+    let _ = app.emit(RECORDING_EVENT, runtime.status());
+    Ok(now)
+}
+
+#[tauri::command]
+pub async fn recording_stop<R: Runtime>(
+    app: AppHandle<R>,
+    runtime: tauri::State<'_, capture::recorder::RecorderRuntime>,
+) -> Res<String> {
+    // Finalising an hour of video takes real seconds, and this must not be one
+    // of the things that can freeze the interface.
+    let runtime = runtime.inner().clone();
+    let finished = tauri::async_runtime::spawn_blocking(move || {
+        let result = runtime.stop();
+        (result, runtime.status())
+    })
+    .await
+    .map_err(|e| format!("The recorder could not be stopped: {e}"))?;
+
+    let _ = app.emit(RECORDING_EVENT, finished.1);
+    finished.0
+}
+
+#[tauri::command]
+pub fn recording_status(
+    runtime: tauri::State<'_, capture::recorder::RecorderRuntime>,
+) -> capture::recorder::RecordingStatus {
+    runtime.status()
+}
+
+/// Emitted whenever the recording state changes, so every window agrees.
+pub const RECORDING_EVENT: &str = "caduceus://recording";
+
+/// Today's exchange rates for a base currency.
+///
+/// The one thing in Caduceus that needs the internet, which is why it is its
+/// own command rather than part of the converter: everything else in that tool
+/// works on a plane, and this must not be able to break it.
+#[tauri::command]
+pub async fn exchange_rates(
+    cache: tauri::State<'_, tools::rates::RateCache>,
+    base: String,
+) -> Res<tools::rates::RateTable> {
+    tools::rates::fetch(&cache, &base).await
+}
+
+/// Pick a colour from anywhere on screen.
+///
+/// Caduceus's own windows are hidden for the duration, because the whole point
+/// is to sample what is *behind* them — and because a loupe magnifying the
+/// colour picker you opened it from is a joke that stops being funny quickly.
+/// They come back however this ends, including when it is cancelled.
+///
+/// `null` means the user pressed Escape.
+#[tauri::command]
+pub async fn pick_screen_color<R: Runtime>(app: AppHandle<R>) -> Res<Option<String>> {
+    let hidden: Vec<_> = [window::COMMAND_CENTER_WINDOW, window::STAFF_WINDOW]
+        .iter()
+        .filter_map(|label| app.get_webview_window(label))
+        .filter(|w| w.is_visible().unwrap_or(false))
+        .collect();
+    for window in &hidden {
+        let _ = window.hide();
+    }
+
+    // The sampler is a whole separate process with its own run loop, so this
+    // has to be off the async runtime's shoulders.
+    let picked = tauri::async_runtime::spawn_blocking(tools::native::pick_screen_color)
+        .await
+        .map_err(|e| format!("The colour picker could not be started: {e}"))?;
+
+    for window in &hidden {
+        let _ = window.show();
+        window::configure_staff_floating(window);
+    }
+
+    picked
 }
 
 /// Read the text out of an image file.

@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 
 import * as api from "@/shared/api";
@@ -25,6 +26,36 @@ const ACCENTS = [
 ];
 
 export function AppearanceTab({ draft }: { draft: Draft }) {
+  // Resolved through Rust and served over the asset protocol, so the preview
+  // shows the real file rather than a guess at where it went.
+  const [backdropPreview, setBackdropPreview] = useState<string | null>(null);
+  const [backdropError, setBackdropError] = useState<string | null>(null);
+
+  const backdropToken = draft.settings?.appearance.commandCenterBackground ?? "";
+  useEffect(() => {
+    let cancelled = false;
+    if (!backdropToken) {
+      setBackdropPreview(null);
+      return;
+    }
+    void (async () => {
+      try {
+        const path = await api.resolveBackdrop(backdropToken);
+        const { convertFileSrc } = await import("@tauri-apps/api/core");
+        // Cache-busted: the file keeps its name when replaced, so without this
+        // the preview shows the previous image.
+        if (!cancelled) {
+          setBackdropPreview(path ? `url("${convertFileSrc(path)}?v=${Date.now()}")` : null);
+        }
+      } catch {
+        if (!cancelled) setBackdropPreview(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [backdropToken]);
+
   const settings = draft.settings;
   if (!settings) return null;
   const appearance = settings.appearance;
@@ -215,10 +246,116 @@ export function AppearanceTab({ draft }: { draft: Draft }) {
         </div>
 
         <p className="mt-4 text-2xs leading-relaxed text-ink-faint">
-          The staff stays above full-screen apps (like MacParakeet). Caduceus also respects your
-          system's “reduce motion” setting, which disables every animation regardless of what is set
-          here.
+          The staff stays above full-screen apps. Caduceus also respects your system's “reduce
+          motion” setting, which disables every animation regardless of what is set here.
         </p>
+      </Section>
+
+      <Section
+        title="The Command Center"
+        description="How the one window looks. None of this changes what anything does."
+      >
+        <Field
+          label="Background image"
+          hint="Yours, behind the results. Kept faint and blurred by default — a wallpaper that makes the list hard to read has failed at being either."
+        >
+          <div className="flex flex-wrap items-center gap-4">
+            <div
+              className="h-20 w-32 shrink-0 rounded-lg border border-line bg-base/60 bg-cover bg-center"
+              style={{
+                backgroundImage: backdropPreview ?? undefined,
+                opacity: appearance.commandCenterBackground ? 1 : 0.5,
+              }}
+            />
+            <div className="flex flex-wrap gap-2">
+              <Button
+                size="sm"
+                onClick={async () => {
+                  const path = await open({
+                    multiple: false,
+                    filters: [
+                      { name: "Images", extensions: ["png", "jpg", "jpeg", "webp", "heic"] },
+                    ],
+                  });
+                  if (!path || typeof path !== "string") return;
+                  try {
+                    const token = await api.importBackdrop(path);
+                    draft.update((d) => (d.appearance.commandCenterBackground = token));
+                  } catch (e) {
+                    setBackdropError(api.errorMessage(e));
+                  }
+                }}
+              >
+                Choose an image…
+              </Button>
+              {appearance.commandCenterBackground ? (
+                <Button
+                  size="sm"
+                  onClick={async () => {
+                    await api.clearBackdrop();
+                    draft.update((d) => (d.appearance.commandCenterBackground = ""));
+                  }}
+                >
+                  Remove it
+                </Button>
+              ) : null}
+            </div>
+          </div>
+          {backdropError && <p className="mt-2 text-2xs text-danger">{backdropError}</p>}
+        </Field>
+
+        {appearance.commandCenterBackground ? (
+          <div className="mt-4 grid gap-4 sm:grid-cols-2">
+            <Field label="How strongly it shows" hint="0 is invisible, 1 is full strength.">
+              <NumberInput
+                value={Math.round((appearance.backgroundOpacity ?? 0.35) * 100)}
+                min={0}
+                max={100}
+                step={5}
+                suffix="%"
+                onChange={(value) =>
+                  draft.update((d) => (d.appearance.backgroundOpacity = value / 100))
+                }
+              />
+            </Field>
+            <Field
+              label="Blur"
+              hint="What makes an arbitrary photograph usable behind text."
+            >
+              <NumberInput
+                value={appearance.backgroundBlur ?? 8}
+                min={0}
+                max={40}
+                step={2}
+                suffix="px"
+                onChange={(value) => draft.update((d) => (d.appearance.backgroundBlur = value))}
+              />
+            </Field>
+          </div>
+        ) : null}
+
+        <div className="mt-4 grid gap-4 sm:grid-cols-2">
+          <Field label="Corner radius" hint="0 for square corners.">
+            <NumberInput
+              value={appearance.windowRadius ?? 14}
+              min={0}
+              max={28}
+              step={2}
+              suffix="px"
+              onChange={(value) => draft.update((d) => (d.appearance.windowRadius = value))}
+            />
+          </Field>
+          <Field label="Text size" hint="Scales everything in the window together.">
+            <NumberInput
+              value={Math.round((appearance.uiScale ?? 1) * 100)}
+              min={85}
+              max={140}
+              step={5}
+              suffix="%"
+              onChange={(value) => draft.update((d) => (d.appearance.uiScale = value / 100))}
+            />
+          </Field>
+        </div>
       </Section>
     </>
   );

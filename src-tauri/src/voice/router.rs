@@ -294,6 +294,53 @@ mod tests {
     }
 
     #[test]
+    fn every_search_verb_people_actually_say_reaches_the_web() {
+        // Each of these is a phrase somebody will say out loud expecting a
+        // search, and each must strip the instruction rather than search for it.
+        for (said, expected) in [
+            ("google the best pasta in Rome", "the best pasta in Rome"),
+            ("bing tide times", "tide times"),
+            ("search for a train to Bath", "a train to Bath"),
+            ("look up the weather", "the weather"),
+            ("browse for cheap flights", "cheap flights"),
+            ("search the web for rust lifetimes", "rust lifetimes"),
+            ("search the internet for rust lifetimes", "rust lifetimes"),
+            ("internet who won the match", "who won the match"),
+        ] {
+            let r = route(said, &defaults());
+            assert_eq!(r.route, RouteTarget::WebSearch, "{said} did not route to the web");
+            assert_eq!(r.text, expected, "{said} kept the instruction in the query");
+        }
+    }
+
+    #[test]
+    fn control_phrases_beat_the_bare_computer_keyword() {
+        // "control my computer" is longer than "computer", so specificity has
+        // to pick it — otherwise the stripped text would keep "my computer".
+        let r = route("control my computer and open Mail", &defaults());
+        assert_eq!(r.route, RouteTarget::ComputerUse);
+        assert_eq!(r.matched_keyword.as_deref(), Some("control my computer"));
+        assert_eq!(r.text, "and open Mail");
+
+        let r = route("computer use close every tab", &defaults());
+        assert_eq!(r.route, RouteTarget::ComputerUse);
+        assert_eq!(r.text, "close every tab");
+    }
+
+    #[test]
+    fn an_ordinary_sentence_still_goes_to_the_ai() {
+        // The point of the default. Adding search and control keywords must not
+        // turn every sentence containing one of those words into a search.
+        for said in [
+            "how do I get a web server running on this machine",
+            "write me an email about the internet outage",
+            "what does the computer science department do",
+        ] {
+            assert_eq!(route(said, &defaults()).route, RouteTarget::PrimaryAi, "{said}");
+        }
+    }
+
+    #[test]
     fn normalization_collapses_whitespace_and_strips_punctuation() {
         assert_eq!(normalize("  Hello,   World!  "), "hello world");
         assert_eq!(normalize("search-my-mac"), "search my mac");

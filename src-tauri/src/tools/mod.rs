@@ -6,13 +6,18 @@
 //! cannot work for free does not belong in the app, it belongs on the website's
 //! list of things Caduceus deliberately does not do.
 
+pub mod apple;
 pub mod awake;
+pub mod citation;
+pub mod cleaner;
 pub mod dev;
 pub mod devenv;
 pub mod files;
 pub mod media;
 pub mod native;
 pub mod net;
+pub mod rates;
+pub mod sorter;
 pub mod system;
 pub mod text;
 

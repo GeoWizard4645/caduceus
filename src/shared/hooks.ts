@@ -10,7 +10,7 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import * as api from "./api";
-import { applyAppearance, watchSystemTheme } from "./theme";
+import { applyAppearance, applyBackdrop, watchSystemTheme } from "./theme";
 import type { Settings } from "./types";
 import { EVENTS } from "./types";
 
@@ -34,6 +34,9 @@ export function useSettings(): {
     latest.current = next;
     setSettings(next);
     applyAppearance(next.appearance);
+    // Fire-and-forget: the background image has to be resolved through Rust,
+    // and nothing on screen should wait for a decoration.
+    void applyBackdrop(next.appearance.commandCenterBackground ?? "", api.resolveBackdrop);
   }, []);
 
   const reload = useCallback(async () => {

@@ -29,6 +29,20 @@ That downloads the universal `.dmg` from the latest release, mounts it, copies
 the app to `/Applications`, removes the quarantine flag, and launches it. About
 10 MB and ten seconds, with no toolchain and nothing to configure.
 
+Or with Homebrew:
+
+```bash
+brew install --cask geowizard4645/caduceus/caduceus
+```
+
+Same app. It taps [`geowizard4645/caduceus`](https://github.com/GeoWizard4645/homebrew-caduceus)
+on the way through, so there is nothing to add first, and `brew upgrade --cask
+caduceus` keeps it current. `brew uninstall --cask caduceus` removes the app;
+add `--zap` to take the settings and clipboard history with it. The cask clears
+the quarantine flag in a `postflight` block for the reason below — it is
+[twelve lines you can read](./homebrew/caduceus.rb) — and `--no-quarantine`
+turns that into a no-op if you would rather approve the app yourself.
+
 Prefer to do it yourself? Download the `.dmg` from
 [Releases](https://github.com/GeoWizard4645/caduceus/releases), drag Caduceus to
 Applications, then run this once:
@@ -335,7 +349,8 @@ and the on-device speech helper.
 
 ## Licence
 
-MIT. See [LICENSE](LICENSE).
+GPL-3.0-or-later. See [LICENSE](LICENSE), and [NOTICE.md](NOTICE.md) for why it
+changed in v3.0.0 and who is credited. Releases up to v2.3.1 remain MIT.
 
 Hermes Agent is a separate project by [Nous Research](https://nousresearch.com),
 under its own licence.

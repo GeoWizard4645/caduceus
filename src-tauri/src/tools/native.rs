@@ -54,6 +54,38 @@ fn invoke(args: &[&str]) -> Result<String, String> {
     }
 }
 
+/// Pick a colour from anywhere on screen, with macOS's own loupe.
+///
+/// `Ok(None)` means the user pressed Escape, which is not a failure and must
+/// not be reported as one.
+///
+/// Needs no Screen Recording grant: `NSColorSampler` has the user point at what
+/// they want rather than the app reading the screen, which is both a smaller
+/// ask and a nicer interaction than a custom overlay would be.
+pub fn pick_screen_color() -> Result<Option<String>, String> {
+    let helper = helper_path().ok_or(MISSING)?;
+    let output = Command::new(&helper)
+        .arg("pick-color")
+        .output()
+        .map_err(|e| format!("Could not start the native helper: {e}"))?;
+
+    // 3 is the helper's "cancelled" code.
+    if output.status.code() == Some(3) {
+        return Ok(None);
+    }
+    if !output.status.success() {
+        let reason = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        return Err(if reason.is_empty() {
+            "The colour picker did not start.".into()
+        } else {
+            reason
+        });
+    }
+
+    let hex = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    Ok(if hex.is_empty() { None } else { Some(hex) })
+}
+
 /// Whether the helper is present, so the UI can say why a feature is missing
 /// instead of failing when it is used.
 pub fn available() -> bool {

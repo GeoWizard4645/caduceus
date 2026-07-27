@@ -470,12 +470,39 @@ pub enum RouteTarget {
     ClipboardSearch,
 }
 
+/// What a spoken phrase does, before anyone has configured anything.
+///
+/// The shape of it: **saying something is asking the AI**, because that is what
+/// most sentences are. The two exceptions announce themselves in the first
+/// words — a phrase that opens with a search verb wants the web, and one that
+/// opens with a control verb wants the machine driven.
+///
+/// Keywords are stripped when they lead, so "search the best pasta in Rome"
+/// searches for *the best pasta in Rome* rather than including the instruction
+/// in the query. Longest match wins across groups, which is why "control my
+/// computer" beats the bare "computer" and "search my mac" beats "search".
 pub fn default_keyword_groups() -> Vec<KeywordGroup> {
     vec![
         KeywordGroup {
             id: "kw-search".into(),
             name: "Web search".into(),
-            keywords: vec!["search".into(), "look up".into(), "browse".into()],
+            keywords: vec![
+                "search".into(),
+                "search for".into(),
+                "search the web for".into(),
+                "search the internet for".into(),
+                "look up".into(),
+                "lookup".into(),
+                "browse".into(),
+                "browse for".into(),
+                "google".into(),
+                "bing".into(),
+                "web search".into(),
+                "on the web".into(),
+                "on the internet".into(),
+                "internet".into(),
+                "web".into(),
+            ],
             route: RouteTarget::WebSearch,
             match_mode: KeywordMatch::LeadingWords,
             enabled: true,
@@ -483,7 +510,17 @@ pub fn default_keyword_groups() -> Vec<KeywordGroup> {
         KeywordGroup {
             id: "kw-computer".into(),
             name: "Computer use".into(),
-            keywords: vec!["computer".into(), "jarvis".into(), "search my mac".into()],
+            keywords: vec![
+                "computer use".into(),
+                "computer".into(),
+                "control my computer".into(),
+                "control my mac".into(),
+                "control the computer".into(),
+                "use my computer".into(),
+                "drive my mac".into(),
+                "jarvis".into(),
+                "search my mac".into(),
+            ],
             route: RouteTarget::ComputerUse,
             match_mode: KeywordMatch::LeadingWords,
             enabled: true,
@@ -730,6 +767,28 @@ pub struct AppearanceSettings {
     pub staff_idle_animation: bool,
     /// Built-in caduceus pixel mark when empty; `image:staff-mark.png` after upload.
     pub staff_mark_icon: String,
+    /// A background image for the Command Center.
+    ///
+    /// Empty for none; `image:command-center-background.png` once one has been
+    /// chosen. See [`crate::backdrop`].
+    pub command_center_background: String,
+    /// How strongly the background image shows through, 0.0–1.0.
+    ///
+    /// Low by default. A wallpaper behind a list of results is decoration, and
+    /// decoration that makes the results hard to read has failed at being
+    /// either.
+    pub background_opacity: f32,
+    /// Blur applied over the background image, in pixels (0–40).
+    ///
+    /// The thing that makes an arbitrary photograph usable behind text.
+    pub background_blur: u32,
+    /// Corner radius of the Command Center window, in pixels (0–28).
+    pub window_radius: u32,
+    /// Font scale for the Command Center, 0.85–1.4.
+    ///
+    /// Not a full accessibility story — macOS's own text size is that — but
+    /// enough for "this palette is too small on a 5K display".
+    pub ui_scale: f32,
 }
 
 impl Default for AppearanceSettings {
@@ -744,6 +803,11 @@ impl Default for AppearanceSettings {
             reduce_transparency: false,
             staff_idle_animation: true,
             staff_mark_icon: String::new(),
+            command_center_background: String::new(),
+            background_opacity: 0.35,
+            background_blur: 8,
+            window_radius: 14,
+            ui_scale: 1.0,
         }
     }
 }

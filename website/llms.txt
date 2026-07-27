@@ -4,7 +4,7 @@
 
 Important notes:
 
-- Fully open source (MIT) and fully customizable — hotkeys, prefixes, backends, and optional extensions.
+- Fully open source (GPL-3.0-or-later; MIT through v2.3.1) and fully customizable — hotkeys, prefixes, backends, and optional extensions.
 - No monetization, no data collection, no telemetry, and no tracking. Private and secure by default; as local as you want (offline core workflow, optional local or cloud AI only if you configure it).
 - macOS 11 (Big Sur) or later; universal binary (Apple Silicon and Intel).
 - Menu bar app only — no Dock icon. Notarized signing is not in place yet; the installer clears the quarantine attribute after download.
@@ -23,6 +23,7 @@ Important notes:
 - [README](https://github.com/GeoWizard4645/caduceus/blob/main/README.md): Install from release or source, feature overview, build instructions.
 - [Releases](https://github.com/GeoWizard4645/caduceus/releases): Latest universal `.dmg` attached to each GitHub release.
 - [install.sh](https://vivaanshahani.com/caduceus/install.sh): Curl-to-bash installer (release DMG or `--from-source`).
+- [Homebrew tap](https://github.com/GeoWizard4645/homebrew-caduceus): `brew install --cask geowizard4645/caduceus/caduceus`. Same universal DMG; the cask clears the quarantine flag in a postflight block, which `--no-quarantine` skips.
 
 ## Optional
 

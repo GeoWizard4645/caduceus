@@ -36,7 +36,108 @@ export interface CommandOutput {
   title: string;
   text: string;
   message?: string;
+  /**
+   * Structured rows, when the answer is a table rather than a paragraph.
+   *
+   * Rendered as a definition list on the command's page; `text` is still what
+   * Copy puts on the clipboard, so nothing depends on the pretty version.
+   */
+  rows?: { label: string; value: string; swatch?: string }[];
 }
+
+// ---------------------------------------------------------------------------
+// Forms
+// ---------------------------------------------------------------------------
+
+/**
+ * What a command's page asks for.
+ *
+ * # Why commands describe their own inputs
+ *
+ * Every command used to get the same page: one textarea, one Run button. That
+ * is right for "SHA-256 this" and wrong for almost everything else. Sorting
+ * lines wants a direction and a "remove duplicates" tick. Converting a colour
+ * wants a swatch you can pick from. Generating a password wants a length. Given
+ * one textarea, all of those either grew a syntax you had to know, or silently
+ * did the only thing they could.
+ *
+ * So a command declares its fields and the page builds itself. That keeps the
+ * promise — *every feature has an interface made for that feature* — without a
+ * hand-written React page per command, and it means adding a field is one line
+ * in the registry rather than a new file.
+ *
+ * Commands that need something genuinely bespoke — a colour picker that samples
+ * the screen, a sticky-notes board — name a {@link CommandDef.page} instead.
+ */
+export type Field =
+  | {
+      kind: "text";
+      id: string;
+      label: string;
+      hint?: string;
+      placeholder?: string;
+      /** A box rather than a line, for anything that can be several lines. */
+      multiline?: boolean;
+      mono?: boolean;
+      required?: boolean;
+      default?: string;
+      /**
+       * Offer "choose a file" beside this field.
+       *
+       * On by default for multiline text: anything that operates on a block of
+       * text operates just as well on a file full of it, and having to open the
+       * file and copy it out first is a chore the app can simply do.
+       */
+      file?: boolean;
+      /** Extensions the file picker should suggest, e.g. `["txt", "csv"]`. */
+      fileTypes?: string[];
+    }
+  | {
+      kind: "select";
+      id: string;
+      label: string;
+      hint?: string;
+      options: { value: string; label: string }[];
+      default?: string;
+    }
+  | {
+      kind: "number";
+      id: string;
+      label: string;
+      hint?: string;
+      min?: number;
+      max?: number;
+      step?: number;
+      default?: string;
+    }
+  | { kind: "toggle"; id: string; label: string; hint?: string; default?: string }
+  | { kind: "color"; id: string; label: string; hint?: string; default?: string }
+  | {
+      kind: "file";
+      id: string;
+      label: string;
+      hint?: string;
+      fileTypes?: string[];
+      /** Hand the command the file's text, rather than its path. */
+      readAs?: "text" | "path";
+    };
+
+export interface CommandForm {
+  fields: Field[];
+  /**
+   * Re-run on every change.
+   *
+   * Only for commands that are pure functions of their inputs and run in this
+   * process. Anything that touches the network, the disk or another app waits
+   * to be asked — otherwise typing a hostname pings it once per keystroke.
+   */
+  live?: boolean;
+  /** Label for the button. Defaults to "Run". */
+  submitLabel?: string;
+}
+
+/** Values collected from a command's form, keyed by field id. */
+export type FieldValues = Record<string, string>;
 
 /** What a command can ask the palette to do. */
 export interface CommandActions {
@@ -52,6 +153,15 @@ export interface CommandContext {
   /** Whatever was typed after the trigger word, trimmed. */
   input: string;
   actions: CommandActions;
+  /**
+   * The command's form values, keyed by field id.
+   *
+   * Empty when the command was run straight from the palette (`sha256 hello`),
+   * which is why every command has to keep working from `input` alone. A field
+   * whose id is `input` is fed from — and back into — that same string, so the
+   * common single-box case needs no special handling at either end.
+   */
+  values: FieldValues;
 }
 
 /**
@@ -91,7 +201,92 @@ export interface CommandDef {
   argumentOptional?: boolean;
   /** Shown before the command runs; Enter again confirms. */
   confirm?: string;
+  /**
+   * The fields this command's page asks for.
+   *
+   * Omitted means "one box", derived from {@link argument} — see
+   * {@link formFor}. Commands with nothing to ask for get a page with a
+   * button and their output.
+   */
+  form?: CommandForm;
+  /**
+   * A page of its own, for the handful that cannot be a form.
+   *
+   * Names a component in `src/command-center/pages/tools/`; see `ToolPage`.
+   * Reach for this only when the interaction *is* the feature — sampling a
+   * colour off the screen, arranging files on a desktop — not merely because a
+   * command has several inputs.
+   */
+  page?: ToolPageId;
+  /**
+   * Roughly how many people will ever want this, 0–100.
+   *
+   * Drives the order of the browse list and breaks ties in search. Sticky notes
+   * and "empty the Trash" are near the top; decoding a JWT is near the bottom.
+   * Not a judgement about which is more useful — a judgement about how many
+   * people know what a JWT is. See `commandWeight`.
+   */
+  reach?: number;
   run(ctx: CommandContext): Promise<CommandResult> | CommandResult;
+}
+
+/** Bespoke pages, named rather than imported so the registry stays data. */
+export type ToolPageId =
+  | "colors"
+  | "sticky-notes"
+  | "convert"
+  | "processes"
+  | "storage"
+  | "desktop-sort"
+  | "citations"
+  | "meeting"
+  | "screen-record";
+
+/**
+ * The form a command's page should render.
+ *
+ * A command with no declared form still gets a real one: a single field built
+ * from its `argument`, with file upload attached, because "paste the text" and
+ * "point at a file containing the text" are the same request.
+ */
+export function formFor(command: CommandDef): CommandForm {
+  if (command.form) return command.form;
+  if (!command.argument) return { fields: [] };
+  return {
+    fields: [
+      {
+        kind: "text",
+        id: "input",
+        label: command.argument,
+        multiline: true,
+        mono: true,
+        required: true,
+        file: true,
+      },
+    ],
+    live: LIVE_GROUPS.has(command.group),
+  };
+}
+
+/**
+ * Groups whose commands re-run on every keystroke.
+ *
+ * Both are pure functions of their input, computed in this process — hashing,
+ * case conversion, sorting lines. Everything else is a request to the network,
+ * the disk or another application, and firing one of those per keystroke is how
+ * you ping a host forty times because you typed its name.
+ */
+const LIVE_GROUPS = new Set<CommandGroupId>(["developer", "text"]);
+
+/**
+ * Reduce a command's form values to the single string its `run` expects.
+ *
+ * The bridge between the two ways a command can be invoked. `sha256 hello` from
+ * the palette has no form at all; the same command opened as a page has an
+ * `input` field. Both end up calling `run` with the same `input`.
+ */
+export function primaryValue(values: FieldValues): string {
+  return values.input ?? "";
 }
 
 export type CommandGroupId =
@@ -1823,22 +2018,604 @@ const WEIGHTS: Record<string, number> = {
   "utility.caffeinate-off": 24,
 };
 
-/** The shipped ranking weight for a command. */
+/**
+ * The shipped ranking weight for a command.
+ *
+ * # How the browse list is ordered
+ *
+ * By how many people would ever want the thing. Sticky notes, "free up disk
+ * space" and "force quit something" are near the top; decoding a JWT, minting a
+ * Nano ID and Base64 are near the bottom. That is not a judgement about which
+ * is more *useful* — it is a judgement about how many people know what a JWT
+ * is, and the empty palette is the first thing a new user sees.
+ *
+ * Two sources, plus one adjustment:
+ *
+ * 1. `command.reach`, set on the command itself, is taken as final — it is a
+ *    direct statement about that command and nothing should second-guess it.
+ * 2. Otherwise `WEIGHTS` below, or the group's baseline, **scaled down for the
+ *    groups that are specialist as a whole**.
+ *
+ * The scaling applies to the hand-tuned weights as well as the baseline, and
+ * that is the point. Those weights order the developer tools sensibly *against
+ * each other*, which they still do — but they were set when the registry was
+ * mostly developer tools, so "Generate a UUID" ended up above "free up disk
+ * space". Scaling the whole group keeps the tuning and fixes the altitude.
+ *
+ * Scaled rather than subtracted, and floored, for a reason worth keeping: a
+ * flat subtraction pushed the cheapest developer commands to *negative* weights
+ * and therefore below "Shut down" and "Log out". Those three have to stay at
+ * the bottom — that is a safety property, not a taste one, because the browse
+ * list is a place people arrow through.
+ */
 export function commandWeight(command: CommandDef): number {
-  return WEIGHTS[command.id] ?? GROUP_BASELINE[command.group];
+  if (command.reach !== undefined) return command.reach;
+  const base = WEIGHTS[command.id] ?? GROUP_BASELINE[command.group];
+  const scaled = base * SPECIALIST_SCALE[command.group];
+  return Math.round(Math.max(scaled, base > 0 ? SPECIALIST_FLOOR : base));
 }
+
+/**
+ * How much of its weight a group keeps.
+ *
+ * Only the groups that are specialist in every member. Everything else contains
+ * something a person with no technical background might plausibly want, so
+ * pushing the group down would bury the wrong things.
+ */
+const SPECIALIST_SCALE: Record<CommandGroupId, number> = {
+  windows: 1,
+  system: 1,
+  sound: 1,
+  screen: 1,
+  // Encoders, hashes, JWTs, identifiers. Every one is something you have to
+  // already know the name of before you can want it.
+  developer: 0.55,
+  text: 0.9,
+  files: 1,
+  network: 0.85,
+  // Ports, containers, SSH hosts, git repositories.
+  devenv: 0.6,
+  utilities: 1,
+};
+
+/**
+ * The lowest a *scaled* command may land.
+ *
+ * Above the session-ending commands, which sit at 6–10 and are deliberately
+ * last. Nothing that merely happens to be niche should share a floor with
+ * "Shut down".
+ */
+const SPECIALIST_FLOOR = 14;
+
+// ---------------------------------------------------------------------------
+// Pages
+// ---------------------------------------------------------------------------
+
+/**
+ * The features that are a page rather than an action.
+ *
+ * Every one of these is something you *stay in* for a minute or an hour — a
+ * board of notes, a colour you are working out, a call you are recording. They
+ * have no meaningful one-shot form, so `run` opens the tab and that is the
+ * whole command.
+ *
+ * They carry the highest `reach` values in the registry on purpose: these are
+ * the things a person who has never used a launcher wants, and the browse list
+ * should lead with them rather than with base64.
+ */
+const PAGE_COMMANDS: CommandDef[] = [
+  {
+    id: "page.sticky-notes",
+    title: "Sticky notes",
+    detail:
+      "Somewhere to put four words before you lose them. Saves as you type, survives a restart, and never asks you to name a file.",
+    group: "utilities",
+    icon: "▤",
+    keywords: [
+      "note", "notes", "sticky", "scratch", "jot", "memo", "reminder", "todo", "list",
+      "stickies", "postit", "post-it", "write",
+    ],
+    page: "sticky-notes",
+    reach: 96,
+    run: ({ actions }) => {
+      actions.openTab({ kind: "tool", commandId: "page.sticky-notes", title: "Sticky Notes" });
+      return false;
+    },
+  },
+  {
+    id: "page.colors",
+    title: "Colors",
+    detail:
+      "Pick a colour from anywhere on screen, or type any notation, and get every other notation, its name, its tints and shades, what goes with it, and whether text on it passes WCAG. Pull a palette out of an image too.",
+    group: "utilities",
+    icon: "◍",
+    keywords: [
+      "color", "colour", "hex", "rgb", "hsl", "cmyk", "picker", "eyedropper", "dropper",
+      "palette", "contrast", "wcag", "accessibility", "swatch", "tint", "shade", "convert",
+      "wheel", "harmony", "complementary", "extract",
+    ],
+    page: "colors",
+    reach: 84,
+    run: ({ actions }) => {
+      actions.openTab({ kind: "tool", commandId: "page.colors", title: "Colors" });
+      return false;
+    },
+  },
+  {
+    id: "page.convert",
+    title: "Convert units",
+    detail:
+      "Length, weight, temperature, volume, area, speed, time, data, pressure, energy and angle — all offline arithmetic on definitions. Currency too, which is the one thing here that needs the internet and says so.",
+    group: "utilities",
+    icon: "⇄",
+    keywords: [
+      "convert", "conversion", "unit", "units", "metric", "imperial", "temperature",
+      "celsius", "fahrenheit", "kelvin", "km", "miles", "kg", "pounds", "currency",
+      "exchange", "rate", "usd", "eur", "gbp", "money", "calculator",
+    ],
+    page: "convert",
+    reach: 88,
+    run: ({ actions }) => {
+      actions.openTab({ kind: "tool", commandId: "page.convert", title: "Convert" });
+      return false;
+    },
+  },
+  {
+    id: "page.meeting",
+    title: "Meeting notes",
+    detail:
+      "Records both sides of a call — the room through system audio, you through the microphone — transcribes on-device as it goes, and keeps your notes beside the transcript. Nothing is uploaded and no bot joins the meeting.",
+    group: "utilities",
+    icon: "◉",
+    keywords: [
+      "meeting", "notetaker", "note taker", "minutes", "transcript", "transcribe",
+      "record", "call", "zoom", "teams", "google meet", "meet", "webex", "facetime",
+      "slack huddle", "huddle", "interview", "lecture", "otter", "granola", "fathom",
+      "fireflies", "notes",
+    ],
+    page: "meeting",
+    reach: 90,
+    run: ({ actions }) => {
+      actions.openTab({ kind: "tool", commandId: "page.meeting", title: "Meeting notes" });
+      return false;
+    },
+  },
+  {
+    id: "page.screen-record",
+    title: "Record the screen",
+    detail:
+      "Screen video with the audio your Mac is playing — the thing ⇧⌘5 cannot do without an audio driver. Your microphone goes on its own track. Needs macOS 13 and the Screen Recording permission.",
+    group: "screen",
+    icon: "⏺",
+    keywords: [
+      "record", "recording", "screen", "capture", "video", "screencast", "system audio",
+      "internal audio", "loom", "cleanshot", "obs", "demo", "gif",
+    ],
+    page: "screen-record",
+    reach: 78,
+    run: ({ actions }) => {
+      actions.openTab({
+        kind: "tool",
+        commandId: "page.screen-record",
+        title: "Record the screen",
+      });
+      return false;
+    },
+  },
+  {
+    id: "page.storage",
+    title: "Free up disk space",
+    detail:
+      "What is taking your disk, and getting it back. Caches, logs, build intermediates and the leftovers of apps you removed — measured, explained one by one, and moved to the Trash rather than deleted. Also uninstalls an app properly, with everything it scattered through your Library.",
+    group: "files",
+    icon: "◒",
+    keywords: [
+      "storage", "disk", "space", "clean", "cleaner", "cleanup", "junk", "cache", "caches",
+      "uninstall", "uninstaller", "remove app", "delete app", "size", "full", "purge",
+      "cleanmymac", "ccleaner", "appcleaner", "daisydisk", "leftovers",
+    ],
+    page: "storage",
+    reach: 86,
+    run: ({ actions }) => {
+      actions.openTab({ kind: "tool", commandId: "page.storage", title: "Storage" });
+      return false;
+    },
+  },
+  {
+    id: "page.processes",
+    title: "Force quit something",
+    detail:
+      "Every running process, sorted by what is actually costing you, refreshed as you watch. Stop sends SIGTERM so a program can save first; Force is a second, separate choice.",
+    group: "system",
+    icon: "◑",
+    keywords: [
+      "force quit", "quit", "kill", "process", "processes", "task manager", "activity monitor",
+      "cpu", "memory", "ram", "hung", "frozen", "not responding", "beachball", "pid",
+    ],
+    page: "processes",
+    reach: 82,
+    run: ({ actions }) => {
+      actions.openTab({ kind: "tool", commandId: "page.processes", title: "Processes" });
+      return false;
+    },
+  },
+  {
+    id: "page.desktop-sort",
+    title: "Tidy a folder",
+    detail:
+      "Files a messy Desktop (or any folder) into subfolders by what things are, when they were changed, or how big they are. Shows you the plan first and moves nothing until you say so — and Undo puts every file back.",
+    group: "files",
+    icon: "▦",
+    keywords: [
+      "tidy", "sort", "organise", "organize", "desktop", "clean desktop", "arrange", "file",
+      "folder", "downloads", "declutter", "group",
+    ],
+    page: "desktop-sort",
+    reach: 80,
+    run: ({ actions }) => {
+      actions.openTab({ kind: "tool", commandId: "page.desktop-sort", title: "Tidy a folder" });
+      return false;
+    },
+  },
+  {
+    id: "page.citations",
+    title: "Cite this page",
+    detail:
+      "Reads whatever your browser has in front and writes the citation in MLA, APA, Chicago, Harvard, IEEE, Vancouver and BibTeX at once. Fills in the author and date from the page when you ask it to, and admits when it cannot rather than inventing one.",
+    group: "utilities",
+    icon: "❝",
+    keywords: [
+      "cite", "citation", "reference", "bibliography", "mla", "apa", "chicago", "harvard",
+      "ieee", "vancouver", "bibtex", "source", "essay", "paper", "zotero",
+    ],
+    page: "citations",
+    reach: 74,
+    run: ({ actions }) => {
+      actions.openTab({ kind: "tool", commandId: "page.citations", title: "Cite this page" });
+      return false;
+    },
+  },
+];
+
+// ---------------------------------------------------------------------------
+// Other applications
+// ---------------------------------------------------------------------------
+
+/**
+ * Driving apps you already have, over AppleScript.
+ *
+ * These need Automation permission for the app in question, which macOS asks
+ * for the first time and Caduceus explains if it is refused. Nothing here
+ * launches an app that is not already running — a "next track" that opens
+ * Spotify to play nothing is not what anybody meant.
+ */
+interface AppCommandSpec {
+  id: string;
+  title: string;
+  detail: string;
+  app: string;
+  script: string;
+  keywords: string[];
+  reach: number;
+  /** Shows what it produced rather than a toast. */
+  output?: string;
+}
+
+const SPOTIFY_SPECS: AppCommandSpec[] = [
+  {
+    id: "spotify.play-pause",
+    title: "Spotify: play or pause",
+    detail: "Toggles playback without switching to Spotify.",
+    app: "Spotify",
+    script: "playpause",
+    keywords: ["spotify", "play", "pause", "music", "resume", "stop"],
+    reach: 70,
+  },
+  {
+    id: "spotify.next",
+    title: "Spotify: next track",
+    detail: "Skips forward.",
+    app: "Spotify",
+    script: "next track",
+    keywords: ["spotify", "next", "skip", "forward", "track"],
+    reach: 66,
+  },
+  {
+    id: "spotify.previous",
+    title: "Spotify: previous track",
+    detail: "Back one track.",
+    app: "Spotify",
+    script: "previous track",
+    keywords: ["spotify", "previous", "back", "last", "track"],
+    reach: 60,
+  },
+  {
+    id: "spotify.now-playing",
+    title: "Spotify: what is playing",
+    detail: "The current track, artist and album, ready to paste.",
+    app: "Spotify",
+    script:
+      'return (name of current track) & " — " & (artist of current track) & " · " & (album of current track)',
+    keywords: ["spotify", "now playing", "current", "track", "song", "what", "artist"],
+    reach: 64,
+    output: "Now playing",
+  },
+  {
+    id: "spotify.copy-link",
+    title: "Spotify: copy a link to this track",
+    detail: "The share URL for whatever is playing.",
+    app: "Spotify",
+    script:
+      'set u to spotify url of current track\nreturn "https://open.spotify.com/track/" & (last text item of (my split(u, ":")))',
+    keywords: ["spotify", "link", "share", "url", "copy", "track"],
+    reach: 52,
+    output: "Track link",
+  },
+  {
+    id: "spotify.shuffle",
+    title: "Spotify: toggle shuffle",
+    detail: "Turns shuffle on or off.",
+    app: "Spotify",
+    script: "set shuffling to not shuffling",
+    keywords: ["spotify", "shuffle", "random"],
+    reach: 46,
+  },
+  {
+    id: "spotify.repeat",
+    title: "Spotify: toggle repeat",
+    detail: "Turns repeat on or off.",
+    app: "Spotify",
+    script: "set repeating to not repeating",
+    keywords: ["spotify", "repeat", "loop"],
+    reach: 44,
+  },
+  {
+    id: "spotify.volume-up",
+    title: "Spotify: louder",
+    detail: "Raises Spotify's own volume by ten, without touching the system volume.",
+    app: "Spotify",
+    script: "set sound volume to (sound volume + 10)",
+    keywords: ["spotify", "volume", "louder", "up"],
+    reach: 40,
+  },
+  {
+    id: "spotify.volume-down",
+    title: "Spotify: quieter",
+    detail: "Lowers Spotify's own volume by ten.",
+    app: "Spotify",
+    script: "set sound volume to (sound volume - 10)",
+    keywords: ["spotify", "volume", "quieter", "down"],
+    reach: 40,
+  },
+];
+
+const BROWSER_SPECS: AppCommandSpec[] = [
+  {
+    id: "chrome.new-tab",
+    title: "Chrome: new tab",
+    detail: "Opens a tab in the front window.",
+    app: "Google Chrome",
+    script: "tell front window to make new tab",
+    keywords: ["chrome", "tab", "new", "browser"],
+    reach: 62,
+  },
+  {
+    id: "chrome.new-window",
+    title: "Chrome: new window",
+    detail: "A fresh window.",
+    app: "Google Chrome",
+    script: "make new window",
+    keywords: ["chrome", "window", "new", "browser"],
+    reach: 58,
+  },
+  {
+    id: "chrome.incognito",
+    title: "Chrome: new incognito window",
+    detail: "A window that keeps no history.",
+    app: "Google Chrome",
+    script: 'make new window with properties {mode:"incognito"}',
+    keywords: ["chrome", "incognito", "private", "window", "browser"],
+    reach: 60,
+  },
+  {
+    id: "chrome.copy-url",
+    title: "Chrome: copy this page's address",
+    detail: "The URL of the tab in front.",
+    app: "Google Chrome",
+    script: "return URL of active tab of front window",
+    keywords: ["chrome", "url", "link", "copy", "address", "page"],
+    reach: 64,
+    output: "Page address",
+  },
+  {
+    id: "chrome.copy-title",
+    title: "Chrome: copy this page's title",
+    detail: "The title of the tab in front.",
+    app: "Google Chrome",
+    script: "return title of active tab of front window",
+    keywords: ["chrome", "title", "copy", "page", "name"],
+    reach: 44,
+    output: "Page title",
+  },
+  {
+    id: "chrome.copy-all-tabs",
+    title: "Chrome: copy every open tab",
+    detail: "Title and address of every tab in the front window, one per line.",
+    app: "Google Chrome",
+    script:
+      'set out to ""\nrepeat with t in tabs of front window\nset out to out & (title of t) & " — " & (URL of t) & linefeed\nend repeat\nreturn out',
+    keywords: ["chrome", "tabs", "all", "copy", "list", "session"],
+    reach: 48,
+    output: "Open tabs",
+  },
+  {
+    id: "safari.copy-url",
+    title: "Safari: copy this page's address",
+    detail: "The URL of the tab in front.",
+    app: "Safari",
+    script: "return URL of current tab of front window",
+    keywords: ["safari", "url", "link", "copy", "address", "page"],
+    reach: 50,
+    output: "Page address",
+  },
+];
+
+/**
+ * Turn a spec into a command.
+ *
+ * The `tell application` wrapper is added here rather than written out in every
+ * spec, and the "is it running" guard with it: every one of these should be a
+ * no-op with an explanation when the app is closed, not a reason for it to
+ * launch.
+ */
+function appCommand(spec: AppCommandSpec): CommandDef {
+  return {
+    id: spec.id,
+    title: spec.title,
+    detail: `${spec.detail} Needs Automation permission for ${spec.app}, which macOS asks for once.`,
+    group: spec.id.startsWith("spotify") ? "sound" : "utilities",
+    icon: spec.id.startsWith("spotify") ? "♫" : "◇",
+    keywords: spec.keywords,
+    reach: spec.reach,
+    async run({ actions }) {
+      const script = [
+        `if application "${spec.app}" is not running then return "\\u0000not-running"`,
+        `tell application "${spec.app}"`,
+        spec.script,
+        "end tell",
+      ].join("\n");
+
+      try {
+        const result = await api.runAppleScript(script);
+        if (result.trim() === " not-running" || result.includes("not-running")) {
+          actions.notify(`${spec.app} is not running.`, "error");
+          return false;
+        }
+        if (spec.output) {
+          const text = result.trim();
+          if (!text) {
+            actions.notify(`${spec.app} had nothing to report.`, "error");
+            return false;
+          }
+          await copyText(text);
+          actions.showOutput({ title: spec.output, text, message: "Copied" });
+          return false;
+        }
+        actions.notify(`${spec.title.split(": ")[1] ?? "Done"}.`);
+        return false;
+      } catch (error) {
+        actions.notify(api.errorMessage(error), "error");
+        return false;
+      }
+    },
+  };
+}
+
+const APP_COMMANDS: CommandDef[] = [...SPOTIFY_SPECS, ...BROWSER_SPECS].map(appCommand);
+
+// ---------------------------------------------------------------------------
+// Apple Shortcuts
+// ---------------------------------------------------------------------------
+
+/**
+ * Run a shortcut from the Shortcuts app.
+ *
+ * One command rather than one per shortcut: which shortcuts exist is a property
+ * of the user's machine, and the palette can offer them by name through the
+ * live-list provider instead of the registry pretending to know.
+ */
+const SHORTCUTS_COMMANDS: CommandDef[] = [
+  {
+    id: "apple.run-shortcut",
+    title: "Run an Apple Shortcut",
+    detail:
+      "Runs any shortcut from the Shortcuts app by name, with optional text as its input. Everything you have already built in Shortcuts is reachable from the search bar.",
+    group: "utilities",
+    icon: "⌘",
+    keywords: ["shortcut", "shortcuts", "apple", "automation", "workflow", "run", "siri"],
+    trigger: "shortcut",
+    argument: "the shortcut's name",
+    reach: 62,
+    form: {
+      fields: [
+        {
+          kind: "text",
+          id: "input",
+          label: "Shortcut name",
+          placeholder: "exactly as it is called in the Shortcuts app",
+          required: true,
+        },
+        {
+          kind: "text",
+          id: "payload",
+          label: "Input to give it (optional)",
+          multiline: true,
+          file: true,
+        },
+      ],
+      submitLabel: "Run it",
+    },
+    async run({ input, values, actions }) {
+      const name = (values.input ?? input).trim();
+      if (!name) {
+        actions.notify("Which shortcut?", "error");
+        return false;
+      }
+      try {
+        const result = await api.runAppleShortcut(name, values.payload ?? "");
+        if (result.trim()) {
+          actions.showOutput({ title: name, text: result.trim() });
+        } else {
+          actions.notify(`Ran “${name}”.`);
+        }
+      } catch (error) {
+        actions.notify(api.errorMessage(error), "error");
+      }
+      return false;
+    },
+  },
+  {
+    id: "apple.list-shortcuts",
+    title: "List your Apple Shortcuts",
+    detail: "Every shortcut the Shortcuts app knows about, so you can see what is runnable.",
+    group: "utilities",
+    icon: "⌘",
+    keywords: ["shortcut", "shortcuts", "apple", "list", "automation", "workflow"],
+    reach: 40,
+    async run({ actions }) {
+      try {
+        const names = await api.listAppleShortcuts();
+        if (names.length === 0) {
+          actions.notify("The Shortcuts app has nothing in it yet.");
+          return false;
+        }
+        actions.showOutput({
+          title: `${names.length} shortcuts`,
+          text: names.join("\n"),
+          message: "Run one with `shortcut <name>`",
+        });
+      } catch (error) {
+        actions.notify(api.errorMessage(error), "error");
+      }
+      return false;
+    },
+  },
+];
 
 // ---------------------------------------------------------------------------
 // The registry
 // ---------------------------------------------------------------------------
 
 export const COMMANDS: CommandDef[] = [
+  ...PAGE_COMMANDS,
   ...WINDOW_COMMANDS,
   ...TOOL_COMMANDS,
   ...CASE_COMMANDS,
   ...SYSTEM_COMMANDS,
   ...LIST_COMMANDS,
   ...OTHER_COMMANDS,
+  ...APP_COMMANDS,
+  ...SHORTCUTS_COMMANDS,
 ];
 
 /** Commands in a group, for the catalogue. */

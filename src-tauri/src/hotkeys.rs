@@ -433,41 +433,99 @@ pub fn toggle_dictation<R: Runtime>(app: &AppHandle<R>, settings: &SettingsManag
 }
 
 /// Start push-to-talk / dictation capture (shared by the PTT hotkey and function keys).
+///
+/// # Everything here happens off the main thread, and that is the whole point
+///
+/// Starting a live session is a handshake with a helper process that can
+/// legitimately take fifteen seconds — or three minutes on the first run, while
+/// macOS holds up its microphone and speech-recognition sheets and waits for a
+/// human. Both callers of this function (the global-shortcut handler and the
+/// function-key tap) are invoked by Tauri **on the main thread**.
+///
+/// So the old version, which did that handshake inline, froze the entire
+/// application for as long as the helper took. The visible symptom was a
+/// spinning beachball with no way out: the staff would not respond, the palette
+/// would not open, and the key that would have stopped the recording could not
+/// be processed either, because processing it needed the same thread.
+///
+/// The recording indicator therefore goes up immediately and the handshake runs
+/// on a blocking worker. If it fails, the indicator comes down and says why.
 pub fn start_push_to_talk<R: Runtime>(app: &AppHandle<R>, settings: &SettingsManager) {
     use tauri::Emitter;
 
-    let Some(runtime) = app.try_state::<voice::VoiceRuntime>() else {
+    if app.try_state::<voice::VoiceRuntime>().is_none() {
         return;
-    };
-    let app_partial = app.clone();
-    match runtime.start(settings, move |text| {
-        let _ = app_partial.emit(voice::VOICE_PARTIAL_EVENT, text);
-    }) {
-        Ok(()) => {
-            let _ = window::open_command_center(app, Default::default());
-            let _ = app.emit(voice::VOICE_STATE_EVENT, voice::VoiceState::Recording);
-        }
-        Err(e) => {
-            log::error!("could not start recording: {e}");
-            let _ = app.emit(voice::VOICE_RESULT_EVENT, VoiceOutcome::error(e));
-        }
     }
+
+    // Optimistic, and correct: `VoiceRuntime::start` claims the slot with an
+    // atomic before it blocks, so `is_recording()` is already true and a second
+    // press will stop rather than start a second session.
+    //
+    // The HUD goes up *before* the handshake for the same reason. A microphone
+    // that might be live must be visible immediately, and its Stop button is
+    // the only thing that reliably ends a session whose helper is misbehaving.
+    window::recorder::show(app);
+    let _ = app.emit(voice::VOICE_STATE_EVENT, voice::VoiceState::Recording);
+
+    let app = app.clone();
+    let settings = settings.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let Some(runtime) = app.try_state::<voice::VoiceRuntime>() else {
+            return;
+        };
+        let app_partial = app.clone();
+        let started = runtime.start(&settings, move |text| {
+            let _ = app_partial.emit(voice::VOICE_PARTIAL_EVENT, text);
+        });
+
+        match started {
+            Ok(()) => {}
+            Err(e) => {
+                log::error!("could not start recording: {e}");
+                // All three, in this order: the HUD comes down, the state event
+                // clears the indicator, and the result event says what went
+                // wrong. Doing only the last leaves a red dot on screen for a
+                // recording that never began — exactly the state nobody could
+                // get out of.
+                window::recorder::hide(&app);
+                let _ = app.emit(voice::VOICE_STATE_EVENT, voice::VoiceState::Idle);
+                let _ = app.emit(voice::VOICE_RESULT_EVENT, VoiceOutcome::error(e));
+            }
+        }
+    });
 }
 
+/// Stop capture and transcribe. Also non-blocking, for the same reason.
+///
+/// `VoiceRuntime::stop` waits on the helper to flush its final transcript, and
+/// a helper that has wedged used to hold the main thread for two minutes.
 pub fn stop_push_to_talk<R: Runtime>(app: &AppHandle<R>, settings: &SettingsManager) {
     use tauri::Emitter;
 
-    let Some(runtime) = app.try_state::<voice::VoiceRuntime>() else {
+    if app.try_state::<voice::VoiceRuntime>().is_none() {
         return;
-    };
-    let Some(outcome) = runtime.stop() else {
-        return;
-    };
+    }
+
+    let _ = app.emit(voice::VOICE_STATE_EVENT, voice::VoiceState::Transcribing);
 
     let app = app.clone();
     let settings = settings.clone();
     tauri::async_runtime::spawn(async move {
-        let _ = app.emit(voice::VOICE_STATE_EVENT, voice::VoiceState::Transcribing);
+        let stopped = {
+            let app = app.clone();
+            tauri::async_runtime::spawn_blocking(move || {
+                app.try_state::<voice::VoiceRuntime>().and_then(|r| r.stop())
+            })
+            .await
+        };
+
+        let Ok(Some(outcome)) = stopped else {
+            // Nothing was running, or the worker itself failed. Either way the
+            // indicator must not be left up.
+            window::recorder::hide(&app);
+            let _ = app.emit(voice::VOICE_STATE_EVENT, voice::VoiceState::Idle);
+            return;
+        };
 
         let result = match outcome {
             voice::StopOutcome::Batch(Ok(wav)) => {
@@ -484,6 +542,7 @@ pub fn stop_push_to_talk<R: Runtime>(app: &AppHandle<R>, settings: &SettingsMana
             voice::StopOutcome::Live(Err(e)) => VoiceOutcome::error(e),
         };
 
+        window::recorder::hide(&app);
         let _ = app.emit(voice::VOICE_STATE_EVENT, voice::VoiceState::Idle);
         let _ = app.emit(voice::VOICE_RESULT_EVENT, result);
     });

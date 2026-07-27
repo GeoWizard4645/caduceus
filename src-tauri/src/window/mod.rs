@@ -36,7 +36,9 @@ mod panel;
 
 #[cfg(target_os = "macos")]
 pub mod accessibility;
+pub mod grants;
 pub mod manage;
+pub mod recorder;
 
 pub const STAFF_WINDOW: &str = "staff";
 pub const COMMAND_CENTER_WINDOW: &str = "command-center";

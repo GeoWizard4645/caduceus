@@ -22,6 +22,7 @@
 pub mod agent;
 pub mod apps;
 pub mod autostart;
+pub mod backdrop;
 pub mod calc;
 pub mod capture;
 pub mod chat;
@@ -132,6 +133,9 @@ pub fn run() {
             commands::import_shortcut_icon,
             commands::import_staff_mark,
             commands::clear_staff_mark,
+            commands::resolve_backdrop,
+            commands::import_backdrop,
+            commands::clear_backdrop,
             commands::resolve_staff_mark,
             // clipboard
             commands::clipboard_list,
@@ -164,6 +168,8 @@ pub fn run() {
             // voice
             commands::voice_start,
             commands::voice_stop,
+            commands::voice_pause,
+            commands::voice_finish,
             commands::voice_cancel,
             commands::voice_is_recording,
             commands::toggle_dictation,
@@ -174,6 +180,7 @@ pub fn run() {
             // window management
             commands::window_action,
             commands::window_permission,
+            commands::repair_permission,
             commands::selected_text,
             // developer toolbox
             commands::run_tool,
@@ -186,6 +193,25 @@ pub fn run() {
             // vision + audio devices
             commands::ocr_screen,
             commands::ocr_image,
+            commands::pick_screen_color,
+            commands::exchange_rates,
+            // other applications
+            commands::run_apple_script,
+            commands::run_apple_shortcut,
+            commands::list_apple_shortcuts,
+            // storage, sorting, citations, recording
+            commands::scan_junk,
+            commands::list_installed_app_sizes,
+            commands::sort_plan,
+            commands::sort_apply,
+            commands::sort_revert,
+            commands::current_page,
+            commands::enrich_citation,
+            commands::format_citations,
+            commands::recording_start,
+            commands::recording_pause,
+            commands::recording_stop,
+            commands::recording_status,
             commands::audio_devices,
             commands::set_audio_device,
             // developer environment
@@ -322,6 +348,7 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     // Loaded before the windows so the palette's first render already has it.
     app.manage(usage::UsageStore::open(data_dir.join(usage::USAGE_FILE)));
     app.manage(tools::awake::AwakeRuntime::new());
+    app.manage(tools::rates::RateCache::new());
     app.manage(window::PaletteFloating::default());
 
     // --- agents and voice -------------------------------------------------
@@ -329,6 +356,7 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     app.manage(apps::AppIndex::new());
     app.manage(voice::VoiceRuntime::new());
     app.manage(capture::CaptureRuntime::new());
+    app.manage(capture::recorder::RecorderRuntime::new());
     app.manage(sysmon::SysMonitor::new());
 
     // --- windows ----------------------------------------------------------
@@ -472,6 +500,10 @@ pub fn shutdown<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
     }
     if let Some(watcher) = app.try_state::<WatcherHandle>() {
         watcher.stop();
+    }
+    // A recorder left running would keep writing to a file nobody can stop.
+    if let Some(recorder) = app.try_state::<capture::recorder::RecorderRuntime>() {
+        recorder.shutdown();
     }
     if let Some(tracker) = app.try_state::<CursorTracker>() {
         tracker.stop();

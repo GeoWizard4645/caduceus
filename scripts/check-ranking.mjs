@@ -126,11 +126,22 @@ try {
 
   const aliases = [
     ["amphetamine", "utility.caffeinate-on"],
-    ["cleanshot", "screen.ocr"],
+    // CleanShot X is a screenshot and screen-recording tool. This used to point
+    // at OCR, which was the closest thing Caduceus had; now there is an actual
+    // recorder, and that is the honest answer.
+    ["cleanshot", "page.screen-record"],
     ["maccy", "utility.clipboard"],
     ["orbstack", "list.docker"],
     ["jettison", "utility.eject"],
-    ["activity monitor", "utility.system-monitor"],
+    // Activity Monitor opens on a list of processes with a Quit button, which
+    // is the Processes page — not the System Monitor overview it used to map
+    // to. Somebody typing this name almost always wants to kill something.
+    ["activity monitor", "page.processes"],
+    // Named here because these are the apps people arrive already knowing.
+    ["cleanmymac", "page.storage"],
+    ["appcleaner", "page.storage"],
+    ["stickies", "page.sticky-notes"],
+    ["granola", "page.meeting"],
   ];
   for (const [query, expectedId] of aliases) {
     const found = topFor(query);

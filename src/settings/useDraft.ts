@@ -14,7 +14,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
 import * as api from "@/shared/api";
-import { applyAppearance } from "@/shared/theme";
+import { applyAppearance, applyBackdrop } from "@/shared/theme";
 import type { Settings } from "@/shared/types";
 import { EVENTS } from "@/shared/types";
 
@@ -126,8 +126,10 @@ export function useDraft(): Draft {
         const next = structuredClone(current);
         mutate(next);
         // Appearance is applied optimistically so colour and theme changes are
-        // visible while you drag a slider, not 500ms later.
+        // visible while you drag a slider, not 500ms later. The background
+        // image goes with it, so picking one shows up immediately.
         applyAppearance(next.appearance);
+        void applyBackdrop(next.appearance.commandCenterBackground ?? "", api.resolveBackdrop);
         schedule(next);
         return next;
       });
@@ -139,6 +141,7 @@ export function useDraft(): Draft {
     (next: Settings) => {
       setSettings(next);
       applyAppearance(next.appearance);
+      void applyBackdrop(next.appearance.commandCenterBackground ?? "", api.resolveBackdrop);
       schedule(next);
     },
     [schedule],

@@ -1,9 +1,9 @@
 [package]
 name = "caduceus"
-version = "2.3.1"
+version = "3.0.0"
 description = "Caduceus — a fast, local-first AI command center for your desktop."
 authors = ["Caduceus contributors"]
-license = "MIT"
+license = "GPL-3.0-or-later"
 repository = "https://github.com/vivaanshahani/caduceus"
 edition = "2021"
 rust-version = "1.82"

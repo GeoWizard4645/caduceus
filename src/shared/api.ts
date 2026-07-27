@@ -97,6 +97,7 @@ export type SystemSettingsPane =
   | "microphone"
   | "accessibility"
   | "screen-recording"
+  | "speech-recognition"
   | "automation"
   | "login-items";
 
@@ -164,6 +165,15 @@ export const importStaffMark = (sourcePath: string) =>
   invoke<string>("import_staff_mark", { sourcePath });
 
 export const clearStaffMark = () => invoke<void>("clear_staff_mark");
+
+/** Where the Command Center's background image lives, if one has been chosen. */
+export const resolveBackdrop = (token: string) =>
+  invoke<string | null>("resolve_backdrop", { token });
+
+export const importBackdrop = (sourcePath: string) =>
+  invoke<string>("import_backdrop", { sourcePath });
+
+export const clearBackdrop = () => invoke<void>("clear_backdrop");
 
 export const importShortcutIcon = (shortcutId: string, sourcePath: string) =>
   invoke<string>("import_shortcut_icon", { shortcutId, sourcePath });
@@ -268,6 +278,18 @@ export const voiceStart = () => invoke<void>("voice_start");
 
 export const voiceStop = () => invoke<RoutedText | null>("voice_stop");
 
+/** Hold the recording without ending it. Returns the new paused state. */
+export const voicePause = (paused: boolean) => invoke<boolean>("voice_pause", { paused });
+
+/**
+ * End the recording and transcribe.
+ *
+ * Returns as soon as the request is in; the transcript arrives on
+ * `EVENTS.voiceResult`. That is what keeps the HUD's Stop button responsive
+ * even when the speech helper is being slow about finalising.
+ */
+export const voiceFinish = () => invoke<void>("voice_finish");
+
 export const voiceCancel = () => invoke<void>("voice_cancel");
 
 export const voiceIsRecording = () => invoke<boolean>("voice_is_recording");
@@ -370,6 +392,23 @@ export const systemAction = (action: SystemAction) =>
 
 export const systemPermissions = () => invoke<PermissionReport>("system_permissions");
 
+/** What `repair_permission` reports back. Mirrors `window::grants::RepairOutcome`. */
+export interface RepairOutcome {
+  ok: boolean;
+  message: string;
+  granted: boolean;
+}
+
+/**
+ * Clear a stale macOS privacy grant and ask for it again.
+ *
+ * The fix for "Caduceus is ticked in System Settings and Caduceus says it is
+ * not" — which happens because the grant is recorded against a code signature
+ * that changes on every build. See `window::grants` on the Rust side.
+ */
+export const repairPermission = (grant: import("./tabs").PermissionId) =>
+  invoke<RepairOutcome>("repair_permission", { grant });
+
 export const machineSummary = () => invoke<ToolOutcome>("machine_summary");
 
 export const wifiSummary = () => invoke<ToolOutcome>("wifi_summary");
@@ -383,6 +422,165 @@ export const mediaAction = (action: MediaAction) =>
 export const ocrScreen = () => invoke<ToolOutcome>("ocr_screen");
 
 export const ocrImage = (path: string) => invoke<ToolOutcome>("ocr_image", { path });
+
+/**
+ * Sample a colour from anywhere on screen with macOS's own loupe.
+ *
+ * Resolves to `null` when the user presses Escape — a cancel, not a failure.
+ * Caduceus's windows are hidden for the duration and restored afterwards.
+ */
+export const pickScreenColor = () => invoke<string | null>("pick_screen_color");
+
+/** Today's rates. Mirrors `tools::rates::RateTable`. */
+export interface RateTable {
+  base: string;
+  rates: Record<string, number>;
+  /** `YYYY-MM-DD`, the day the source published these. */
+  date: string;
+  source: string;
+  cached: boolean;
+}
+
+/**
+ * Exchange rates for a base currency.
+ *
+ * The only call in Caduceus that needs the internet. Cached for six hours,
+ * which is finer-grained than the once-a-day source publishes.
+ */
+export const exchangeRates = (base: string) =>
+  invoke<RateTable>("exchange_rates", { base });
+
+// --- other applications -----------------------------------------------------
+
+/**
+ * Run AppleScript and get back what it printed.
+ *
+ * Scripts come from Caduceus's own command registry, never from anything
+ * fetched — see the Rust side for the trust boundary this depends on.
+ */
+export const runAppleScript = (script: string) =>
+  invoke<string>("run_apple_script", { script });
+
+/** Run a shortcut from the Shortcuts app, optionally with text as its input. */
+export const runAppleShortcut = (name: string, input = "") =>
+  invoke<string>("run_apple_shortcut", { name, input });
+
+export const listAppleShortcuts = () => invoke<string[]>("list_apple_shortcuts");
+
+// --- storage and cleaning ---------------------------------------------------
+
+/** Mirrors `tools::cleaner::JunkGroup`. */
+export interface JunkGroup {
+  kind: string;
+  label: string;
+  detail: string;
+  /** Could plausibly contain something wanted. Never pre-ticked. */
+  risky: boolean;
+  bytes: number;
+  human: string;
+  items: number;
+  paths: string[];
+}
+
+export interface InstalledAppSize {
+  name: string;
+  path: string;
+  bundleId: string | null;
+  bytes: number;
+  human: string;
+  /** Epoch seconds, where macOS records it. */
+  lastOpened: number | null;
+}
+
+/** Measure everything reclaimable. Slow on a full disk, because it measures. */
+export const scanJunk = () => invoke<JunkGroup[]>("scan_junk");
+
+export const listInstalledAppSizes = () =>
+  invoke<InstalledAppSize[]>("list_installed_app_sizes");
+
+// --- folder sorting ---------------------------------------------------------
+
+export type SortBy = "kind" | "extension" | "month" | "year" | "alphabetical" | "size";
+
+export interface SortMove {
+  from: string;
+  to: string;
+  folder: string;
+  name: string;
+  bytes: number;
+}
+
+export interface SortPlan {
+  directory: string;
+  moves: SortMove[];
+  folders: Record<string, number>;
+  skipped: string[];
+}
+
+export interface SortResult {
+  ok: boolean;
+  message: string;
+  moved: SortMove[];
+}
+
+/** Work out where everything goes. Changes nothing. */
+export const sortPlan = (directory: string, sortBy: SortBy) =>
+  invoke<SortPlan>("sort_plan", { directory, sortBy });
+
+export const sortApply = (moves: SortMove[]) => invoke<SortResult>("sort_apply", { moves });
+
+export const sortRevert = (moves: SortMove[]) => invoke<SortResult>("sort_revert", { moves });
+
+// --- citations --------------------------------------------------------------
+
+export interface CitationSource {
+  title: string;
+  url: string;
+  author: string | null;
+  site: string | null;
+  published: string | null;
+}
+
+export interface Citation {
+  style: string;
+  label: string;
+  text: string;
+}
+
+/** The page in the frontmost browser. */
+export const currentPage = () => invoke<CitationSource>("current_page");
+
+/** Fill in author and date by fetching the page. Only ever on request. */
+export const enrichCitation = (source: CitationSource) =>
+  invoke<CitationSource>("enrich_citation", { source });
+
+export const formatCitations = (source: CitationSource, accessed: string) =>
+  invoke<Citation[]>("format_citations", { source, accessed });
+
+// --- recording --------------------------------------------------------------
+
+export type RecordMode = "screen" | "audio";
+
+export interface RecordingStatus {
+  active: boolean;
+  paused: boolean;
+  mode: RecordMode | null;
+  path: string | null;
+  seconds: number;
+  /** 0–1, only while the microphone is on. */
+  level: number;
+  error: string | null;
+}
+
+export const recordingStart = (mode: RecordMode, microphone: boolean) =>
+  invoke<string>("recording_start", { mode, microphone });
+
+export const recordingPause = (paused: boolean) =>
+  invoke<boolean>("recording_pause", { paused });
+
+export const recordingStop = () => invoke<string>("recording_stop");
+
+export const recordingStatus = () => invoke<RecordingStatus>("recording_status");
 
 export const audioDevices = () => invoke<AudioDevice[]>("audio_devices");
 

@@ -76,6 +76,7 @@ export const PERMISSIONS: Record<PermissionId, PermissionInfo> = {
     steps: [
       "Click the button below to open Microphone.",
       "Find Caduceus in the list and turn its switch on.",
+      "Dictation needs a second switch too: Speech Recognition, further down the same list. Turn Caduceus on there as well.",
       "Try dictation again — the first attempt after granting it usually needs a second press.",
     ],
     detectable: false,
@@ -93,7 +94,36 @@ export const PERMISSIONS: Record<PermissionId, PermissionInfo> = {
     ],
     detectable: false,
   },
+  "speech-recognition": {
+    id: "speech-recognition",
+    title: "Speech Recognition",
+    why: "Turning what you dictate into text. On an Apple Silicon Mac this runs on-device, so the audio never leaves the machine.",
+    path: "Privacy & Security → Speech Recognition",
+    pane: "speech-recognition",
+    steps: [
+      "Click the button below to open Speech Recognition.",
+      "Find Caduceus in the list and turn its switch on.",
+      "Dictation also needs the Microphone, which is a separate switch in the same pane list.",
+    ],
+    detectable: false,
+  },
 };
+
+/**
+ * What to say when the switch is already on and the app still cannot do it.
+ *
+ * Not an edge case — it is what happens to everybody on their second update.
+ * macOS records a grant against the app's code signature, Caduceus is signed
+ * ad-hoc because it has no Apple Developer certificate, and an ad-hoc signature
+ * is a hash of the binary. So the name stays in the list, the switch stays on,
+ * and the entry underneath describes a build that no longer exists.
+ */
+export const STALE_GRANT_EXPLANATION =
+  "Already switched on and Caduceus still says no? That is what happens after an " +
+  "update. macOS files the permission under the app's signature, and Caduceus is " +
+  "not signed with an Apple certificate — so every new build looks like a different " +
+  "app to it, even though the switch stays where you left it. Repairing it clears " +
+  "the old entry and asks again for the build you are running.";
 
 /**
  * The canonical sentence for each wall.
@@ -112,6 +142,8 @@ export const PERMISSION_WALL: Record<PermissionId, string> = {
     "Caduceus needs Microphone permission for this. Grant it in System Settings → Privacy & Security → Microphone.",
   automation:
     "Caduceus needs Automation permission to control that app. Grant it in System Settings → Privacy & Security → Automation.",
+  "speech-recognition":
+    "Caduceus needs Speech Recognition permission for this. Grant it in System Settings → Privacy & Security → Speech Recognition.",
 };
 
 /**
@@ -130,6 +162,14 @@ export function permissionFromMessage(message: string): PermissionId | null {
   if (text.includes("screen recording") || text.includes("screen & system audio")) {
     return "screen-recording";
   }
+  // Microphone before speech recognition, deliberately. Dictation can fail on
+  // either, and the one message that names both — "macOS never asked for
+  // microphone or speech-recognition access" — should land on the microphone
+  // page, because that is the switch people are missing far more often. That
+  // page names the other one in its steps, so neither is a dead end.
   if (text.includes("microphone")) return "microphone";
+  if (text.includes("speech recognition") || text.includes("speech-recognition")) {
+    return "speech-recognition";
+  }
   return null;
 }

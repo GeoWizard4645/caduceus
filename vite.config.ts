@@ -2,9 +2,10 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import { resolve } from "node:path";
 
-// Caduceus ships two webviews: the always-on staff, and the Command Center that
-// holds everything else as tabs. Each HTML file at the repo root is an entry
-// point Tauri loads by path (see src-tauri/tauri.conf.json + window/mod.rs).
+// Caduceus ships three webviews: the always-on staff, the recording HUD that
+// exists only while a microphone is live, and the Command Center that holds
+// everything else as tabs. Each HTML file at the repo root is an entry point
+// Tauri loads by path (see src-tauri/tauri.conf.json + window/mod.rs).
 export default defineConfig({
   plugins: [react()],
 
@@ -32,6 +33,7 @@ export default defineConfig({
       input: {
         staff: resolve(__dirname, "index.html"),
         commandCenter: resolve(__dirname, "command-center.html"),
+        recorder: resolve(__dirname, "recorder.html"),
       },
     },
   },

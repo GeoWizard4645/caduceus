@@ -53,8 +53,18 @@ export interface Tab {
   retryCommandId?: string;
 }
 
-/** The macOS grants Caduceus can walk someone through. */
-export type PermissionId = "accessibility" | "screen-recording" | "microphone" | "automation";
+/**
+ * The macOS grants Caduceus can walk someone through.
+ *
+ * Kept in step with `window::grants::Grant` on the Rust side, whose
+ * `rename_all = "kebab-case"` produces exactly these strings.
+ */
+export type PermissionId =
+  | "accessibility"
+  | "screen-recording"
+  | "microphone"
+  | "automation"
+  | "speech-recognition";
 
 interface KindMeta {
   label: string;

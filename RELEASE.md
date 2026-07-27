@@ -8,7 +8,7 @@ Caduceus is **macOS-only**. Each public release is one **universal** `.dmg` (App
 npm run release -- patch -m "fix a hotkey that could never fire"
 ```
 
-That is the whole thing. [`scripts/release.sh`](./scripts/release.sh) does every step below in order: bumps the three version files, runs the gates and the Rust tests, builds both architectures, `lipo`s them into one universal app, signs it, packs the DMG, commits, tags, pushes, creates the release with `--latest`, and checks that `/releases/latest` now resolves to it.
+That is the whole thing. [`scripts/release.sh`](./scripts/release.sh) does every step below in order: bumps the three version files, runs the gates and the Rust tests, builds both architectures, `lipo`s them into one universal app, signs it, packs the DMG, commits, tags, pushes, creates the release with `--latest`, updates the Homebrew tap, and checks that `/releases/latest` now resolves to it.
 
 | | |
 |---|---|
@@ -19,6 +19,7 @@ That is the whole thing. [`scripts/release.sh`](./scripts/release.sh) does every
 | `--draft` | publish as a draft, so it does not become `/releases/latest` yet |
 | `--notes-file F` | use a file for the notes instead of the commit log |
 | `--skip-tests` | skip the gates. For re-runs after a failure, not for releases |
+| `--skip-cask` | leave the Homebrew tap alone |
 
 It refuses to start unless you are on `main`, up to date with `origin`, logged into `gh`, and the tag is free — and it does not push anything until the DMG exists on disk, so a build that dies half-way costs you time rather than leaving a tag pointing at nothing.
 
@@ -159,7 +160,27 @@ EOF
 
 Release page: `https://github.com/GeoWizard4645/caduceus/releases/tag/v<version>`
 
-## 5. Verify
+## 5. Update the Homebrew tap
+
+```bash
+scripts/publish-cask.sh 2.4.0
+```
+
+`npm run release` does this automatically, after the GitHub release exists — the cask carries a checksum of the attached asset, so it cannot be published first.
+
+The script rewrites the version and `sha256` in [`homebrew/caduceus.rb`](./homebrew/caduceus.rb), which is the source of truth, and copies it to `Casks/caduceus.rb` in **[GeoWizard4645/homebrew-caduceus](https://github.com/GeoWizard4645/homebrew-caduceus)** — a separate one-file repository, because Homebrew resolves `brew tap owner/name` to `github.com/owner/homebrew-name` and there is no way around that naming. The first run offers to create it.
+
+Called with no DMG path it downloads the asset from the release and checksums that, which is the more useful check of the two: it verifies the bytes a user will actually receive.
+
+```bash
+brew install --cask geowizard4645/caduceus/caduceus   # what the tap gives people
+brew upgrade --cask caduceus
+brew uninstall --zap --cask caduceus                  # app plus everything it stored
+```
+
+**Why a tap and not `homebrew/homebrew-cask`.** The official repository has a notability bar Caduceus does not clear yet and a review queue measured in days; a tap ships the moment the release does. Moving to homebrew-cask later would not change the command anyone has already run — `brew install --cask caduceus` would simply start resolving to the official one.
+
+## 6. Verify
 
 ```bash
 # Latest release metadata
@@ -181,6 +202,7 @@ Only for a hand-rolled release — `npm run release` enforces all of it.
 - [ ] `npm run typecheck` (and tests if you touched Rust)
 - [ ] Universal `.dmg` built and `file` shows arm64 + x86_64 on main binary
 - [ ] `gh release create` with `Caduceus_<version>_universal.dmg` and `--latest`
+- [ ] Homebrew tap updated (`scripts/publish-cask.sh <version>`)
 - [ ] Installer or API check confirms `/releases/latest` is the new tag
 
 ## Related docs

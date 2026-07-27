@@ -249,15 +249,79 @@ func setDefaultAudioDevice(scope: AudioScope, uid: String) -> Never {
 }
 
 // ---------------------------------------------------------------------------
+// Colour sampling
+// ---------------------------------------------------------------------------
+
+// Pick a colour from anywhere on screen.
+//
+// `NSColorSampler` is Apple's own eyedropper: a magnifier loupe follows the
+// pointer, Escape cancels, a click picks. Using it rather than reading pixels
+// ourselves matters for two reasons — it needs **no Screen Recording grant**,
+// because the user is pointing at what they want rather than the app reading
+// the screen, and the loupe is the interaction people already know from the
+// system colour panel.
+//
+// Prints `#rrggbb` and exits 0; exits 3 with nothing on cancel, which the
+// caller treats as "no colour", not as an error.
+@available(macOS 10.15, *)
+func pickScreenColor() -> Never {
+    let app = NSApplication.shared
+    // Accessory, so sampling does not put a Dock icon up for the two seconds
+    // this process lives.
+    app.setActivationPolicy(.accessory)
+
+    let sampler = NSColorSampler()
+    var picked: NSColor?
+    let done = DispatchSemaphore(value: 0)
+
+    sampler.show { color in
+        picked = color
+        done.signal()
+    }
+
+    // The sampler needs a running loop to drive its loupe, so the wait cannot
+    // simply block the main thread.
+    DispatchQueue.global().async {
+        done.wait()
+        DispatchQueue.main.async {
+            guard let color = picked?.usingColorSpace(.sRGB) else {
+                // Cancelled. Distinct exit code: there is nothing wrong, the
+                // user just changed their mind, and that should not surface as
+                // a red error message.
+                exit(3)
+            }
+            let r = Int((color.redComponent * 255).rounded())
+            let g = Int((color.greenComponent * 255).rounded())
+            let b = Int((color.blueComponent * 255).rounded())
+            print(String(format: "#%02x%02x%02x", r, g, b))
+            exit(0)
+        }
+    }
+
+    app.run()
+    // `NSApplication.run()` only returns if something stops the loop, which
+    // nothing here does — the exits above are the way out. Swift cannot see
+    // that, so this makes the `Never` return type true on paper as well.
+    exit(3)
+}
+
+// ---------------------------------------------------------------------------
 // Entry point
 // ---------------------------------------------------------------------------
 
 let arguments = CommandLine.arguments
 guard arguments.count >= 2 else {
-    fail("usage: caduceus-native <ocr|audio-list|audio-set> [...]")
+    fail("usage: caduceus-native <ocr|audio-list|audio-set|pick-color> [...]")
 }
 
 switch arguments[1] {
+case "pick-color":
+    if #available(macOS 10.15, *) {
+        pickScreenColor()
+    } else {
+        fail("picking a colour off the screen needs macOS 10.15 or newer")
+    }
+
 case "ocr":
     guard arguments.count >= 3 else { fail("usage: caduceus-native ocr <image-path>") }
     runOCR(path: arguments[2])

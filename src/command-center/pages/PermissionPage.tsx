@@ -20,7 +20,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import * as api from "@/shared/api";
 import { COMMANDS, type CommandActions } from "@/shared/commands";
-import { PERMISSIONS } from "@/shared/permissions";
+import { PERMISSIONS, STALE_GRANT_EXPLANATION } from "@/shared/permissions";
 import type { PermissionId, Tab } from "@/shared/tabs";
 import { Button, Callout, Spinner, cx } from "@/shared/ui";
 
@@ -43,6 +43,7 @@ export function PermissionPage({
 
   const [granted, setGranted] = useState<boolean | null>(null);
   const [opening, setOpening] = useState(false);
+  const [repairing, setRepairing] = useState(false);
   const [result, setResult] = useState<{ text: string; ok: boolean } | null>(null);
 
   const check = useCallback(async () => {
@@ -78,6 +79,20 @@ export function PermissionPage({
     }
   };
 
+  const repair = async () => {
+    setRepairing(true);
+    try {
+      const outcome = await api.repairPermission(info.id);
+      setResult({ text: outcome.message, ok: outcome.ok });
+      if (outcome.granted) setGranted(true);
+      else void check();
+    } catch (error) {
+      setResult({ text: api.errorMessage(error), ok: false });
+    } finally {
+      setRepairing(false);
+    }
+  };
+
   const runAgain = async () => {
     if (!retry) return;
     const actions: CommandActions = {
@@ -89,7 +104,7 @@ export function PermissionPage({
       close: () => {},
     };
     try {
-      await retry.run({ input: "", actions });
+      await retry.run({ input: "", actions, values: {} });
       // A command that changes something visible says nothing on success, so
       // say it here rather than leaving the page looking like nothing happened.
       setResult((current) => current ?? { text: `Ran ${retry.title}.`, ok: true });
@@ -128,6 +143,22 @@ export function PermissionPage({
             {opening ? "Opening…" : `Open ${info.path.split(" → ").slice(-1)[0]}`}
           </Button>
           <span className="text-2xs text-ink-faint">System Settings → {info.path}</span>
+        </div>
+      </div>
+
+      {/* --- the one that catches everybody ------------------------------ */}
+      <div className="mt-4 rounded-cad border border-caution/30 bg-caution/[0.06] p-4">
+        <p className="text-[13px] font-semibold text-ink">It is already on and still not working</p>
+        <p className="mt-1.5 max-w-prose text-[13px] leading-relaxed text-ink-mute">
+          {STALE_GRANT_EXPLANATION}
+        </p>
+        <div className="row mt-3 gap-2">
+          <Button onClick={() => void repair()} disabled={repairing}>
+            {repairing ? "Repairing…" : "Repair it for me"}
+          </Button>
+          <span className="text-2xs text-ink-faint">
+            Or switch Caduceus off and back on in the list — same effect, more clicks.
+          </span>
         </div>
       </div>
 

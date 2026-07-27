@@ -190,11 +190,27 @@ function describeTarget(shortcut: Shortcut): string {
   }
 }
 
-/** Recent clipboard entries. */
+/**
+ * Recent clipboard entries — **only** when you are asking for them.
+ *
+ * These used to appear in every result list. That is wrong in a way that took a
+ * while to see: the clipboard is a history of text, so *something* in it fuzzy-
+ * matches almost anything you type, and the matches are meaningless. Searching
+ * for "chrome" would surface the word "chrome" from a message you pasted last
+ * Tuesday, ranked alongside the application.
+ *
+ * So they are gated behind the clipboard prefix (`/v` by default) and the
+ * clipboard tab, which is where somebody who wants their clipboard history goes.
+ */
 export const clipboardProvider: ResultProvider = {
   id: "clipboard",
   title: "Clipboard",
-  search({ clipboard, query, actions, settings }) {
+  search({ clipboard, query, parsed, actions, settings }) {
+    // The prefix router hands this provider the query with `/v` stripped, and
+    // sets `rule` to the clipboard action. No rule means the user was searching
+    // for something else and these rows are noise.
+    if (parsed?.rule?.action !== "clipboard_search") return [];
+
     const limit = settings.commandCenter.maxResultsPerSource;
     return clipboard.slice(0, limit).map((entry, index) => ({
       id: `clipboard:${entry.id}`,
@@ -208,8 +224,9 @@ export const clipboardProvider: ResultProvider = {
         .join(" · "),
       icon: entry.pinned ? "★" : entry.kind === "image" ? "▣" : entry.kind === "files" ? "⌥" : "≡",
       group: "Clipboard",
-      // Below shortcuts on an empty query, competitive once you are searching.
-      score: (query ? 300 : 200) - index,
+      // Top of the list: reaching this provider at all means the user asked
+      // for their clipboard specifically, so nothing else should outrank it.
+      score: 900 - index,
       positions: query ? (fuzzyMatch(query, entry.preview)?.positions ?? undefined) : undefined,
       run: async () => {
         try {
@@ -421,10 +438,16 @@ export const appLauncherProvider: ResultProvider = {
         subtitle: "Application",
         icon: "▣",
         group: "Applications",
-        // Launching an app you named is almost always what you meant, so this
-        // outranks a web search for the same word — and the apps you launch
-        // most rise above the ones that merely match as well.
-        score: match.score + 40 + usageBoost(`app:${app.path}`),
+        // Applications lead the list.
+        //
+        // Typing a name is overwhelmingly a request to launch that thing, and
+        // when it is not, the command underneath is one arrow key away. The
+        // reverse — a command winning because its description happened to
+        // contain the word — means typing "docker" and getting a lecture about
+        // containers instead of Docker. `APP_LEAD` is what buys that: enough to
+        // clear a strong command match, not so much that a two-letter fuzzy
+        // hit on an app you have never opened beats an exact command name.
+        score: match.score + APP_LEAD + usageBoost(`app:${app.path}`),
         positions: match.positions,
         accessory: "↵",
         run: async () => {
@@ -718,7 +741,9 @@ function runCommand(command: CommandDef, input: string, actions: PaletteActions)
   if (needsItsPage(command, input)) {
     return openCommandPage(command, input, actions);
   }
-  return command.run({ input, actions });
+  // No form was filled in — this came straight from the palette — so the one
+  // value there is goes in under the id every default form uses.
+  return command.run({ input, actions, values: { input } });
 }
 
 /** Whether picking this row with this input should open the page instead. */
@@ -735,11 +760,21 @@ function accessoryFor(command: CommandDef): string {
 /**
  * Where the full command list starts on an empty query.
  *
- * Below the clipboard rows (which top out at 200) so the catalogue sits at the
- * bottom, and far enough above nothing that 124 descending scores never collide
- * with another provider.
+ * Below the prefix hints so the catalogue sits at the bottom, and far enough
+ * above nothing that a hundred and fifty descending scores never collide with
+ * another provider.
  */
 const EMPTY_STATE_BASE = 180;
+
+/**
+ * How far an application's fuzzy score is lifted above a command's.
+ *
+ * The one number that decides "type a name, get the app". Chosen against the
+ * command provider's `score - 10`: a command needs to beat an app by more than
+ * 55 points of fuzzy match to lead, which in practice means the app has to be a
+ * poor match and the command an excellent one.
+ */
+const APP_LEAD = 45;
 
 function truncate(text: string, max: number): string {
   return text.length <= max ? text : `${text.slice(0, max - 1)}…`;

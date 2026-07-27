@@ -9,7 +9,10 @@
 //   wav <absolute-path>
 //   error <message>
 //
-// Stdin: line "stop" ends capture and prints final + wav path.
+// Stdin:
+//   pause    stop feeding the recogniser, keep the session and transcript
+//   resume   start feeding it again
+//   stop     end capture and print final + wav path
 
 import AVFoundation
 import Foundation
@@ -98,15 +101,39 @@ guard recognizer.isAvailable else {
 let engine = AVAudioEngine()
 let request = SFSpeechAudioBufferRecognitionRequest()
 request.shouldReportPartialResults = true
+
+// On-device recognition is preferred — it is the reason dictation works with
+// no network and nothing leaving the Mac — but `supportsOnDeviceRecognition`
+// answers "this locale *can* run on device", not "its model is downloaded".
+// Forcing it before the asset has arrived produces a recogniser that accepts
+// audio, reports nothing, and never finalises: the exact "it says Listening
+// and then nothing ever happens" failure. Requesting it and letting Speech
+// fall back is strictly better than insisting and hanging.
+//
+// CADUCEUS_STT_FORCE_ON_DEVICE=1 restores the strict behaviour for anyone who
+// would rather fail than have a phrase go to Apple's servers.
+let forceOnDevice = ProcessInfo.processInfo.environment["CADUCEUS_STT_FORCE_ON_DEVICE"] == "1"
 if recognizer.supportsOnDeviceRecognition {
-    request.requiresOnDeviceRecognition = true
+    request.requiresOnDeviceRecognition = forceOnDevice
 }
 
 var pcmSamples: [Float] = []
 let inputNode = engine.inputNode
 let format = inputNode.outputFormat(forBus: 0)
 
+// Guarded by `stateLock`: the audio tap runs on a real-time thread and the
+// stdin loop runs on the main one.
+let stateLock = NSLock()
+var isPaused = false
+
 inputNode.installTap(onBus: 0, bufferSize: 2048, format: format) { buffer, _ in
+    stateLock.lock()
+    let paused = isPaused
+    stateLock.unlock()
+    // A paused session drops audio on the floor rather than tearing anything
+    // down, so resuming picks up mid-sentence with the transcript intact.
+    guard !paused else { return }
+
     request.append(buffer)
     if let channel = buffer.floatChannelData?[0] {
         let frames = Int(buffer.frameLength)
@@ -147,14 +174,27 @@ do {
 emit("ready")
 
 while let line = readLine(strippingNewline: true) {
-    if line.contains("stop") { break }
+    let command = line.trimmingCharacters(in: .whitespacesAndNewlines)
+    if command == "pause" || command == "resume" {
+        stateLock.lock()
+        isPaused = (command == "pause")
+        stateLock.unlock()
+        emit(command == "pause" ? "paused" : "resumed")
+        continue
+    }
+    if command.contains("stop") { break }
 }
 
 engine.inputNode.removeTap(onBus: 0)
 engine.stop()
 request.endAudio()
 
-_ = done.wait(timeout: .now() + 120)
+// Six seconds, not 120. Speech finalises a normal utterance in well under a
+// second; when it does not finalise at all — an undownloaded on-device model,
+// a recogniser that has quietly given up — waiting two minutes does not
+// improve the outcome, it just holds up everything downstream. `lastPartial`
+// is used instead, and the caller kills this process if even this expires.
+_ = done.wait(timeout: .now() + 6)
 task.cancel()
 
 if let recognitionError, finalText.isEmpty, lastPartial.isEmpty {

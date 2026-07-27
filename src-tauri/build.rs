@@ -25,7 +25,8 @@ fn build_macos_helpers() {
         b"Helper executables bundled with Caduceus.\n\n\
          caduceus-stt       Transcribe a WAV (batch).\n\
          caduceus-stt-live  Live mic + partial transcripts.\n\
-         caduceus-native    Vision OCR and CoreAudio device switching.\n",
+         caduceus-native    Vision OCR, CoreAudio device switching, colour sampling.\n\
+         caduceus-record    Screen and meeting recording, with system audio.\n",
     );
 
     if std::env::var("CARGO_CFG_TARGET_OS").as_deref() != Ok("macos") {
@@ -54,6 +55,17 @@ fn build_macos_helpers() {
         "caduceus-native",
         "OCR and audio helper",
         "com.caduceus.desktop.native-helper",
+    );
+    // The recorder asks for Screen Recording *and* the microphone, so it needs
+    // the usage-description plist like the speech helpers — but its own
+    // identifier, because Screen Recording is a grant people should be able to
+    // reason about separately from dictation.
+    compile_swift(
+        &bin_dir,
+        "macos/CaduceusRecorder.swift",
+        "caduceus-record",
+        "screen and meeting recorder",
+        "com.caduceus.desktop.recorder",
     );
 }
 

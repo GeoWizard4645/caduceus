@@ -1,5 +1,7 @@
 //! Screenshots and screen recording exposed as explicit commands.
 
+pub mod recorder;
+
 use std::path::PathBuf;
 use std::process::Command;
 
