@@ -213,14 +213,188 @@
     vertical-align: 0.05em;
   }
 
-  /* The second command inside an option card — "or with Homebrew". */
-  .install-alt-label {
-    margin: 18px 0 8px;
+  /* Collapsible alternate install — "Or with Homebrew". */
+  .install-brew {
+    max-width: 660px;
+    margin: 18px auto 0;
+    text-align: left;
+  }
+
+  .install-brew > summary {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    list-style: none;
     font-size: 0.74rem;
     letter-spacing: 0.08em;
     text-transform: uppercase;
     color: var(--ink-faint);
     font-weight: 600;
+    user-select: none;
+  }
+
+  .install-brew > summary::-webkit-details-marker { display: none; }
+
+  .install-brew > summary:hover { color: var(--ink-mute); }
+
+  .install-brew .chev {
+    display: inline-block;
+    color: var(--ink-faint);
+    transition: transform 0.15s ease;
+    font-size: 0.85rem;
+    line-height: 1;
+  }
+
+  .install-brew[open] > summary .chev { transform: rotate(90deg); }
+
+  .install-brew-body {
+    margin-top: 10px;
+  }
+
+  .install-brew-body .cmd {
+    margin-left: 0;
+    margin-right: 0;
+  }
+
+  .install-brew-body .cmd-meta {
+    margin-left: 0;
+    margin-right: 0;
+  }
+
+  /* Collapsible blocks inside the install section (Option 3, extra copy). */
+  .install-fold {
+    margin: 0;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: var(--surface);
+    text-align: left;
+  }
+
+  .install-fold + .install-fold,
+  .install-or + .install-fold {
+    margin-top: 18px;
+  }
+
+  .install-fold > summary {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 16px 20px;
+    cursor: pointer;
+    list-style: none;
+    user-select: none;
+  }
+
+  .install-fold > summary::-webkit-details-marker { display: none; }
+
+  .install-fold > summary:hover { background: var(--raised); }
+
+  .install-fold[open] > summary {
+    border-bottom: 1px solid var(--line);
+  }
+
+  .install-fold .chev {
+    flex: none;
+    margin-top: 0.15em;
+    color: var(--ink-faint);
+    transition: transform 0.15s ease;
+    font-size: 0.85rem;
+    line-height: 1;
+  }
+
+  .install-fold[open] > summary .chev { transform: rotate(90deg); }
+
+  .install-fold-head {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .install-fold-title {
+    display: block;
+    font-size: 0.72rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    font-weight: 600;
+  }
+
+  .install-fold-hint {
+    display: block;
+    margin-top: 6px;
+    font-size: 0.86rem;
+    line-height: 1.45;
+    color: var(--ink-mute);
+    font-weight: 400;
+    text-transform: none;
+    letter-spacing: normal;
+  }
+
+  .install-fold-body {
+    padding: 16px 20px 20px;
+  }
+
+  .install-fold-body > :first-child { margin-top: 0; }
+  .install-fold-body > :last-child { margin-bottom: 0; }
+
+  .install-fold-nested {
+    margin: 14px 0 0;
+    border: 1px solid var(--line);
+    border-radius: 9px;
+    background: var(--raised);
+  }
+
+  .install-fold-nested > summary {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px;
+    cursor: pointer;
+    list-style: none;
+    font-size: 0.78rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    user-select: none;
+  }
+
+  .install-fold-nested > summary::-webkit-details-marker { display: none; }
+
+  .install-fold-nested > summary:hover { color: var(--ink-mute); }
+
+  .install-fold-nested[open] > summary {
+    border-bottom: 1px solid var(--line);
+  }
+
+  .install-fold-nested[open] > summary .chev { transform: rotate(90deg); }
+
+  .install-fold-nested .install-fold-body {
+    padding: 12px 14px 14px;
+    font-size: 0.88rem;
+    color: var(--ink-mute);
+    line-height: 1.55;
+  }
+
+  .install-fold-nested .install-fold-body p { margin: 0; }
+
+  .install-fold-nested .install-fold-body .install-follow + .install-follow {
+    margin-top: 12px;
+  }
+
+  .install-fold-intro {
+    margin-bottom: 22px;
+  }
+
+  .install-fold-intro .install-choices {
+    margin: 0;
+  }
+
+  .install-intro-line {
+    margin: 0 0 20px;
+    font-size: 0.88rem;
+    color: var(--ink-mute);
+    text-wrap: pretty;
   }
 
   .install-follow {
@@ -309,8 +483,8 @@
   .alt a:hover { border-bottom-color: var(--accent); }
 
   .manual {
-    max-width: 660px;
-    margin: 22px auto 0;
+    max-width: none;
+    margin: 0;
     text-align: left;
     font-size: 0.88rem;
     color: var(--ink-mute);
@@ -335,7 +509,139 @@
 
   .bundle-panel > p:first-child { margin-top: 0; }
 
-  ul.opts { list-style: none; margin: 16px 0; padding: 0; display: grid; gap: 2px; }
+  ul.opts { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+
+  .bundle-customize-open {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin: 14px 0 6px;
+    padding: 8px 13px;
+    border: 1px solid var(--line);
+    border-radius: 9px;
+    background: var(--raised);
+    color: var(--ink-soft);
+    font: inherit;
+    font-size: 0.84rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: border-color 0.15s, color 0.15s, background 0.15s;
+  }
+
+  .bundle-customize-open:hover {
+    border-color: var(--accent);
+    color: var(--ink);
+    background: var(--surface);
+  }
+
+  .bundle-customize-icon {
+    flex: none;
+    width: 1.05rem;
+    height: 1.05rem;
+    color: var(--ink-faint);
+  }
+
+  .bundle-customize-open:hover .bundle-customize-icon { color: var(--accent); }
+
+  .bundle-includes {
+    margin: 0 0 14px;
+    font-size: 0.78rem;
+    line-height: 1.45;
+    color: var(--ink-faint);
+    min-height: 1.2em;
+  }
+
+  .bundle-customize-dialog {
+    padding: 0;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    max-width: min(580px, calc(100vw - 28px));
+    width: 100%;
+    background: var(--surface);
+    color: var(--ink-soft);
+    box-shadow: 0 24px 64px -12px rgb(0 0 0 / 0.65);
+  }
+
+  .bundle-customize-dialog::backdrop {
+    background: rgb(0 0 0 / 0.55);
+    backdrop-filter: blur(2px);
+  }
+
+  .bundle-customize-panel {
+    margin: 0;
+    padding: 0;
+  }
+
+  .bundle-customize-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 16px 18px;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .bundle-customize-header h3 {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    color: var(--ink);
+  }
+
+  .bundle-customize-close {
+    flex: none;
+    display: grid;
+    place-items: center;
+    width: 2rem;
+    height: 2rem;
+    padding: 0;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--ink-faint);
+    font: inherit;
+    font-size: 1.35rem;
+    line-height: 1;
+    cursor: pointer;
+  }
+
+  .bundle-customize-close:hover {
+    border-color: var(--line);
+    background: var(--raised);
+    color: var(--ink-soft);
+  }
+
+  .bundle-customize-body {
+    padding: 12px 14px 8px;
+    max-height: min(62vh, 520px);
+    overflow-y: auto;
+  }
+
+  .bundle-customize-footer {
+    display: flex;
+    justify-content: flex-end;
+    padding: 12px 18px 16px;
+    border-top: 1px solid var(--line);
+  }
+
+  button.bundle-customize-done {
+    border: 1px solid var(--line);
+    background: var(--raised);
+    color: var(--ink-soft);
+    border-radius: 9px;
+    padding: 8px 16px;
+    font-size: 0.84rem;
+    font-weight: 500;
+    font-family: inherit;
+    cursor: pointer;
+    transition: border-color 0.15s, color 0.15s;
+  }
+
+  button.bundle-customize-done:hover {
+    border-color: var(--accent);
+    color: var(--ink);
+  }
 
   ul.opts label {
     display: grid;
@@ -775,7 +1081,7 @@
         and optionally routes to AI chat or computer-use when you configure a backend.
       </p>
       <p>
-        Use it if you want launcher speed in the Raycast mould, but with
+        Use it if you want a fast launcher-style palette, but with
         <strong>source you can audit</strong>, <strong>no subscription or account</strong>,
         clipboard and dictation that stay on the machine by default, and AI that can be
         entirely local (Ollama + Hermes) or pointed at whatever API you already trust.
@@ -785,15 +1091,30 @@
 
     <div class="install" id="install">
       <p class="install-label">Install</p>
-      <p class="install-choices">
-        Pick one path — <strong>Caduceus only</strong>, the
-        <strong>full local stack</strong>
-        (app + <a href="https://ollama.com/" rel="noopener">Ollama</a> +
-        <a href="https://hermes-agent.nousresearch.com/" rel="noopener">Hermes Agent</a> + models),
-        or the <strong>.dmg</strong>. The first two each work with
-        <strong>curl</strong> or <strong>Homebrew</strong>, whichever you prefer;
-        it is the same app either way.
+      <p class="install-intro-line">
+        <strong>Caduceus only</strong> (curl or Homebrew), the <strong>full local stack</strong>, or a
+        <strong>.dmg</strong> — pick one path below.
       </p>
+      <details class="install-fold install-fold-intro">
+        <summary>
+          <span class="chev" aria-hidden="true">&rsaquo;</span>
+          <span class="install-fold-head">
+            <span class="install-fold-title">Which path should I use?</span>
+            <span class="install-fold-hint">When to use curl, the stack installer, or a manual download.</span>
+          </span>
+        </summary>
+        <div class="install-fold-body">
+          <p class="install-choices">
+            Pick one path — <strong>Caduceus only</strong>, the
+            <strong>full local stack</strong>
+            (app + <a href="https://ollama.com/" rel="noopener">Ollama</a> +
+            <a href="https://hermes-agent.nousresearch.com/" rel="noopener">Hermes Agent</a> + models),
+            or the <strong>.dmg</strong>. Option 1 also works with
+            <strong>Homebrew</strong> if you prefer that over <strong>curl</strong>;
+            the full local stack uses the installer script below.
+          </p>
+        </div>
+      </details>
 
       <div class="install-grid">
       <div class="install-block">
@@ -812,21 +1133,28 @@
           <strong>Idempotent</strong> — safe to run again; re-running just reinstalls the latest release.
         </p>
 
-        <p class="install-alt-label">or with Homebrew</p>
-        <div class="cmd">
-          <code id="brew-cmd"><span class="prompt">$ </span>brew install --cask geowizard4645/caduceus/caduceus</code>
-          <button class="copy" id="brew-copy" type="button">Copy</button>
-        </div>
-        <p class="cmd-meta">
-          Taps <a href="https://github.com/GeoWizard4645/homebrew-caduceus" rel="noopener">geowizard4645/caduceus</a>
-          on the way through, so there is nothing to add first.
-          <strong><code>brew upgrade --cask caduceus</code></strong> to update ·
-          <strong><code>brew uninstall --cask caduceus</code></strong> to remove it, or
-          <code>--zap</code> as well to take your settings and clipboard history with it.
-          The cask clears the quarantine flag the same way the script above does — read it in
-          <a href="https://github.com/GeoWizard4645/caduceus/blob/main/homebrew/caduceus.rb" rel="noopener">the cask</a>,
-          or pass <code>--no-quarantine</code> to approve the app yourself.
-        </p>
+        <details class="install-brew">
+          <summary>
+            <span class="chev" aria-hidden="true">&rsaquo;</span>
+            Or with Homebrew
+          </summary>
+          <div class="install-brew-body">
+            <div class="cmd">
+              <code id="brew-cmd"><span class="prompt">$ </span>brew install --cask geowizard4645/caduceus/caduceus</code>
+              <button class="copy" id="brew-copy" type="button">Copy</button>
+            </div>
+            <p class="cmd-meta">
+              Taps <a href="https://github.com/GeoWizard4645/homebrew-caduceus" rel="noopener">geowizard4645/caduceus</a>
+              on the way through, so there is nothing to add first.
+              <strong><code>brew upgrade --cask caduceus</code></strong> to update ·
+              <strong><code>brew uninstall --cask caduceus</code></strong> to remove it, or
+              <code>--zap</code> as well to take your settings and clipboard history with it.
+              The cask clears the quarantine flag the same way the script above does — read it in
+              <a href="https://github.com/GeoWizard4645/caduceus/blob/main/homebrew/caduceus.rb" rel="noopener">the cask</a>,
+              or pass <code>--no-quarantine</code> to approve the app yourself.
+            </p>
+          </div>
+        </details>
       </div>
 
       <p class="install-or" aria-hidden="true">or</p>
@@ -839,23 +1167,60 @@
           Hermes, and Caduceus settings are configured for you.
         </p>
         <div class="bundle-panel">
-          <p>
-            One <strong>idempotent</strong> command: Caduceus,
-            <a href="https://ollama.com/" rel="noopener">Ollama</a>,
-            <a href="https://hermes-agent.nousresearch.com/" rel="noopener">Hermes Agent</a>,
-            model pulls, <code>/</code> on <code>http://localhost:11434/v1</code>, and
-            <code>/c</code> via Hermes <code>computer_use</code>. Untick what you already have;
-            model pulls require Ollama (see
-            <a href="https://github.com/ollama/ollama/tree/main/docs" rel="noopener">Ollama docs</a>
-            and
-            <a href="https://github.com/NousResearch/hermes-agent" rel="noopener">Hermes Agent on GitHub</a>
-            if you prefer to install by hand).
-            <strong>Do not worry if you installed Caduceus already</strong> — by any of the other
-            routes — you can run this same command later; it skips what is already installed and
-            only fills in the AI pieces.
-          </p>
+          <details class="install-fold-nested">
+            <summary>
+              <span class="chev" aria-hidden="true">&rsaquo;</span>
+              What this command installs
+            </summary>
+            <div class="install-fold-body">
+              <p>
+                One <strong>idempotent</strong> command: Caduceus,
+                <a href="https://ollama.com/" rel="noopener">Ollama</a>,
+                <a href="https://hermes-agent.nousresearch.com/" rel="noopener">Hermes Agent</a>,
+                model pulls, <code>/</code> on <code>http://localhost:11434/v1</code>, and
+                <code>/c</code> via Hermes <code>computer_use</code>. Untick what you already have;
+                model pulls require Ollama (see
+                <a href="https://github.com/ollama/ollama/tree/main/docs" rel="noopener">Ollama docs</a>
+                and
+                <a href="https://github.com/NousResearch/hermes-agent" rel="noopener">Hermes Agent on GitHub</a>
+                if you prefer to install by hand).
+                <strong>Do not worry if you installed Caduceus already</strong> — by any of the other
+                routes — you can run this same command later; it skips what is already installed and
+                only fills in the AI pieces.
+              </p>
+            </div>
+          </details>
 
-          <ul class="opts" id="opts"></ul>
+          <button
+            type="button"
+            class="bundle-customize-open"
+            id="bundle-customize-open"
+            aria-haspopup="dialog"
+            aria-controls="bundle-customize-dialog"
+          >
+            <svg class="bundle-customize-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" />
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z" />
+            </svg>
+            Customize what's included
+          </button>
+          <p class="bundle-includes" id="bundle-includes" aria-live="polite"></p>
+
+          <dialog class="bundle-customize-dialog" id="bundle-customize-dialog" aria-labelledby="bundle-customize-title">
+            <div class="bundle-customize-panel">
+              <header class="bundle-customize-header">
+                <h3 id="bundle-customize-title">Customize what's included</h3>
+                <button type="button" class="bundle-customize-close" id="bundle-customize-close" aria-label="Close">&times;</button>
+              </header>
+              <div class="bundle-customize-body">
+                <ul class="opts" id="opts"></ul>
+                <p class="opts-note" id="opts-note"></p>
+              </div>
+              <footer class="bundle-customize-footer">
+                <button type="button" class="bundle-customize-done" id="bundle-customize-done">Done</button>
+              </footer>
+            </div>
+          </dialog>
 
           <div class="cmd">
             <code id="bundle-cmd"><span class="prompt">$ </span></code>
@@ -863,29 +1228,31 @@
           </div>
 
           <p class="cmd-meta" id="bundle-meta"></p>
-          <p class="opts-note" id="opts-note"></p>
 
-          <p class="install-alt-label">or with Homebrew</p>
-          <div class="cmd">
-            <code id="brew-stack-cmd"><span class="prompt">$ </span>brew install --cask geowizard4645/caduceus/caduceus &amp;&amp; brew install ollama &amp;&amp; curl -fsSL https://vivaanshahani.com/caduceus/install.sh | bash -s -- --with=hermes --pull=qwen3.5:4b --ai=qwen3.5:4b</code>
-            <button class="copy" id="brew-stack-copy" type="button">Copy</button>
-          </div>
-          <p class="cmd-meta">
-            Homebrew installs the app and Ollama; the script still does the model pull and the
-            wiring, because those are not things a package manager knows how to do. Same result,
-            and <code>brew upgrade</code> keeps the two of them current afterwards.
-          </p>
-          <p class="install-follow">
-            Would rather use your own AI CLI or cloud API?
-            <a href="https://caduceus.vivaanshahani.com/configure-ai">Learn how to configure that with Caduceus</a>.
-          </p>
+          <details class="install-fold-nested">
+            <summary>
+              <span class="chev" aria-hidden="true">&rsaquo;</span>
+              Use your own AI instead
+            </summary>
+            <div class="install-fold-body">
+              <p class="install-follow">
+                Would rather use your own AI CLI or cloud API?
+                <a href="https://caduceus.vivaanshahani.com/configure-ai">Learn how to configure that with Caduceus</a>.
+              </p>
+            </div>
+          </details>
         </div>
       </div>
 
-      <p class="install-or" aria-hidden="true">or</p>
-
-      <div class="install-block manual">
-        <p class="install-step">Option 3 — Download the .dmg</p>
+      <details class="install-fold install-fold-dmg">
+        <summary>
+          <span class="chev" aria-hidden="true">&rsaquo;</span>
+          <span class="install-fold-head">
+            <span class="install-fold-title">Option 3 — Download the .dmg</span>
+            <span class="install-fold-hint">Manual download — corporate policy, offline transfer, or no curl script.</span>
+          </span>
+        </summary>
+        <div class="install-fold-body manual">
         <p class="install-best">
           <span class="tag">Best for</span>
           downloading the app file yourself — corporate policies, offline transfer, or if you prefer not to
@@ -898,19 +1265,28 @@
           quarantines it until you trust it. Every other option runs this line for you.
         </p>
         <pre>xattr -dr com.apple.quarantine /Applications/Caduceus.app</pre>
-        <p class="install-follow">
-          <strong>Need an older version?</strong>
-          <a href="https://github.com/GeoWizard4645/caduceus/releases" rel="noopener">Every release
-          is still there</a>, each with its universal <code>.dmg</code> attached — useful if a new
-          version breaks something you depend on, or if you are on an older macOS. Downgrading is
-          just installing the older <code>.dmg</code> over the top; your settings, shortcuts and
-          clipboard history live outside the app bundle and are left alone.
-        </p>
-        <p class="install-follow">
-          Would rather compile it? Add <code>--from-source</code> to the command in option 1 and the
-          installer builds it on your Mac instead — it fetches Rust and Node and takes a few minutes.
-        </p>
-      </div>
+        <details class="install-fold-nested">
+          <summary>
+            <span class="chev" aria-hidden="true">&rsaquo;</span>
+            Older releases &amp; compile from source
+          </summary>
+          <div class="install-fold-body">
+            <p class="install-follow">
+              <strong>Need an older version?</strong>
+              <a href="https://github.com/GeoWizard4645/caduceus/releases" rel="noopener">Every release
+              is still there</a>, each with its universal <code>.dmg</code> attached — useful if a new
+              version breaks something you depend on, or if you are on an older macOS. Downgrading is
+              just installing the older <code>.dmg</code> over the top; your settings, shortcuts and
+              clipboard history live outside the app bundle and are left alone.
+            </p>
+            <p class="install-follow">
+              Would rather compile it? Add <code>--from-source</code> to the command in option 1 and the
+              installer builds it on your Mac instead — it fetches Rust and Node and takes a few minutes.
+            </p>
+          </div>
+        </details>
+        </div>
+      </details>
       </div>
     </div>
   </div>
@@ -1387,6 +1763,11 @@ export default async function (input, ctx) {
   const bundleCode = document.getElementById("bundle-cmd");
   const bundleMeta = document.getElementById("bundle-meta");
   const optsNote = document.getElementById("opts-note");
+  const bundleIncludes = document.getElementById("bundle-includes");
+  const customizeDialog = document.getElementById("bundle-customize-dialog");
+  const customizeOpen = document.getElementById("bundle-customize-open");
+  const customizeClose = document.getElementById("bundle-customize-close");
+  const customizeDone = document.getElementById("bundle-customize-done");
 
   if (optsList && bundleCode) {
     for (const part of PARTS) {
@@ -1532,6 +1913,15 @@ export default async function (input, ctx) {
         : needsDeps
           ? "Required tools are included whenever Ollama or Hermes is in the command."
           : "";
+
+      if (bundleIncludes) {
+        if (nothing) {
+          bundleIncludes.textContent = "";
+        } else {
+          const labels = selected.map((p) => p.name);
+          bundleIncludes.textContent = "Includes: " + labels.join(", ");
+        }
+      }
     };
 
     optsList.addEventListener("change", (ev) => {
@@ -1552,6 +1942,14 @@ export default async function (input, ctx) {
       render();
     });
     render();
+
+    if (customizeDialog && customizeOpen) {
+      const closeCustomize = () => customizeDialog.close();
+      customizeOpen.addEventListener("click", () => customizeDialog.showModal());
+      customizeClose?.addEventListener("click", closeCustomize);
+      customizeDone?.addEventListener("click", closeCustomize);
+      customizeDialog.addEventListener("close", () => customizeOpen.focus());
+    }
   }
 
   // Copy buttons. The command text is read from the DOM rather than duplicated
@@ -1559,7 +1957,6 @@ export default async function (input, ctx) {
   for (const [buttonId, codeId] of [
     ["copy", "cmd"],
     ["brew-copy", "brew-cmd"],
-    ["brew-stack-copy", "brew-stack-cmd"],
     ["copy2", "cmd2"],
     ["bundle-copy", "bundle-cmd"],
   ]) {
