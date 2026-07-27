@@ -11,7 +11,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import * as api from "./api";
 import { applyAppearance, applyBackdrop, watchSystemTheme } from "./theme";
-import type { Settings } from "./types";
+import type { Settings, UpdateCheck } from "./types";
 import { EVENTS } from "./types";
 
 /**
@@ -197,4 +197,25 @@ export function useAsync<T>(
   }, [...deps, nonce]);
 
   return { data, loading, error, reload: () => setNonce((n) => n + 1) };
+}
+
+const UPDATE_POLL_MS = 6 * 60 * 60 * 1000;
+
+/** Poll GitHub for a newer release; also listens for the startup emit from Rust. */
+export function useUpdateCheck(active = true): UpdateCheck | null {
+  const [update, setUpdate] = useState<UpdateCheck | null>(null);
+
+  useEffect(() => {
+    if (!active) return;
+    const refresh = () => void api.checkForUpdate().then(setUpdate).catch(() => {});
+    refresh();
+    const timer = setInterval(refresh, UPDATE_POLL_MS);
+    return () => clearInterval(timer);
+  }, [active]);
+
+  useTauriEvent<UpdateCheck>(EVENTS.updateAvailable, (payload) => {
+    setUpdate(payload);
+  });
+
+  return update;
 }

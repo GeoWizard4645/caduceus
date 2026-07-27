@@ -70,6 +70,8 @@ pub struct RepairOutcome {
     pub message: String,
     /// Whether the grant is held *now*, where that can be read back.
     pub granted: bool,
+    /// Caduceus scheduled a relaunch (macOS often quits the app during TCC reset).
+    pub will_relaunch: bool,
 }
 
 const BUNDLE_ID: &str = "com.caduceus.desktop";
@@ -107,6 +109,8 @@ fn run_bounded(command: &mut Command, limit: Duration) -> std::io::Result<std::p
 /// Delete the stale entry and ask macOS for the grant again.
 #[cfg(target_os = "macos")]
 pub fn repair(grant: Grant) -> RepairOutcome {
+    let will_relaunch = super::relaunch::schedule_relaunch();
+
     // Bounded, like every other subprocess Caduceus starts. `tccutil` talks to
     // the TCC daemon, and a daemon that does not answer would otherwise hold
     // whichever thread is servicing this call indefinitely.
@@ -132,35 +136,51 @@ pub fn repair(grant: Grant) -> RepairOutcome {
                      System Settings — that does the same thing."
                 ),
                 granted: currently_granted(grant),
+                will_relaunch: false,
             };
         }
     }
+
+    let relaunch_note = if will_relaunch {
+        " Caduceus is restarting so macOS can apply the change — if a prompt appears, approve it when the app comes back."
+    } else {
+        ""
+    };
 
     // Only Accessibility has an API that both reports the grant and asks for
     // it. The rest are prompted for by the framework that needs them, at the
     // moment it needs them, so the honest thing after a reset is to say the
     // slate is clean and let the next attempt trigger the prompt.
     if grant == Grant::Accessibility {
-        let trusted = super::accessibility::prompt_for_trust();
+        let trusted = if will_relaunch {
+            // macOS may terminate us during reset; relaunch will show the prompt.
+            super::accessibility::is_trusted()
+        } else {
+            super::accessibility::prompt_for_trust()
+        };
         return RepairOutcome {
             ok: true,
             granted: trusted,
             message: if trusted {
-                "Accessibility is on. Everything that needed it works now.".into()
+                format!(
+                    "Accessibility is on. Everything that needed it works now.{relaunch_note}"
+                )
             } else {
-                "Cleared the stale entry and asked macOS again — approve the prompt, or turn \
-                 Caduceus on in the list that just opened."
-                    .into()
+                format!(
+                    "Cleared the stale entry.{relaunch_note} If nothing prompted you, turn Caduceus on in the Accessibility list that opens from System Settings."
+                )
             },
+            will_relaunch,
         };
     }
 
     RepairOutcome {
         ok: true,
         granted: false,
-        message: "Cleared the old entry. Try the thing that needed this permission again — \
-                  macOS will ask, and this time it will ask about the build you are running."
-            .into(),
+        message: format!(
+            "Cleared the old entry.{relaunch_note} Try the thing that needed this permission again — macOS will ask about the build you are running."
+        ),
+        will_relaunch,
     }
 }
 
@@ -170,6 +190,7 @@ pub fn repair(_grant: Grant) -> RepairOutcome {
         ok: false,
         message: "Privacy grants are a macOS idea.".into(),
         granted: true,
+        will_relaunch: false,
     }
 }
 

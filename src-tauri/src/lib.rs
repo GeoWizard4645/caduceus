@@ -40,6 +40,7 @@ pub mod tools;
 pub mod staff_mark;
 pub mod tray;
 pub mod uninstall;
+pub mod update;
 pub mod usage;
 pub mod voice;
 pub mod window;
@@ -77,6 +78,7 @@ pub fn run() {
             commands::update_settings,
             commands::reset_settings,
             commands::get_runtime_info,
+            commands::check_for_update,
             commands::validate_hotkey,
             // secrets
             commands::set_backend_api_key,
@@ -450,6 +452,14 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     if let Err(e) = tray::build(&handle) {
         log::error!("could not create the tray icon: {e}");
     }
+
+    let update_handle = handle.clone();
+    tauri::async_runtime::spawn(async move {
+        let check = crate::update::check().await;
+        if check.update_available {
+            let _ = update_handle.emit(window::UPDATE_AVAILABLE_EVENT, &check);
+        }
+    });
 
     autostart::sync_with_settings(&handle, loaded.general.launch_at_login);
 

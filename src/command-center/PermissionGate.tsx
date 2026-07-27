@@ -182,9 +182,13 @@ export function PermissionGate({
     setNote(null);
     try {
       const outcome = await api.repairPermission(blocking);
-      setNote(outcome.message);
+      setNote(
+        outcome.willRelaunch
+          ? `${outcome.message} If Caduceus closes, it should reopen in a second.`
+          : outcome.message,
+      );
       if (outcome.granted) await refresh();
-      else await beginGrantFlow(blocking);
+      else if (!outcome.willRelaunch) await beginGrantFlow(blocking);
     } catch (error) {
       setNote(api.errorMessage(error));
     } finally {

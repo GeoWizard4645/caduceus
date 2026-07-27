@@ -6,25 +6,22 @@
  * is. This lists everything, sorted by whatever is actually costing you, with
  * enough context to decide.
  *
- * # Two things it does deliberately
- *
- * **Terminate before kill.** The first press sends SIGTERM, which lets a
- * process save and close its files. SIGKILL is a second, separate, clearly
- * labelled choice — reaching for it first is how you lose the document that was
- * mid-write.
- *
- * **It refuses to kill Caduceus.** Not because you should not be able to quit
- * it, but because doing it from this list looks like the app crashing, and
- * there is a Quit item in the menu bar that says what it means.
+ * Processes are grouped by application (bundle), like Activity Monitor's App view.
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import * as api from "@/shared/api";
 import { useEscape } from "@/shared/hooks";
-import type { ProcessRow, SystemSnapshot } from "@/shared/types";
-import { Button, cx } from "@/shared/ui";
+import type { ProcessGroupRow, ProcessRow, SystemSnapshot } from "@/shared/types";
+import { cx } from "@/shared/ui";
 import type { ToolPageProps } from "../ToolPage";
+
+import {
+  ProcessGroupList,
+  filterProcessGroups,
+  quitProcessGroup,
+} from "../../processGroups";
 
 type SortKey = "cpu" | "memory" | "name";
 
@@ -32,7 +29,8 @@ export function ProcessesPage({ active, onSetTitle }: ToolPageProps) {
   const [snapshot, setSnapshot] = useState<SystemSnapshot | null>(null);
   const [filter, setFilter] = useState("");
   const [sort, setSort] = useState<SortKey>("cpu");
-  const [armed, setArmed] = useState<{ pid: number; force: boolean } | null>(null);
+  const [armed, setArmed] = useState<{ key: string; force: boolean } | null>(null);
+  const [killing, setKilling] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
 
   useEffect(() => onSetTitle("Processes"), [onSetTitle]);
@@ -45,8 +43,6 @@ export function ProcessesPage({ active, onSetTitle }: ToolPageProps) {
     }
   }, [sort]);
 
-  // Two seconds: fast enough that a spike is visible, slow enough that the
-  // list is readable and the poll itself is not the busiest thing running.
   useEffect(() => {
     if (!active) return;
     void refresh();
@@ -54,23 +50,18 @@ export function ProcessesPage({ active, onSetTitle }: ToolPageProps) {
     return () => clearInterval(timer);
   }, [active, refresh]);
 
-  const rows = useMemo(() => {
-    const all = snapshot?.processes ?? [];
-    const needle = filter.trim().toLowerCase();
-    const matched = needle
-      ? all.filter(
-          (p) => p.name.toLowerCase().includes(needle) || String(p.pid).includes(needle),
-        )
-      : all;
-    return [...matched].sort((a, b) =>
-      sort === "name" ? a.name.localeCompare(b.name)
-      : sort === "memory" ? b.memoryBytes - a.memoryBytes
-      : b.cpu - a.cpu,
-    );
+  const groups = useMemo(() => {
+    let list = filterProcessGroups(snapshot?.processGroups ?? [], filter);
+    if (sort === "name") {
+      list = [...list].sort((a, b) => a.name.localeCompare(b.name));
+    } else if (sort === "memory") {
+      list = [...list].sort((a, b) => b.memoryBytes - a.memoryBytes);
+    } else {
+      list = [...list].sort((a, b) => b.cpu - a.cpu);
+    }
+    return list;
   }, [snapshot, filter, sort]);
 
-  // Escape means "not that one after all" long before it means "close the tab",
-  // and losing an armed Stop along with the whole page is the worst reading of it.
   useEscape(active, () => {
     if (armed) {
       setArmed(null);
@@ -83,27 +74,44 @@ export function ProcessesPage({ active, onSetTitle }: ToolPageProps) {
     return false;
   });
 
-  const end = async (row: ProcessRow, force: boolean) => {
-    if (armed?.pid !== row.pid || armed.force !== force) {
-      setArmed({ pid: row.pid, force });
+  const runKill = async (key: string, force: boolean, run: () => Promise<void>) => {
+    if (armed?.key !== key || armed.force !== force) {
+      setArmed({ key, force });
       return;
     }
     setArmed(null);
+    setKilling(key);
     try {
-      await api.systemKill(row.pid, force);
-      setNote(`${force ? "Killed" : "Asked"} ${row.name} (${row.pid}) to stop.`);
+      await run();
       await refresh();
     } catch (e) {
       setNote(api.errorMessage(e));
+    } finally {
+      setKilling(null);
     }
   };
+
+  const killGroup = (group: ProcessGroupRow, force: boolean) =>
+    runKill(`g:${group.name}:${force}`, force, async () => {
+      const { ok, failed } = await quitProcessGroup(group, force);
+      if (ok > 0) {
+        setNote(`${force ? "Killed" : "Asked"} ${group.name} (${ok} process${ok === 1 ? "" : "es"}).`);
+      }
+      if (failed.length) throw new Error(failed[0]);
+    });
+
+  const killProcess = (row: ProcessRow, force: boolean) =>
+    runKill(`p:${row.pid}:${force}`, force, async () => {
+      await api.systemKill(row.pid, force);
+      setNote(`${force ? "Killed" : "Asked"} ${row.name} (${row.pid}) to stop.`);
+    });
 
   return (
     <div className="flex h-full flex-col">
       <div className="shrink-0 border-b border-line px-5 py-3">
         <h1 className="text-[17px] font-semibold tracking-[-0.015em] text-ink">Processes</h1>
         <p className="mt-0.5 text-[13px] text-ink-mute">
-          Everything running, refreshed every two seconds. Stop asks nicely; Force does not.
+          Grouped by app, refreshed every two seconds. Stop asks nicely; Force does not.
         </p>
 
         <div className="row mt-3 flex-wrap gap-2">
@@ -111,7 +119,7 @@ export function ProcessesPage({ active, onSetTitle }: ToolPageProps) {
             type="search"
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
-            placeholder="Filter by name or pid…"
+            placeholder="Filter by app, process, or pid…"
             className="min-w-[180px] flex-1 rounded-lg border border-line bg-base/40 px-3 py-1.5 text-2xs text-ink placeholder:text-ink-faint focus:border-accent/50 focus:outline-none"
           />
           {(["cpu", "memory", "name"] as SortKey[]).map((key) => (
@@ -133,57 +141,27 @@ export function ProcessesPage({ active, onSetTitle }: ToolPageProps) {
 
         {snapshot && (
           <p className="mt-2 text-2xs text-ink-faint">
-            {snapshot.processTotal} processes · CPU {snapshot.cpuPercent.toFixed(0)}% ·
-            memory {humanBytes(snapshot.memoryUsedBytes)} of {humanBytes(snapshot.memoryTotalBytes)}
+            {snapshot.processGroups.length} apps · {snapshot.processTotal} processes · CPU{" "}
+            {snapshot.cpuPercent.toFixed(0)}% · memory {humanBytes(snapshot.memoryUsedBytes)} of{" "}
+            {humanBytes(snapshot.memoryTotalBytes)}
           </p>
         )}
         {note && <p className="mt-1 text-2xs text-ink-mute">{note}</p>}
+        {armed && (
+          <p className="mt-1 text-2xs text-caution">Press again to confirm, or Escape to cancel.</p>
+        )}
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto px-2 py-2">
-        {rows.map((row) => {
-          const armedHere = armed?.pid === row.pid;
-          const isSelf = row.name.toLowerCase().includes("caduceus");
-          return (
-            <div
-              key={row.pid}
-              className="flex items-center gap-3 rounded-lg px-3 py-1.5 transition-colors hover:bg-raised/60"
-            >
-              <span className="w-16 shrink-0 text-right font-mono text-2xs tabular-nums text-ink-faint">
-                {row.pid}
-              </span>
-              <span className="min-w-0 flex-1 truncate text-[13px] text-ink">{row.name}</span>
-              <span
-                className={cx(
-                  "w-14 shrink-0 text-right font-mono text-2xs tabular-nums",
-                  row.cpu > 50 ? "text-danger" : "text-ink-mute",
-                )}
-              >
-                {row.cpu.toFixed(1)}%
-              </span>
-              <span className="w-20 shrink-0 text-right font-mono text-2xs tabular-nums text-ink-mute">
-                {humanBytes(row.memoryBytes)}
-              </span>
+        <ProcessGroupList
+          groups={groups}
+          killingKey={killing}
+          onKillGroup={killGroup}
+          onKillProcess={killProcess}
+          variant="tool"
+        />
 
-              {isSelf ? (
-                <span className="w-[132px] shrink-0 text-right text-2xs text-ink-faint">
-                  Quit from the menu bar
-                </span>
-              ) : (
-                <span className="row w-[132px] shrink-0 justify-end gap-1">
-                  <Button size="sm" onClick={() => void end(row, false)}>
-                    {armedHere && !armed.force ? "Sure?" : "Stop"}
-                  </Button>
-                  <Button size="sm" tone="danger" onClick={() => void end(row, true)}>
-                    {armedHere && armed.force ? "Sure?" : "Force"}
-                  </Button>
-                </span>
-              )}
-            </div>
-          );
-        })}
-
-        {rows.length === 0 && (
+        {groups.length === 0 && (
           <p className="px-3 py-10 text-center text-2xs text-ink-faint">
             {snapshot ? "Nothing matches that." : "Reading the process list…"}
           </p>
@@ -193,7 +171,6 @@ export function ProcessesPage({ active, onSetTitle }: ToolPageProps) {
   );
 }
 
-/** `1.2 GB`. Bytes are unreadable and this list is meant to be scanned. */
 function humanBytes(bytes: number): string {
   const units = ["B", "KB", "MB", "GB", "TB"];
   let value = bytes;

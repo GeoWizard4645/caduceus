@@ -10,7 +10,7 @@
 import { useEffect, useState } from "react";
 
 import * as api from "@/shared/api";
-import { useAsync, useTauriEvent } from "@/shared/hooks";
+import { useAsync, useTauriEvent, useUpdateCheck } from "@/shared/hooks";
 import { EVENTS } from "@/shared/types";
 import { Callout, Spinner, cx } from "@/shared/ui";
 import { ThemeToggle } from "@/shared/ThemeToggle";
@@ -73,6 +73,7 @@ export function Settings({ initialSection }: { initialSection?: string } = {}) {
   }, [initialSection]);
 
   const info = useAsync(() => api.getRuntimeInfo(), []);
+  const update = useUpdateCheck(true);
 
   // The tray and the Command Center can ask for a specific tab.
   useTauriEvent<string>(EVENTS.settingsTab, (requested) => {
@@ -106,8 +107,24 @@ export function Settings({ initialSection }: { initialSection?: string } = {}) {
             <ThemeToggle />
           </div>
           <p className="px-2 text-2xs text-ink-faint">
-            {info.data ? `Version ${info.data.version}` : " "}
+            {info.data ? `Version ${info.data.version}` : " "}
           </p>
+          {update?.updateAvailable && (
+            <button
+              type="button"
+              className="no-drag mx-2 mt-2 w-[calc(100%-1rem)] rounded-lg border border-accent/35 bg-accent/10 px-2.5 py-1.5 text-left text-2xs font-medium text-accent transition-colors hover:bg-accent/15"
+              onClick={() => {
+                setTab("help");
+                const url =
+                  update.downloadUrl ??
+                  update.releaseUrl ??
+                  "https://github.com/GeoWizard4645/caduceus/releases/latest";
+                void api.openExternalUrl(url);
+              }}
+            >
+              Update to {update.latestVersion ?? "latest"} ↗
+            </button>
+          )}
         </div>
 
         <div className="no-drag flex-1 space-y-0.5 overflow-y-auto px-2 pb-3">

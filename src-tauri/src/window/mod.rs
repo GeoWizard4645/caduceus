@@ -39,6 +39,7 @@ pub mod accessibility;
 pub mod grants;
 pub mod manage;
 pub mod recorder;
+pub mod relaunch;
 
 pub const STAFF_WINDOW: &str = "staff";
 pub const COMMAND_CENTER_WINDOW: &str = "command-center";
@@ -211,6 +212,8 @@ pub struct StaffHoverState {
 /// [`COMMAND_CENTER_OPEN_EVENT`] is emitted to that window alone, so no other
 /// webview can observe it. The staff needs to.
 pub const COMMAND_CENTER_SHOWN_EVENT: &str = "caduceus://command-center-shown";
+/// Latest GitHub release is newer than this build.
+pub const UPDATE_AVAILABLE_EVENT: &str = "caduceus://update-available";
 
 /// What the Command Center should show when it opens.
 #[derive(Debug, Clone, Serialize)]

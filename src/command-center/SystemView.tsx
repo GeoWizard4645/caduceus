@@ -15,11 +15,17 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import * as api from "@/shared/api";
-import type { ProcessRow, SystemSnapshot } from "@/shared/types";
+import type { ProcessGroupRow, ProcessRow, SystemSnapshot } from "@/shared/types";
 import { Spinner, cx } from "@/shared/ui";
 
+import {
+  ProcessGroupList,
+  filterProcessGroups,
+  quitProcessGroup,
+} from "./processGroups";
+
 const POLL_MS = 1000;
-const ROW_LIMIT = 60;
+const GROUP_LIMIT = 50;
 
 export function SystemView({
   query,
@@ -30,7 +36,7 @@ export function SystemView({
 }) {
   const [snap, setSnap] = useState<SystemSnapshot | null>(null);
   const [sortByMemory, setSortByMemory] = useState(false);
-  const [killing, setKilling] = useState<number | null>(null);
+  const [killing, setKilling] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   // Ref, not state: the poll loop reads it without needing to be torn down and
   // rebuilt every time the sort flips.
@@ -43,7 +49,7 @@ export function SystemView({
 
     const tick = async () => {
       try {
-        const next = await api.systemSnapshot(ROW_LIMIT, sortRef.current);
+        const next = await api.systemSnapshot(GROUP_LIMIT, sortRef.current);
         if (cancelled) return;
         setSnap(next);
         setError(null);
@@ -62,25 +68,66 @@ export function SystemView({
     };
   }, []);
 
-  const kill = useCallback(
+  const removePids = useCallback((pids: Set<number>) => {
+    setSnap((current) => {
+      if (!current) return current;
+      const processGroups = current.processGroups
+        .map((g) => ({
+          ...g,
+          processes: g.processes.filter((p) => !pids.has(p.pid)),
+        }))
+        .filter((g) => g.processes.length > 0)
+        .map((g) => ({
+          ...g,
+          cpu: g.processes.reduce((s, p) => s + p.cpu, 0),
+          memoryBytes: g.processes.reduce((s, p) => s + p.memoryBytes, 0),
+        }));
+      return {
+        ...current,
+        processGroups,
+        processes: current.processes.filter((p) => !pids.has(p.pid)),
+      };
+    });
+  }, []);
+
+  const killProcess = useCallback(
     async (row: ProcessRow, force: boolean) => {
-      setKilling(row.pid);
+      setKilling(`p:${row.pid}`);
       try {
         await api.systemKill(row.pid, force);
         onNotify(`${force ? "Force quit" : "Asked"} ${row.name} to quit`, "info");
-        setSnap((current) =>
-          current
-            ? { ...current, processes: current.processes.filter((p) => p.pid !== row.pid) }
-            : current,
-        );
+        removePids(new Set([row.pid]));
       } catch (e) {
         onNotify(api.errorMessage(e), "error");
       } finally {
         setKilling(null);
       }
     },
-    [onNotify],
+    [onNotify, removePids],
   );
+
+  const killGroup = useCallback(
+    async (group: ProcessGroupRow, force: boolean) => {
+      setKilling(`g:${group.name}`);
+      try {
+        const { ok, failed } = await quitProcessGroup(group, force);
+        if (ok > 0) {
+          onNotify(
+            `${force ? "Force quit" : "Asked"} ${group.name} to quit (${ok} process${ok === 1 ? "" : "es"})`,
+            "info",
+          );
+          const gone = new Set(group.processes.map((p) => p.pid));
+          removePids(gone);
+        }
+        if (failed.length) onNotify(failed[0]!, "error");
+      } finally {
+        setKilling(null);
+      }
+    },
+    [onNotify, removePids],
+  );
+
+  const kill = killProcess;
 
   if (error && !snap) {
     return <p className="px-5 py-8 text-center text-[13px] text-danger">{error}</p>;
@@ -94,10 +141,7 @@ export function SystemView({
     );
   }
 
-  const needle = query.trim().toLowerCase();
-  const rows = needle
-    ? snap.processes.filter((p) => p.name.toLowerCase().includes(needle))
-    : snap.processes;
+  const groups = filterProcessGroups(snap.processGroups, query);
 
   const memPercent = snap.memoryTotalBytes
     ? (snap.memoryUsedBytes / snap.memoryTotalBytes) * 100
@@ -151,9 +195,9 @@ export function SystemView({
       {/* --- process table ---------------------------------------------- */}
       <div className="row justify-between px-2 pb-1.5">
         <span className="text-2xs text-ink-faint">
-          {needle
-            ? `${rows.length} matching`
-            : `Top ${rows.length} of ${snap.processTotal} processes`}
+          {query.trim()
+            ? `${groups.length} matching app${groups.length === 1 ? "" : "s"}`
+            : `Top ${groups.length} apps · ${snap.processTotal} processes`}
         </span>
         <button
           type="button"
@@ -164,57 +208,19 @@ export function SystemView({
         </button>
       </div>
 
-      <div className="space-y-px">
-        {rows.map((row) => (
-          <div
-            key={row.pid}
-            className="group row justify-between gap-3 rounded-lg px-2.5 py-1.5 transition-colors hover:bg-raised/70"
-          >
-            <span className="min-w-0 flex-1 truncate text-[13px] text-ink">{row.name}</span>
-            <span className="w-14 shrink-0 text-right font-mono text-2xs tabular-nums text-ink-mute">
-              {row.cpu.toFixed(1)}%
-            </span>
-            <span className="w-16 shrink-0 text-right font-mono text-2xs tabular-nums text-ink-mute">
-              {bytes(row.memoryBytes)}
-            </span>
-            <span className="w-16 shrink-0 text-right">
-              {row.own ? (
-                <span className="row justify-end gap-1 opacity-0 transition-opacity group-hover:opacity-100">
-                  <button
-                    type="button"
-                    disabled={killing === row.pid}
-                    onClick={() => void kill(row, false)}
-                    title="Ask this process to quit (SIGTERM)"
-                    className="rounded px-1.5 py-0.5 text-2xs text-ink-mute hover:bg-overlay hover:text-ink disabled:opacity-40"
-                  >
-                    Quit
-                  </button>
-                  <button
-                    type="button"
-                    disabled={killing === row.pid}
-                    onClick={() => void kill(row, true)}
-                    title="Force quit (SIGKILL) — unsaved work is lost"
-                    className="rounded px-1.5 py-0.5 text-2xs text-danger hover:bg-danger/10 disabled:opacity-40"
-                  >
-                    Force
-                  </button>
-                </span>
-              ) : (
-                // Not ours to kill; saying so beats a button that always fails.
-                <span className="text-2xs text-ink-faint opacity-0 group-hover:opacity-100">
-                  system
-                </span>
-              )}
-            </span>
-          </div>
-        ))}
+      <ProcessGroupList
+        groups={groups}
+        killingKey={killing}
+        onKillGroup={(g, force) => void killGroup(g, force)}
+        onKillProcess={(row, force) => void kill(row, force)}
+        variant="monitor"
+      />
 
-        {rows.length === 0 && (
-          <p className="py-8 text-center text-2xs text-ink-faint">
-            No process matches “{query.trim()}”.
-          </p>
-        )}
-      </div>
+      {groups.length === 0 && (
+        <p className="py-8 text-center text-2xs text-ink-faint">
+          No app matches “{query.trim()}”.
+        </p>
+      )}
 
       <p className="px-2 pt-3 text-2xs text-ink-faint">
         {[snap.hostName, snap.osVersion, snap.kernelVersion].filter(Boolean).join(" · ")}

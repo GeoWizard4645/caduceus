@@ -187,6 +187,11 @@ pub async fn get_runtime_info<R: Runtime>(
     })
 }
 
+#[tauri::command]
+pub async fn check_for_update() -> crate::update::UpdateCheck {
+    crate::update::check().await
+}
+
 fn platform_computer_use_note() -> &'static str {
     #[cfg(target_os = "macos")]
     {

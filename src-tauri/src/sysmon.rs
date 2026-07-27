@@ -10,6 +10,8 @@
 //! separate command so "look at my system" and "terminate a process" are never
 //! the same click.
 
+use std::collections::HashMap;
+use std::path::Path;
 use std::sync::Arc;
 
 use parking_lot::Mutex;
@@ -33,6 +35,20 @@ pub struct ProcessRow {
     /// anything else needs privileges we do not have, so the UI greys it out
     /// rather than offering a button that always fails.
     pub own: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProcessGroupRow {
+    /// Human-readable app name (bundle name when inside a `.app`).
+    pub name: String,
+    /// Sum of child CPU usages — can exceed 100% on multi-core machines.
+    pub cpu: f32,
+    pub memory_bytes: u64,
+    pub own: bool,
+    /// A representative pid for the app (often the main executable in the bundle).
+    pub root_pid: Option<u32>,
+    pub processes: Vec<ProcessRow>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -63,6 +79,7 @@ pub struct SystemSnapshot {
     pub os_version: Option<String>,
     pub kernel_version: Option<String>,
     pub disks: Vec<DiskRow>,
+    pub process_groups: Vec<ProcessGroupRow>,
     pub processes: Vec<ProcessRow>,
     /// How many processes existed before `limit` was applied, so the UI can say
     /// "showing 40 of 612" instead of implying that is everything.
@@ -128,30 +145,73 @@ impl SysMonitor {
             ProcessRefreshKind::nothing()
                 .with_cpu()
                 .with_memory()
+                .with_exe(sysinfo::UpdateKind::OnlyIfNotSet)
                 .with_user(sysinfo::UpdateKind::OnlyIfNotSet),
         );
         disks.refresh(true);
         networks.refresh(true);
 
-        let mut processes: Vec<ProcessRow> = system
-            .processes()
-            .iter()
-            .map(|(pid, p)| ProcessRow {
+        let process_total = system.processes().len();
+
+        let mut groups_map: HashMap<String, ProcessGroupRow> = HashMap::new();
+        for (pid, p) in system.processes() {
+            let row = ProcessRow {
                 pid: pid.as_u32(),
                 name: p.name().to_string_lossy().to_string(),
                 cpu: p.cpu_usage(),
                 memory_bytes: p.memory(),
                 own: match (own_uid.as_ref(), p.user_id()) {
                     (Some(mine), Some(theirs)) => mine == theirs,
-                    // Unknown ownership is treated as not-ours: offering a kill
-                    // button that fails is worse than not offering one.
                     _ => false,
                 },
-            })
+            };
+            let (group_name, root_pid) = resolve_app_group(*pid, system);
+            let group = groups_map.entry(group_name.clone()).or_insert_with(|| ProcessGroupRow {
+                name: group_name,
+                cpu: 0.0,
+                memory_bytes: 0,
+                own: false,
+                root_pid: Some(root_pid.as_u32()),
+                processes: Vec::new(),
+            });
+            group.cpu += row.cpu;
+            group.memory_bytes += row.memory_bytes;
+            group.own |= row.own;
+            group.processes.push(row);
+        }
+
+        let mut process_groups: Vec<ProcessGroupRow> = groups_map.into_values().collect();
+        for group in &mut process_groups {
+            group.processes.sort_by(|a, b| {
+                b.cpu
+                    .partial_cmp(&a.cpu)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+                    .then_with(|| b.memory_bytes.cmp(&a.memory_bytes))
+            });
+            if group.root_pid.is_none() {
+                group.root_pid = group.processes.first().map(|p| p.pid);
+            }
+        }
+
+        if sort_by_memory {
+            process_groups.sort_by(|a, b| b.memory_bytes.cmp(&a.memory_bytes));
+        } else {
+            process_groups.sort_by(|a, b| {
+                b.cpu
+                    .partial_cmp(&a.cpu)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+                    .then_with(|| b.memory_bytes.cmp(&a.memory_bytes))
+            });
+        }
+        process_groups.truncate(limit);
+
+        let mut processes: Vec<ProcessRow> = process_groups
+            .iter()
+            .flat_map(|g| g.processes.iter().cloned())
             .collect();
 
-        let process_total = processes.len();
-
+        // Legacy flat sort (unused for display once grouped, kept for callers that
+        // still read `processes` directly).
         if sort_by_memory {
             processes.sort_by(|a, b| b.memory_bytes.cmp(&a.memory_bytes));
         } else {
@@ -162,7 +222,6 @@ impl SysMonitor {
                     .then_with(|| b.memory_bytes.cmp(&a.memory_bytes))
             });
         }
-        processes.truncate(limit);
 
         let (net_down_bytes, net_up_bytes) = networks
             .iter()
@@ -196,6 +255,7 @@ impl SysMonitor {
                     available_bytes: d.available_space(),
                 })
                 .collect(),
+            process_groups,
             processes,
             process_total,
         }
@@ -234,6 +294,59 @@ impl SysMonitor {
             ))
         }
     }
+}
+
+/// Display name from a path like `/Applications/Google Chrome.app/Contents/...`.
+fn app_name_from_exe(path: &Path) -> Option<String> {
+    let s = path.to_str()?;
+    let lower = s.to_ascii_lowercase();
+    let idx = lower.find(".app/")?;
+    let before = &s[..idx];
+    let bundle = before.rsplit('/').next()?;
+    Some(
+        bundle
+            .strip_suffix(".app")
+            .unwrap_or(bundle)
+            .to_string(),
+    )
+}
+
+/// Walk toward the root process until we find a `.app` bundle or run out of parents.
+fn resolve_app_group(pid: Pid, system: &System) -> (String, Pid) {
+    let mut current = pid;
+    for _ in 0..48 {
+        let Some(proc) = system.process(current) else {
+            break;
+        };
+
+        if let Some(exe) = proc.exe() {
+            if let Some(name) = app_name_from_exe(exe) {
+                return (name, current);
+            }
+        }
+
+        let name = proc.name().to_string_lossy();
+        match proc.parent() {
+            Some(parent) if parent.as_u32() > 1 => {
+                let walk = name.starts_with("com.apple.WebKit")
+                    || name.contains("Helper")
+                    || name.contains("helper")
+                    || (name.contains('.') && !name.contains(' ') && name.len() > 20);
+                if walk {
+                    current = parent;
+                    continue;
+                }
+                return (name.to_string(), current);
+            }
+            _ => return (name.to_string(), current),
+        }
+    }
+
+    let fallback = system
+        .process(pid)
+        .map(|p| p.name().to_string_lossy().to_string())
+        .unwrap_or_else(|| "Unknown".into());
+    (fallback, pid)
 }
 
 #[cfg(unix)]
@@ -277,7 +390,7 @@ mod tests {
             snap.memory_total_bytes
         );
         assert!(snap.process_total > 0);
-        assert!(snap.processes.len() <= 10, "limit was not applied");
+        assert!(snap.process_groups.len() <= 10, "group limit was not applied");
     }
 
     #[test]
@@ -287,7 +400,7 @@ mod tests {
         std::thread::sleep(std::time::Duration::from_millis(MIN_POLL_MS));
         let snap = monitor.snapshot(40, false);
 
-        for pair in snap.processes.windows(2) {
+        for pair in snap.process_groups.windows(2) {
             assert!(
                 pair[0].cpu >= pair[1].cpu || pair[0].memory_bytes >= pair[1].memory_bytes,
                 "{} then {} is out of order",
@@ -301,7 +414,7 @@ mod tests {
     fn sorting_by_memory_is_monotonic() {
         let monitor = SysMonitor::new();
         let snap = monitor.snapshot(40, true);
-        for pair in snap.processes.windows(2) {
+        for pair in snap.process_groups.windows(2) {
             assert!(pair[0].memory_bytes >= pair[1].memory_bytes);
         }
     }

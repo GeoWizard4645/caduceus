@@ -29,6 +29,7 @@ import { countCommands, countFeatures } from "@/shared/featuresCatalog";
 import { Button, Callout, Kbd, Section, cx } from "@/shared/ui";
 
 import { UninstallSection } from "../UninstallSection";
+import { UpdateSection } from "../UpdateSection";
 import type { Draft } from "../useDraft";
 
 export function HelpTab({
@@ -249,6 +250,8 @@ export function HelpTab({
       </Section>
 
       <UninstallSection />
+
+      <UpdateSection />
 
       <Section title="This install">
         <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-2 text-[13px]">

@@ -87,7 +87,10 @@ export function PermissionPage({
     setRepairing(true);
     try {
       const outcome = await api.repairPermission(info.id);
-      setResult({ text: outcome.message, ok: outcome.ok });
+      const text = outcome.willRelaunch
+        ? `${outcome.message} If Caduceus closes, it should reopen in a second.`
+        : outcome.message;
+      setResult({ text, ok: outcome.ok });
       if (outcome.granted) setGranted(true);
       else void check();
     } catch (error) {

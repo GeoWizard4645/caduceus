@@ -303,6 +303,15 @@ export interface ProcessRow {
   own: boolean;
 }
 
+export interface ProcessGroupRow {
+  name: string;
+  cpu: number;
+  memoryBytes: number;
+  own: boolean;
+  rootPid: number | null;
+  processes: ProcessRow[];
+}
+
 export interface DiskRow {
   name: string;
   mountPoint: string;
@@ -325,9 +334,18 @@ export interface SystemSnapshot {
   osVersion: string | null;
   kernelVersion: string | null;
   disks: DiskRow[];
+  processGroups: ProcessGroupRow[];
   processes: ProcessRow[];
   /** Total before `limit` was applied, so the UI can say "40 of 612". */
   processTotal: number;
+}
+
+export interface UpdateCheck {
+  currentVersion: string;
+  updateAvailable: boolean;
+  latestVersion: string | null;
+  releaseUrl: string | null;
+  downloadUrl: string | null;
 }
 
 export interface RuntimeInfo {
@@ -534,6 +552,7 @@ export const EVENTS = {
   staffMarkChanged: "caduceus://staff-mark-changed",
   /** Rust asking the shell to open (or focus) a tab. */
   tabOpen: "caduceus://tab-open",
+  updateAvailable: "caduceus://update-available",
 } as const;
 
 // --- keep-awake sessions -----------------------------------------------------

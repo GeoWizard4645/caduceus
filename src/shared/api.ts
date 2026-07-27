@@ -38,6 +38,7 @@ import type {
   ParsedInput,
   RoutedText,
   RuntimeInfo,
+  UpdateCheck,
   Settings,
   SettingsApplyReport,
   AudioDevice,
@@ -68,6 +69,8 @@ export const updateSettings = (next: Settings) =>
 export const resetSettings = () => invoke<Settings>("reset_settings");
 
 export const getRuntimeInfo = () => invoke<RuntimeInfo>("get_runtime_info");
+
+export const checkForUpdate = () => invoke<UpdateCheck>("check_for_update");
 
 export const validateHotkey = (accelerator: string) =>
   invoke<string>("validate_hotkey", { accelerator });
@@ -482,6 +485,7 @@ export interface RepairOutcome {
   ok: boolean;
   message: string;
   granted: boolean;
+  willRelaunch: boolean;
 }
 
 /**
