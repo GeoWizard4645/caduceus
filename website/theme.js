@@ -35,5 +35,16 @@
       btn.addEventListener("click", window.caduceusSiteTheme.toggle);
       apply(current());
     }
+
+    document.querySelectorAll('a[href*="github.com"]').forEach(function (link) {
+      link.setAttribute("target", "_blank");
+      var rel = link.getAttribute("rel") || "";
+      if (rel.indexOf("noopener") === -1) {
+        link.setAttribute(
+          "rel",
+          (rel ? rel + " " : "") + "noopener noreferrer",
+        );
+      }
+    });
   });
 })();

@@ -15,7 +15,7 @@ Important notes:
 
 - [Overview](https://caduceus.vivaanshahani.com/): Product summary, install one-liner, and screenshots.
 - [All features](https://caduceus.vivaanshahani.com/features): Checklist of built-in behaviour (staff, palette, clipboard, voice, capture, AI, settings).
-- [Docs](https://caduceus.vivaanshahani.com/docs): Architecture and implementation notes for contributors (Tauri, Rust modules, events, shortcuts).
+- [Docs](https://caduceus.vivaanshahani.com/docs): Architecture and implementation notes for contributors (Tauri, Rust modules, events, shortcuts); user guide includes **Write your own extension**.
 - [Configure AI](https://caduceus.vivaanshahani.com/configure-ai): Hermes, Ollama, OpenAI-compatible CLIs, and cloud API setup for `/` and `/c`.
 
 ## Source and install

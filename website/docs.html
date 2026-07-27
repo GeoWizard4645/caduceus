@@ -180,6 +180,50 @@
     font-size: 1rem;
     color: var(--ink-soft);
   }
+
+  .doc-section pre {
+    margin: 14px 0;
+    padding: 14px 16px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: var(--surface);
+    overflow-x: auto;
+    font: 0.78rem/1.55 ui-monospace, "SF Mono", Menlo, monospace;
+    color: var(--ink-soft);
+  }
+
+  .doc-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.88rem;
+    margin: 12px 0 16px;
+  }
+
+  .doc-table th,
+  .doc-table td {
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--line);
+    vertical-align: top;
+    text-align: left;
+  }
+
+  .doc-table th {
+    color: var(--ink-soft);
+    font-weight: 600;
+  }
+
+  .doc-table td { color: var(--ink-mute); }
+
+  .doc-note {
+    margin: 16px 0;
+    padding: 14px 16px;
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--gold);
+    border-radius: 0 10px 10px 0;
+    background: var(--surface);
+    font-size: 0.9rem;
+    color: var(--ink-mute);
+  }
 </style>
 
 </head>
@@ -247,6 +291,7 @@
       <a href="#keys">Hotkeys and function keys</a>
       <a href="#appearance">Appearance</a>
       <a href="#privacy">Privacy and what leaves your machine</a>
+      <a href="#extensions">Write an extension</a>
   </div>
 
   <section class="doc-section" id="staff">
@@ -343,6 +388,88 @@
     <p>Two things touch the network, both only when you ask: a web search opens your browser, and the <kbd>/</kbd> and <kbd>/c</kbd> prefixes talk to whatever AI backend you configured — which can be a model on your own machine.</p>
     <p>API keys live in the OS keychain. There is no command to read one back out, so a compromised webview cannot exfiltrate them.</p>
   </section>
+  <section class="doc-section" id="extensions">
+    <h2>Write your own extension</h2>
+    <p class="lede">One JavaScript file — metadata in a header comment, no build step.</p>
+    <p>
+      Extensions add commands to the Command Center. Each extension is a single
+      <code>.js</code> file you drop onto <b>Settings → Extensions</b> (or save into the
+      extensions folder Caduceus opens from that tab). There is no separate manifest, no
+      <code>npm install</code>, and no folder layout to get wrong.
+    </p>
+
+    <h3>1. Create the file</h3>
+    <p>
+      The <code>@caduceus</code> block must be the <b>first</b> comment in the file. Caduceus
+      reads it <em>without running your code</em>, so you see the name and permissions before
+      anything executes.
+    </p>
+    <pre>/**
+ * @caduceus 1
+ * name: Word Count
+ * description: Count the words on your clipboard
+ * author: you
+ * permissions: clipboard
+ */
+export default async function (input, ctx) {
+  const text = await ctx.clipboard.read();
+  return `${text.trim().split(/\s+/).length} words`;
+}</pre>
+    <p>
+      <code>input</code> is whatever the user typed after the command name. Return a string for
+      a toast-style message, or an array of <code>{ title, subtitle?, action? }</code> objects to
+      show a list.
+    </p>
+
+    <h3>2. Declare permissions</h3>
+    <p>Only these values are allowed — a typo fails at install time instead of widening access silently.</p>
+    <table class="doc-table">
+      <thead>
+        <tr><th>Permission</th><th>What you get</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>clipboard</code></td><td><code>ctx.clipboard.read()</code> and <code>.write(text)</code></td></tr>
+        <tr><td><code>network</code></td><td><code>ctx.fetch(url, init)</code></td></tr>
+        <tr><td><code>selection</code></td><td><code>ctx.selection()</code> — current Finder selection</td></tr>
+        <tr><td><code>notifications</code></td><td><code>ctx.notify(text)</code></td></tr>
+      </tbody>
+    </table>
+    <p>Omit the <code>permissions</code> line entirely if you only need the APIs below that do not require one.</p>
+
+    <h3>3. Use the <code>ctx</code> API</h3>
+    <p>This is the complete surface — no <code>require</code>, no filesystem, no shell, no ambient <code>fetch</code>.</p>
+    <pre>ctx.clipboard.read()          → Promise&lt;string&gt;
+ctx.clipboard.write(text)     → Promise&lt;void&gt;
+ctx.fetch(url, init)          → Promise&lt;Response&gt;   // needs network
+ctx.selection()               → Promise&lt;string[]&gt;   // needs selection
+ctx.notify(text)              → void                // needs notifications
+ctx.storage.get(key)          → Promise&lt;any&gt;
+ctx.storage.set(key, value)   → Promise&lt;void&gt;
+ctx.open(url)                 → Promise&lt;void&gt;</pre>
+    <p><code>ctx.storage</code> is scoped per extension — two extensions cannot read each other's keys.</p>
+
+    <h3>4. Install</h3>
+    <ul>
+      <li>Drag the <code>.js</code> file onto <b>Settings → Extensions</b>, or</li>
+      <li>Save it in <code>~/Library/Application Support/com.caduceus.desktop/extensions/</code> (use <b>Open extensions folder</b> in Settings).</li>
+    </ul>
+    <p>No store, no signing, no review — but also no escape hatch around the permission list.</p>
+
+    <h3>Prefer not to write it yourself?</h3>
+    <p>
+      On the Extensions tab, describe what you want in one sentence and use <b>Copy prompt</b>.
+      Paste that into any assistant; the prompt already includes the header format, permission list,
+      and API rules. Save the reply as <code>something.js</code> and drag it in.
+    </p>
+
+    <div class="doc-note">
+      <strong>Installing works today;</strong> the sandbox that executes extensions is still in
+      progress, so an installed file is listed and validated but may not run yet. The format is
+      fixed so you can write against it now. Full spec in
+      <a href="https://github.com/GeoWizard4645/caduceus/blob/main/EXTENSIONS.md">EXTENSIONS.md</a>
+      on GitHub.
+    </div>
+  </section>
   <section class="doc-section" id="contact">
     <h2>Contact</h2>
     <p class="lede">Questions, feedback, or something broken?</p>
@@ -366,6 +493,7 @@
       <a href="#dev-clipboard">Clipboard store</a>
       <a href="#dev-window">Staff &amp; windows</a>
       <a href="#dev-settings">Settings &amp; secrets</a>
+      <a href="#dev-extensions">Extensions</a>
       <a href="#dev-events">Tauri events</a>
       <a href="#dev-build">Build &amp; test</a>
   </div>
@@ -516,6 +644,30 @@ pub fn backend_for(kind: BackendKind) -&gt; Arc&lt;dyn AgentBackend&gt; {
 BackendConfig { id, display_name, kind: BackendKind::Hermes, … }
 
 // Frontend draft — settings/useDraft.ts debounced save → update_settings</pre>
+  </section>
+
+  <section class="doc-section" id="dev-extensions">
+    <h2>Extensions</h2>
+    <p class="lede"><code>src-tauri/src/extensions.rs</code> — header parse, install, list, remove.</p>
+    <p>
+      Extensions are single <code>.js</code> files. The first block comment must contain
+      <code>@caduceus 1</code> plus optional <code>name</code>, <code>description</code>,
+      <code>author</code>, and <code>permissions</code> (comma-separated, closed set). Only the
+      first comment is parsed so metadata cannot be redefined later in the file.
+    </p>
+    <pre class="dev-block">// Tauri commands (commands.rs)
+inspect_extension(path)   → Extension metadata or error
+install_extension(path)   → InstallReport { ok, message, extension? }
+list_extensions()         → Vec&lt;Extension&gt;
+remove_extension(id)      → ()
+open_extensions_folder()  → reveals ~/Library/Application Support/…/extensions/</pre>
+    <p>
+      Install copies a validated file into <code>extensions_dir(app_data)</code> under a
+      sanitised basename. Remove refuses paths outside that directory. Execution sandbox (calling
+      the default export with a restricted <code>ctx</code>) is not wired yet — see
+      <a href="https://github.com/GeoWizard4645/caduceus/blob/main/EXTENSIONS.md">EXTENSIONS.md</a>
+      for the planned runtime API.
+    </p>
   </section>
 
   <section class="doc-section" id="dev-events">
