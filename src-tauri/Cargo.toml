@@ -1,6 +1,6 @@
 [package]
 name = "caduceus"
-version = "3.0.0"
+version = "3.0.1"
 description = "Caduceus — a fast, local-first AI command center for your desktop."
 authors = ["Caduceus contributors"]
 license = "GPL-3.0-or-later"
@@ -23,7 +23,12 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 # ---- Tauri core + plugins -------------------------------------------------
-tauri = { version = "2", features = ["macos-private-api", "tray-icon", "image-png"] }
+# `protocol-asset` is what lets the webview display a file the user chose — a
+# custom staff mark, a shortcut icon, a Command Center background. It is not a
+# default feature, and without it the asset:// handler is compiled out and every
+# one of those images silently renders as nothing. Its reach is bounded by
+# `app.security.assetProtocol.scope` in tauri.conf.json.
+tauri = { version = "2", features = ["macos-private-api", "tray-icon", "image-png", "protocol-asset"] }
 tauri-plugin-store = "2"
 tauri-plugin-global-shortcut = "2"
 tauri-plugin-opener = "2"

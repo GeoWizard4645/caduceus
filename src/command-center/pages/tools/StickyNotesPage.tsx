@@ -20,6 +20,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { ToolPageProps } from "../ToolPage";
+import { readPersistedJson, usePersistedJson } from "@/shared/persist";
 import { Button, cx } from "@/shared/ui";
 
 interface Note {
@@ -43,12 +44,10 @@ export function StickyNotesPage({ onSetTitle }: ToolPageProps) {
 
   useEffect(() => onSetTitle("Sticky Notes"), [onSetTitle]);
 
-  // Debounced: typing a sentence should not be a dozen serialisations of every
-  // note you have.
-  useEffect(() => {
-    const timer = setTimeout(() => save(notes), 250);
-    return () => clearTimeout(timer);
-  }, [notes]);
+  // Debounced, and flushed on unmount — see `usePersistedJson`. Cancelling the
+  // pending write in the cleanup, which is the obvious way to write this, loses
+  // the last sentence typed before the tab was closed.
+  usePersistedJson(STORAGE_KEY, notes, 250);
 
   const active = notes.find((note) => note.id === activeId) ?? null;
 
@@ -210,33 +209,26 @@ export function StickyNotesPage({ onSetTitle }: ToolPageProps) {
 // Storage
 // ---------------------------------------------------------------------------
 
+/**
+ * Read the notes back.
+ *
+ * Validated rather than trusted: a note whose `text` is not a string would
+ * render as `undefined` and be uneditable, and one with no `id` breaks React's
+ * keying. Anything malformed is dropped rather than crashing the page.
+ */
 function load(): Note[] {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return [];
-    const parsed: unknown = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    // Validated rather than trusted: a note whose text is not a string would
-    // render as `undefined` and be uneditable.
-    return parsed.filter(
-      (n): n is Note =>
-        Boolean(n) &&
-        typeof (n as Note).id === "string" &&
-        typeof (n as Note).text === "string",
-    );
-  } catch {
-    return [];
-  }
-}
-
-function save(notes: Note[]): void {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(notes));
-  } catch {
-    // Out of quota, or storage disabled. The notes are still on screen and
-    // still editable; losing them at the end of the session is bad, and
-    // throwing an error box over the top of them would not save any.
-  }
+  return (
+    readPersistedJson<Note[]>(STORAGE_KEY, (parsed) =>
+      Array.isArray(parsed)
+        ? parsed.filter(
+            (n): n is Note =>
+              Boolean(n) &&
+              typeof (n as Note).id === "string" &&
+              typeof (n as Note).text === "string",
+          )
+        : null,
+    ) ?? []
+  );
 }
 
 const firstLine = (text: string) => text.split("\n")[0]?.trim() ?? "";

@@ -71,8 +71,8 @@ function buildSteps(hotkey: string): Step[] {
     body: "chrome → launches the app · 2+2 → answers inline · your text → searches the web · / → asks your AI · /v → your clipboard history · /c → an agent that drives your Mac",
   },
   {
-    title: "124 commands, and pages with tabs",
-    body: "left half snaps a window · awake 45 keeps this Mac up for 45 minutes · sha256, port 3000, dark — it is all in the bar. Anything with live state opens the Manage window: browser-style tabs you can leave open, ⌘1–⌘5 to switch. Searching the app you came from works too — amphetamine, rectangle, maccy all find their counterpart.",
+    title: "154 features, each with its own page",
+    body: "Notes, meeting recording, colours, conversions, disk cleanup, window snapping — pick one and it opens as a tab with an interface built for it. Nothing needs you to know a syntax. ⌘T for another tab, ⌘1–⌘9 to switch. Searching by the app you came from works too — amphetamine, cleanshot, cleanmymac, stickies all find their counterpart here.",
   },
   {
     title: "One last thing",

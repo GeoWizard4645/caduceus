@@ -382,6 +382,17 @@ fn directory_size(path: &Path) -> u64 {
 ///
 /// Takes the exact list the user was shown and confirmed, so what is removed is
 /// always what was on screen.
+/// Empty the Trash for real.
+///
+/// Distinct from [`trash_paths`] and it has to be: that one asks Finder to
+/// *move* things to the Trash, which for something already in the Trash is a
+/// no-op that reports success. This is the only operation in Caduceus that
+/// destroys data rather than relocating it, which is why it lives on its own
+/// with its own name.
+pub fn empty_trash() -> Result<(), String> {
+    osa(r#"tell application "Finder" to empty trash"#).map(|_| ())
+}
+
 pub fn trash_paths(paths: &[String]) -> ToolOutcome {
     if paths.is_empty() {
         return ToolOutcome::err("Nothing to remove.");

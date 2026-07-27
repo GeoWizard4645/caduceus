@@ -173,7 +173,12 @@ pub async fn enrich(mut source: Source) -> Source {
     let Ok(body) = response.text().await else { return source };
     // The head is where metadata lives; a news page can be a megabyte of
     // comments after it.
-    let head = &body[..body.len().min(200_000)];
+    //
+    // Truncated on a *character* boundary, not a byte one. `&body[..200_000]`
+    // panics the moment byte 200,000 lands inside a multi-byte character — and
+    // this is arbitrary HTML from an arbitrary website, so it will. An em dash
+    // in a headline is enough.
+    let head = truncate_on_boundary(&body, 200_000);
 
     source.author = source.author.or_else(|| {
         first_meta(
@@ -203,6 +208,21 @@ pub async fn enrich(mut source: Source) -> Source {
     }
 
     source
+}
+
+/// The first `limit` bytes, cut back to the nearest character boundary.
+///
+/// `&s[..n]` on a `String` panics if `n` is not a boundary, which for text
+/// fetched off the internet is a matter of when rather than whether.
+fn truncate_on_boundary(text: &str, limit: usize) -> &str {
+    if text.len() <= limit {
+        return text;
+    }
+    let mut end = limit;
+    while end > 0 && !text.is_char_boundary(end) {
+        end -= 1;
+    }
+    &text[..end]
 }
 
 /// The first of these `<meta>` names or properties that the page defines.
@@ -471,6 +491,35 @@ mod tests {
     fn entities_in_metadata_are_decoded() {
         let html = r#"<meta name="author" content="Smith &amp; Jones">"#;
         assert_eq!(first_meta(html, &["author"]).as_deref(), Some("Smith & Jones"));
+    }
+
+    #[test]
+    fn truncating_html_never_splits_a_character() {
+        // The failure this exists for: a page whose 200,000th byte is the
+        // middle of an em dash. `&body[..200_000]` panics; this does not.
+        let text = "a—b"; // The dash is three bytes.
+        for limit in 0..=text.len() + 2 {
+            let cut = truncate_on_boundary(text, limit);
+            // The only real assertion available: it did not panic, and what
+            // came back is a prefix of the original.
+            assert!(text.starts_with(cut), "limit {limit} produced {cut:?}");
+        }
+        assert_eq!(truncate_on_boundary(text, 2), "a");
+        assert_eq!(truncate_on_boundary(text, 99), text);
+    }
+
+    #[test]
+    fn metadata_is_found_in_a_page_full_of_multibyte_text() {
+        // End to end for the bug above: non-ASCII before and after the tag.
+        let html = format!(
+            "{}<meta name=\"author\" content=\"Ana Muñoz\">{}",
+            "— ".repeat(500),
+            "… ".repeat(500),
+        );
+        let head = truncate_on_boundary(&html, 900);
+        // Whether the tag survives the cut is not the point; not panicking is.
+        assert!(!head.is_empty());
+        assert_eq!(first_meta(&html, &["author"]).as_deref(), Some("Ana Muñoz"));
     }
 
     #[test]

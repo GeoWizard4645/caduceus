@@ -1285,6 +1285,18 @@ pub async fn scan_junk() -> Res<Vec<tools::cleaner::JunkGroup>> {
         .map_err(|e| format!("The scan could not be run: {e}"))
 }
 
+/// Reclaim the space in the chosen categories.
+///
+/// Takes kinds rather than paths so the Trash can be *emptied* rather than
+/// moved to the Trash, and so the removal operates on a fresh scan rather than
+/// on a list the UI has been holding since before you made a cup of tea.
+#[tauri::command]
+pub async fn clean_junk(kinds: Vec<tools::cleaner::JunkKind>) -> Res<tools::ToolOutcome> {
+    tauri::async_runtime::spawn_blocking(move || tools::cleaner::remove(&kinds))
+        .await
+        .map_err(|e| format!("The cleanup could not be run: {e}"))
+}
+
 /// Every installed application, with its real size and when it was last opened.
 #[tauri::command]
 pub async fn list_installed_app_sizes() -> Res<Vec<tools::cleaner::InstalledApp>> {

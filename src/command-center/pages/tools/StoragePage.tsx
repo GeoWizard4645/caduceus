@@ -72,13 +72,13 @@ export function StoragePage({ active, onSetTitle }: ToolPageProps) {
       return;
     }
     setArmed(false);
-    const paths = (groups ?? [])
-      .filter((g) => chosen.has(g.kind))
-      .flatMap((g) => g.paths);
-    if (paths.length === 0) return;
+    const kinds = (groups ?? []).filter((g) => chosen.has(g.kind)).map((g) => g.kind);
+    if (kinds.length === 0) return;
 
     try {
-      const outcome = await api.trashPaths(paths);
+      // By category, not by path — see `cleanJunk`. The Trash cannot be moved
+      // to the Trash, and Rust re-scans so nothing acts on a stale list.
+      const outcome = await api.cleanJunk(kinds);
       setNote(outcome.message);
       setChosen(new Set());
       await scan();

@@ -2,7 +2,7 @@
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Caduceus",
   "mainBinaryName": "Caduceus",
-  "version": "3.0.0",
+  "version": "3.0.1",
   "identifier": "com.caduceus.desktop",
   "build": {
     "beforeDevCommand": "npm run dev",
@@ -14,7 +14,15 @@
     "withGlobalTauri": false,
     "macOSPrivateApi": true,
     "security": {
-      "csp": "default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; connect-src 'self' ipc: http://ipc.localhost ws://127.0.0.1:1420 http://127.0.0.1:1420; object-src 'none'; base-uri 'none'; frame-src 'none'"
+      "csp": "default-src 'self'; img-src 'self' data: blob: asset: http://asset.localhost; style-src 'self' 'unsafe-inline'; font-src 'self' data:; connect-src 'self' ipc: http://ipc.localhost ws://127.0.0.1:1420 http://127.0.0.1:1420; object-src 'none'; base-uri 'none'; frame-src 'none'",
+      "assetProtocol": {
+        "enable": true,
+        "scope": [
+          "$APPCONFIG/staff/*",
+          "$APPCONFIG/appearance/*",
+          "$APPCONFIG/icons/*"
+        ]
+      }
     },
     "windows": [
       {
@@ -37,7 +45,7 @@
       },
       {
         "label": "recorder",
-        "title": "Caduceus — Recording",
+        "title": "Caduceus \u2014 Recording",
         "url": "recorder.html",
         "width": 520,
         "height": 168,

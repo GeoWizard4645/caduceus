@@ -114,8 +114,84 @@ fn compile_swift(
         return;
     }
 
+    if !helper_plist.is_file() {
+        println!("cargo:warning=macos/HelperInfo.plist is missing; {label} will not be able to ask for microphone or speech permission");
+    }
+
+    // Built for both architectures and merged.
+    //
+    // `swiftc` with no `-target` compiles for the *host*, and the release
+    // script's Intel leg reuses whatever the Apple Silicon leg already put in
+    // `bin/` because it is newer than the source. The result shipped in the
+    // "universal" DMG for months: a fat main binary next to four thin arm64
+    // helpers. On an Intel Mac every one of them is found by `is_file()` — so
+    // the code takes the "helper present" path — and then fails to exec, which
+    // is a worse failure than the missing-helper message it would otherwise
+    // have shown. Dictation, OCR, colour sampling, audio switching and
+    // recording were all dead there.
+    let mut slices = Vec::new();
+    let mut built_any = false;
+    for (arch, triple) in [("arm64", "arm64-apple-macos11"), ("x86_64", "x86_64-apple-macos11")] {
+        let slice = output.with_extension(arch);
+        match compile_slice(&source, &slice, triple, &helper_plist) {
+            Ok(()) => {
+                slices.push(slice);
+                built_any = true;
+            }
+            Err(e) => {
+                // A missing SDK slice is normal on a machine that has never
+                // needed it. One architecture is still a working build for the
+                // person doing it; the release script is where both matter.
+                println!("cargo:warning={label}: no {arch} slice ({e})");
+            }
+        }
+    }
+
+    if !built_any {
+        println!("cargo:warning=could not compile {label} for any architecture");
+        return;
+    }
+
+    let merged = if slices.len() > 1 {
+        let lipo = Command::new("lipo")
+            .arg("-create")
+            .args(&slices)
+            .arg("-output")
+            .arg(&output)
+            .output();
+        matches!(lipo, Ok(out) if out.status.success())
+    } else {
+        std::fs::copy(&slices[0], &output).is_ok()
+    };
+
+    for slice in &slices {
+        let _ = std::fs::remove_file(slice);
+    }
+
+    if !merged {
+        println!("cargo:warning=could not assemble {label}");
+        return;
+    }
+
+    println!(
+        "cargo:warning=built macOS {label} ({output_name}, {})",
+        if slices.len() > 1 { "universal" } else { "this architecture only" }
+    );
+    // Signed after lipo: merging rewrites the file and would invalidate a
+    // signature applied to either slice.
+    seal_helper_signature(&output, label, identifier);
+}
+
+/// Compile one architecture's slice of a helper.
+fn compile_slice(
+    source: &Path,
+    output: &Path,
+    target: &str,
+    helper_plist: &Path,
+) -> Result<(), String> {
     let mut cmd = Command::new("swiftc");
-    cmd.arg("-O").arg("-o").arg(&output).arg(&source);
+    cmd.arg("-O").arg("-target").arg(target).arg("-o").arg(output).arg(source);
+
     if helper_plist.is_file() {
         for arg in [
             "-Xlinker",
@@ -128,25 +204,13 @@ fn compile_swift(
         ] {
             cmd.arg(arg);
         }
-        cmd.arg(&helper_plist);
-    } else {
-        println!("cargo:warning=macos/HelperInfo.plist is missing; {label} will not be able to ask for microphone or speech permission");
+        cmd.arg(helper_plist);
     }
 
     match cmd.output() {
-        Ok(out) if out.status.success() => {
-            println!("cargo:warning=built macOS {label} ({output_name})");
-            seal_helper_signature(&output, label, identifier);
-        }
-        Ok(out) => {
-            println!(
-                "cargo:warning=could not compile {label}; swiftc said: {}",
-                String::from_utf8_lossy(&out.stderr).trim()
-            );
-        }
-        Err(e) => {
-            println!("cargo:warning=swiftc unavailable ({e}); {label} will be missing");
-        }
+        Ok(out) if out.status.success() => Ok(()),
+        Ok(out) => Err(String::from_utf8_lossy(&out.stderr).trim().lines().last().unwrap_or("swiftc failed").to_string()),
+        Err(e) => Err(e.to_string()),
     }
 }
 

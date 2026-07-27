@@ -148,7 +148,10 @@ fn handle_menu_event<R: Runtime>(app: &AppHandle<R>, event: MenuEvent) {
             }
         }
         ID_QUIT => {
-            crate::shutdown(app);
+            // `exit` raises `ExitRequested`, which is where the teardown is
+            // decided. Doing it here as well would run it twice — and this
+            // handler is on the main thread, which is the one place it must
+            // not block.
             app.exit(0);
         }
         other => log::debug!("unhandled tray menu item: {other}"),

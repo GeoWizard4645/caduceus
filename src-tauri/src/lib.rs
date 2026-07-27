@@ -201,6 +201,7 @@ pub fn run() {
             commands::list_apple_shortcuts,
             // storage, sorting, citations, recording
             commands::scan_junk,
+            commands::clean_junk,
             commands::list_installed_app_sizes,
             commands::sort_plan,
             commands::sort_apply,
@@ -251,8 +252,14 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("failed to build Caduceus")
         .run(|app, event| {
-            if let RunEvent::ExitRequested { .. } = event {
-                shutdown(app);
+            if let RunEvent::ExitRequested { api, .. } = event {
+                // Cancelled while a recording or a dictation session finishes.
+                // `begin_shutdown` calls `exit` itself once the teardown is
+                // done — see the comment there for why this cannot simply
+                // block.
+                if matches!(begin_shutdown(app), ShutdownDecision::Wait) {
+                    api.prevent_exit();
+                }
             }
         });
 }
@@ -490,7 +497,76 @@ fn handle_window_event(window: &tauri::Window, event: &WindowEvent) {
     }
 }
 
+/// Set once teardown has begun, so quitting twice does not run it twice.
+///
+/// The Quit menu item and the event loop's `ExitRequested` can both fire for a
+/// single quit, and a second teardown would try to stop helpers the first one
+/// is already waiting on.
+static SHUTTING_DOWN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Whether anything is running that needs a moment to finish.
+fn has_work_to_finish<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> bool {
+    let recording = app
+        .try_state::<capture::recorder::RecorderRuntime>()
+        .is_some_and(|r| r.status().active);
+    let dictating = app
+        .try_state::<voice::VoiceRuntime>()
+        .is_some_and(|v| v.is_recording());
+    recording || dictating
+}
+
+/// Quit, finishing what is in flight without freezing while it happens.
+///
+/// # Why this is not just `shutdown(); exit(0)`
+///
+/// Because both of the things worth waiting for are slow. Finalising a
+/// screen recording is bounded at 25 seconds and closing a live dictation
+/// session at 6, and `ExitRequested` is delivered **on the main thread** — so
+/// quitting mid-recording used to beachball the entire app for up to half a
+/// minute before it went away. That is the same failure the dictation hotkey
+/// had, in the one code path nobody tests twice.
+///
+/// The fix is not to shorten the waits: an unfinalised MP4 is a corrupt file,
+/// and throwing away somebody's recording to save them fifteen seconds is the
+/// wrong trade. It is to stop *blocking* for them. The exit is cancelled, the
+/// teardown runs on a worker, and the app exits when it is genuinely done —
+/// with the event loop still turning throughout, so the window server never
+/// sees an unresponsive application.
+fn begin_shutdown<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> ShutdownDecision {
+    use std::sync::atomic::Ordering;
+
+    if SHUTTING_DOWN.swap(true, Ordering::SeqCst) {
+        // Already under way — let this exit through rather than starting again.
+        return ShutdownDecision::ExitNow;
+    }
+
+    // Nothing slow is running, so the whole teardown is a handful of atomic
+    // flags. Doing it inline keeps the common quit instant.
+    if !has_work_to_finish(app) {
+        shutdown(app);
+        return ShutdownDecision::ExitNow;
+    }
+
+    log::info!("finishing a recording or dictation before quitting");
+    let handle = app.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        shutdown(&handle);
+        handle.exit(0);
+    });
+    ShutdownDecision::Wait
+}
+
+enum ShutdownDecision {
+    ExitNow,
+    /// Teardown is running on a worker; it will call `exit` when it is done.
+    Wait,
+}
+
 /// Stop background workers cleanly. Safe to call more than once.
+///
+/// **Blocking, and sometimes for tens of seconds.** Call it through
+/// [`begin_shutdown`] rather than directly, unless you are already off the
+/// main thread.
 pub fn shutdown<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
     if let Some(runtime) = app.try_state::<agent::AgentRuntime>() {
         runtime.stop_all();

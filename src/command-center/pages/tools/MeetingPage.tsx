@@ -27,16 +27,17 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import * as api from "@/shared/api";
 import { useTauriEvent } from "@/shared/hooks";
 import { EVENTS, type VoiceState } from "@/shared/types";
+import { readPersisted, usePersisted } from "@/shared/persist";
 import { Button, Callout, cx } from "@/shared/ui";
 import type { ToolPageProps } from "../ToolPage";
 import { RecordControls, clock, useRecording } from "./RecordShared";
 
 const NOTES_KEY = "caduceus.meeting-notes.v1";
 
-export function MeetingPage({ onSetTitle }: ToolPageProps) {
+export function MeetingPage({ active, onSetTitle }: ToolPageProps) {
   const [microphone, setMicrophone] = useState(true);
   const [transcript, setTranscript] = useState("");
-  const [notes, setNotes] = useState(() => localStorage.getItem(NOTES_KEY) ?? "");
+  const [notes, setNotes] = useState(() => readPersisted(NOTES_KEY));
   const [listening, setListening] = useState(false);
   const [note, setNote] = useState<string | null>(null);
   const recording = useRecording();
@@ -45,15 +46,22 @@ export function MeetingPage({ onSetTitle }: ToolPageProps) {
 
   useEffect(() => onSetTitle("Meeting notes"), [onSetTitle]);
 
-  // Notes survive a restart. Losing what you typed during a call because the
-  // app was updated is not acceptable for something people lean on.
-  useEffect(() => {
-    const timer = setTimeout(() => localStorage.setItem(NOTES_KEY, notes), 300);
-    return () => clearTimeout(timer);
-  }, [notes]);
+  // Notes survive a restart, and survive the tab being closed mid-sentence —
+  // see `usePersisted`, which flushes rather than cancelling on unmount.
+  usePersisted(NOTES_KEY, notes, 300);
 
-  useTauriEvent<string>(EVENTS.voicePartial, (text) => setTranscript(text));
-  useTauriEvent<VoiceState>(EVENTS.voiceState, (state) => setListening(state === "recording"));
+  // Gated on `active`, like every other consumer of these events.
+  //
+  // There is one dictation pipeline in Caduceus, shared by the palette, the
+  // recording HUD and this page. Without the gate, starting voice search from
+  // the Home tab would overwrite a meeting's transcript with unrelated speech
+  // while this tab merely sat in the background.
+  useTauriEvent<string>(EVENTS.voicePartial, (text) => {
+    if (active) setTranscript(text);
+  });
+  useTauriEvent<VoiceState>(EVENTS.voiceState, (state) => {
+    if (active) setListening(state === "recording");
+  });
 
   useEffect(() => {
     const el = transcriptRef.current;

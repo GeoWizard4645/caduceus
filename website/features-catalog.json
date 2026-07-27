@@ -700,6 +700,10 @@
         {
           "name": "Window: toggle full screen",
           "detail": "Enters or leaves macOS full screen — the green-button behaviour, with its own Space."
+        },
+        {
+          "name": "Hide every app except this one",
+          "detail": "Clears the screen down to what you are actually working in. ⌥⌘H, without the finger gymnastics."
         }
       ]
     },
@@ -775,6 +779,18 @@
         {
           "name": "Brightness down",
           "detail": "Lowers display brightness. Needs the Accessibility permission."
+        },
+        {
+          "name": "Emoji and symbols",
+          "detail": "Opens macOS's own emoji and symbol picker, which inserts straight into whatever you were typing in."
+        },
+        {
+          "name": "Open the camera",
+          "detail": "Photo Booth, for when you need to check what the camera can see."
+        },
+        {
+          "name": "Quit every app except this one",
+          "detail": "Asks each app to quit, so anything with unsaved work gets to put its dialog up rather than losing it. Finder and Caduceus are left alone."
         }
       ]
     },
@@ -818,6 +834,10 @@
         {
           "name": "What is playing",
           "detail": "Copies the current track and artist."
+        },
+        {
+          "name": "Mute",
+          "detail": "Sets the system volume to zero. Running it again puts it back where it was."
         },
         {
           "name": "Spotify: play or pause",
@@ -1138,6 +1158,14 @@
         {
           "name": "Copy the path of the latest download",
           "detail": "The same file, as a path on the clipboard."
+        },
+        {
+          "name": "Open the Trash",
+          "detail": "Shows what is in it, before you empty it."
+        },
+        {
+          "name": "Empty the Trash",
+          "detail": "Deletes everything in it. There is no undo for this one, which is why it asks first."
         }
       ]
     },

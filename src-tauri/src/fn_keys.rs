@@ -67,10 +67,14 @@ pub fn dispatch_press<R: Runtime>(
             });
         }
         FunctionKeyAction::Screenshot => {
-            match capture::screenshot_full(true) {
+            // Spawned, like every other slow branch here. `screencapture` is a
+            // subprocess with no timeout, and this runs on the main thread —
+            // one hang (a first-run permission sheet, a busy disk) and the
+            // whole app is frozen with no way to dismiss it.
+            tauri::async_runtime::spawn_blocking(|| match capture::screenshot_full(true) {
                 Ok(r) => log::info!("screenshot: {}", r.message),
                 Err(e) => log::error!("screenshot: {e}"),
-            }
+            });
         }
         FunctionKeyAction::RunShortcut => {
             if shortcut_id.trim().is_empty() {

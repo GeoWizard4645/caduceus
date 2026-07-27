@@ -18,6 +18,7 @@ import {
   type CommandOutput,
 } from "./commands";
 import { usageBoost } from "./usage";
+import { convert as convertUnits, formatValue, parseConversion } from "./units";
 import { fuzzyMatch, fuzzyScore } from "./fuzzy";
 import type { Tab } from "./tabs";
 import type {
@@ -508,6 +509,54 @@ export const calculatorProvider: ResultProvider = {
   },
 };
 
+/**
+ * `12 km to miles` answered inline, the way `2+2` already is.
+ *
+ * Conversion is the other thing people type into a search box expecting a
+ * number back, and until now Caduceus sent it to Google. It is pure arithmetic
+ * on definitions — see `shared/units.ts` — so it runs here with no network and
+ * cannot be stale.
+ *
+ * Currency is deliberately *not* here. Its answer depends on what day it is, so
+ * it lives on the Convert page where the source and the date can be shown.
+ */
+export const conversionProvider: ResultProvider = {
+  id: "conversion",
+  title: "Conversion",
+  search({ raw, parsed, actions }) {
+    if (parsed?.rule) return [];
+
+    const conversion = parseConversion(raw);
+    if (!conversion) return [];
+
+    const result = convertUnits(conversion.value, conversion.from, conversion.to);
+    if (result === null) return [];
+
+    const answer = `${formatValue(result)} ${conversion.to.symbol}`;
+    return [
+      {
+        id: "conversion:result",
+        title: answer,
+        subtitle: `${formatValue(conversion.value)} ${conversion.from.name} in ${conversion.to.name}`,
+        icon: "⇄",
+        group: "Conversion",
+        // Above everything. Typing a conversion is unambiguous, and it should
+        // never lose to an app whose name happens to share a letter with "km".
+        score: 980,
+        accessory: "↵ copies",
+        run: async () => {
+          try {
+            await navigator.clipboard.writeText(formatValue(result));
+            actions.notify(`Copied ${answer}`);
+          } catch {
+            actions.notify("Could not copy the result", "error");
+          }
+        },
+      },
+    ];
+  },
+};
+
 // ---------------------------------------------------------------------------
 // Registry
 // ---------------------------------------------------------------------------
@@ -545,68 +594,40 @@ export const captureProvider: ResultProvider = {
           }
         },
       },
+      // Recording is a page, not four palette rows.
+      //
+      // These used to be three "start recording" rows and a "stop" row, and
+      // every one of them shelled out to Screenshot.app — the ⇧⌘5 overlay,
+      // which cannot capture system audio at all. One of them said so in its
+      // own subtitle. Caduceus has a real recorder now (ScreenCaptureKit, see
+      // `capture::recorder`), and it has controls, a clock and a level meter,
+      // none of which fit in a palette row.
       {
-        id: "capture-record-mic",
-        title: "Start screen recording (mic on)",
-        subtitle: "Screen + microphone → Downloads as .mov",
+        id: "capture-record",
+        title: "Record the screen",
+        subtitle: "With the audio your Mac is playing — the thing ⇧⌘5 cannot do",
         icon: "⏺",
         group: "Capture",
-        score: /record|video/.test(q) ? 850 : 350,
-        run: async () => {
-          try {
-            const state = await api.captureRecordStart(true, false);
-            actions.notify(state.message);
-          } catch (e) {
-            actions.notify(api.errorMessage(e), "error");
-          }
+        score: /record|video|screencast/.test(q) ? 880 : 350,
+        run: () => {
+          actions.openTab({
+            kind: "tool",
+            commandId: "page.screen-record",
+            title: "Record the screen",
+          });
+          return false;
         },
       },
       {
-        id: "capture-record-system",
-        title: "Start screen recording (system audio)",
-        subtitle: "Screen + system sound (macOS 13+); mic off",
-        icon: "🔊",
+        id: "capture-record-meeting",
+        title: "Record a meeting",
+        subtitle: "Both sides of the call, transcribed on-device, notes beside it",
+        icon: "◉",
         group: "Capture",
-        score: /system|audio/.test(q) ? 880 : 300,
-        run: async () => {
-          try {
-            const state = await api.captureRecordStart(false, true);
-            actions.notify(state.message);
-          } catch (e) {
-            actions.notify(api.errorMessage(e), "error");
-          }
-        },
-      },
-      {
-        id: "capture-record-both",
-        title: "Start screen recording (mic + system audio)",
-        subtitle: "Opens Screenshot.app — use Options for audio sources",
-        icon: "🎬",
-        group: "Capture",
-        score: 320,
-        run: async () => {
-          try {
-            const state = await api.captureRecordStart(true, true);
-            actions.notify(state.message);
-          } catch (e) {
-            actions.notify(api.errorMessage(e), "error");
-          }
-        },
-      },
-      {
-        id: "capture-record-stop",
-        title: "Stop screen recording",
-        subtitle: "Use the menu bar control in Screenshot / macOS",
-        icon: "⏹",
-        group: "Capture",
-        score: q.includes("stop") ? 950 : 280,
-        run: async () => {
-          try {
-            const state = await api.captureRecordStop();
-            actions.notify(state.message);
-          } catch (e) {
-            actions.notify(api.errorMessage(e), "error");
-          }
+        score: /meeting|call|transcri|notes/.test(q) ? 900 : 300,
+        run: () => {
+          actions.openTab({ kind: "tool", commandId: "page.meeting", title: "Meeting notes" });
+          return false;
         },
       },
     ];
@@ -998,6 +1019,7 @@ export const defaultProviders: ResultProvider[] = [
   commandProvider,
   liveListProvider,
   shortcutProvider,
+  conversionProvider,
   appLauncherProvider,
   captureProvider,
   searchFallbackProvider,

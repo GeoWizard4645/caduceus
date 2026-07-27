@@ -114,7 +114,7 @@ eats a click meant for something behind it.
 Arrow keys to move, Enter to run, Esc to close. Prefixes are configurable — add
 your own in Settings, or delete the ones you don't use.
 
-### 124 built-in commands
+### 154 built-in features
 
 Open the Command Center with nothing typed and the whole catalogue is there,
 ordered by how often *you* run each one. Counts live in a file next to your
@@ -122,16 +122,24 @@ clipboard history, are never sent anywhere, and record only which built-in row
 was run — never what you typed. Settings → Command Center → Ranking clears them.
 
 
-Window management, on-device screen OCR, sound-device switching, encoders,
-hashes, JSON and JWT inspection, text surgery, Finder actions, ports,
-repositories, SSH hosts and containers — all in the *same* ranked list as your
-apps and shortcuts, with no submenu to go and find. Every one of them is listed
-and explained in **Settings → Features** and on
-[the website](https://caduceus.vivaanshahani.com/features).
+Sticky notes, meeting recording with a live on-device transcript, screen
+recording *with system audio*, colours (screen picker, every notation, WCAG
+contrast, palettes from an image), unit and currency conversion, disk cleanup
+and proper app uninstall, folder tidying, citations in seven styles, process
+management, window management, screen OCR, sound devices, encoders, hashes,
+JSON and JWT inspection, Finder actions, ports, repositories, containers,
+Spotify and browser control, and anything you have built in Apple Shortcuts —
+all in the *same* ranked list as your apps, with no submenu to go and find.
 
-The registry is one file. Adding a command means appending an entry to
-`src/shared/commands.ts`; it then appears in search, in the in-app catalogue and
-on the website with no further wiring.
+**Everything opens as a page built for it.** Pick "sort lines" and you get a box
+and a direction, not an error telling you to have typed something first. Every
+text field takes a file as well as pasted text. Typing `sha256 hello` still runs
+in one keystroke — that is the shortcut, not the only door.
+
+The registry is one file. Adding a feature means appending an entry to
+`src/shared/commands.ts` — it describes its own inputs and the page builds
+itself — and it then appears in search, in the in-app catalogue and on the
+website with no further wiring.
 
 ### Clipboard history
 

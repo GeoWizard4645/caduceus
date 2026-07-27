@@ -178,6 +178,25 @@ pub fn scan() -> Vec<JunkGroup> {
     JunkKind::ALL.iter().map(|kind| scan_kind(*kind)).collect()
 }
 
+/// Every path in a category — uncapped, for removal.
+///
+/// Deliberately separate from the `paths` on [`JunkGroup`], which is truncated
+/// for the UI's sake. The measured size counts everything, so the removal has
+/// to as well or the two disagree by however much fell past the cap.
+fn all_paths(kind: JunkKind) -> Vec<String> {
+    let mut paths = Vec::new();
+    for root in kind.roots() {
+        let Ok(entries) = std::fs::read_dir(&root) else { continue };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if is_candidate(kind, &path) {
+                paths.push(path.to_string_lossy().into_owned());
+            }
+        }
+    }
+    paths
+}
+
 fn scan_kind(kind: JunkKind) -> JunkGroup {
     let mut bytes = 0u64;
     let mut paths = Vec::new();
@@ -291,6 +310,89 @@ fn directory_size(path: &Path) -> u64 {
 }
 
 // ---------------------------------------------------------------------------
+// Removing
+// ---------------------------------------------------------------------------
+
+/// Reclaim the space in the chosen categories.
+///
+/// # Why this is not just "move all these paths to the Trash"
+///
+/// Because one of the categories **is** the Trash, and asking Finder to move
+/// something in the Trash to the Trash does nothing at all — the UI reported
+/// success and the gigabytes stayed exactly where they were. Emptying it is a
+/// different operation and has to be dispatched separately.
+///
+/// Everything else goes to the Trash rather than being unlinked, which is the
+/// rule this whole module is built on: a cleaner that deletes is one bug away
+/// from being the worst program on the machine.
+pub fn remove(kinds: &[JunkKind]) -> super::ToolOutcome {
+    let mut trashed = 0usize;
+    let mut emptied = false;
+    let mut problems = Vec::new();
+
+    // Emptied last: the other categories move things *into* the Trash, and
+    // emptying first would leave those sitting there anyway.
+    let (empties, moves): (Vec<JunkKind>, Vec<JunkKind>) =
+        kinds.iter().copied().partition(|kind| *kind == JunkKind::Trash);
+
+    // `scan_kind` caps its `paths` list at MAX_LISTED so the UI is not sent a
+    // hundred thousand strings to render. Removing has to use the *whole* set:
+    // trashing the first four hundred of a category and reporting "done" left
+    // most of the gigabytes the scan had just promised, with nothing to say so.
+    let paths: Vec<String> = moves.iter().flat_map(|kind| all_paths(*kind)).collect();
+
+    if !paths.is_empty() {
+        let outcome = super::files::trash_paths(&paths);
+        if outcome.ok {
+            trashed = paths.len();
+        } else {
+            problems.push(outcome.message);
+        }
+    }
+
+    if !empties.is_empty() {
+        match super::files::empty_trash() {
+            Ok(()) => emptied = true,
+            Err(e) => problems.push(e),
+        }
+    }
+
+    let mut parts = Vec::new();
+    if trashed > 0 {
+        parts.push(format!(
+            "moved {trashed} item{} to the Trash",
+            if trashed == 1 { "" } else { "s" }
+        ));
+    }
+    if emptied {
+        parts.push("emptied the Trash".into());
+    }
+
+    if parts.is_empty() {
+        return super::ToolOutcome::err(if problems.is_empty() {
+            "Nothing to remove.".to_string()
+        } else {
+            problems.join(" ")
+        });
+    }
+
+    let mut message = capitalise(&parts.join(", "));
+    message.push('.');
+    if !problems.is_empty() {
+        message.push_str(&format!(" {}", problems.join(" ")));
+    }
+    super::ToolOutcome::ok(message)
+}
+
+fn capitalise(text: &str) -> String {
+    let mut chars = text.chars();
+    match chars.next() {
+        Some(first) => first.to_uppercase().collect::<String>() + chars.as_str(),
+        None => String::new(),
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Installed applications
 // ---------------------------------------------------------------------------
 
@@ -362,9 +464,11 @@ fn last_opened(path: &Path) -> Option<u64> {
     if trimmed.is_empty() || trimmed == "(null)" {
         return None;
     }
-    // "2026-07-21 18:04:11 +0000"
-    let date = chrono::NaiveDateTime::parse_from_str(&trimmed[..19.min(trimmed.len())], "%Y-%m-%d %H:%M:%S")
-        .ok()?;
+    // "2026-07-21 18:04:11 +0000" — take the first 19 *characters*, not bytes.
+    // `mdls` should only ever produce ASCII here, but slicing a `String` by
+    // byte index is a panic waiting for the one machine where it does not.
+    let head: String = trimmed.chars().take(19).collect();
+    let date = chrono::NaiveDateTime::parse_from_str(&head, "%Y-%m-%d %H:%M:%S").ok()?;
     Some(date.and_utc().timestamp().max(0) as u64)
 }
 

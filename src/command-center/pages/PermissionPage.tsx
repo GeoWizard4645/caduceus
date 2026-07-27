@@ -38,7 +38,11 @@ export function PermissionPage({
   retryCommandId?: string;
   onOpenTab: (request: Omit<Tab, "id">) => void;
 }) {
-  const info = PERMISSIONS[permission];
+  // Falls back rather than indexing blindly. `permission` can come from a
+  // restored tab written by an older version, and `PERMISSIONS[undefined]`
+  // would throw during render — which, with no error boundary above this,
+  // blanked the entire window.
+  const info = PERMISSIONS[permission] ?? PERMISSIONS.accessibility;
   const retry = retryCommandId ? COMMANDS.find((c) => c.id === retryCommandId) : undefined;
 
   const [granted, setGranted] = useState<boolean | null>(null);

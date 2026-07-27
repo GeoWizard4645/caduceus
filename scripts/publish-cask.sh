@@ -174,6 +174,32 @@ fi
 
 cd "$ROOT"
 
+# --- and commit the source of truth ----------------------------------------
+#
+# `homebrew/caduceus.rb` was just rewritten in this repository, and until this
+# was here nothing ever committed it. The release itself succeeded and left the
+# file modified in the working tree — so the *next* `npm run release` failed its
+# own dirty-tree preflight, and the natural way out of that is `--all`, which
+# sweeps in whatever else happens to be uncommitted. A script whose failure mode
+# is "teaches you to bypass the safety check" is worse than no script.
+
+step "Committing the cask"
+
+if git -C "$ROOT" diff --quiet -- homebrew/caduceus.rb; then
+  note "already committed"
+else
+  git -C "$ROOT" add homebrew/caduceus.rb
+  git -C "$ROOT" commit --quiet -m "cask: $VERSION"
+  if git -C "$ROOT" push --quiet origin HEAD 2>/dev/null; then
+    note "committed and pushed"
+  else
+    # A detached HEAD, or no upstream. The commit is what matters; leaving it
+    # unpushed is recoverable, and failing the whole publish over it is not
+    # proportionate to a release that is otherwise complete.
+    warn "committed, but could not push — push it yourself."
+  fi
+fi
+
 # --- verify ----------------------------------------------------------------
 
 if command -v brew >/dev/null; then

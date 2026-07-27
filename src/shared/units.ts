@@ -227,9 +227,9 @@ function convertTemperature(value: number, from: string, to: string): number {
 /**
  * Read "12 km to miles", "3kg in lb", "100 f to c".
  *
- * Used by the search bar, so it has to be certain: anything it is not sure
- * about returns `null` and falls through to a web search rather than turning a
- * sentence into a number.
+ * Used by `conversionProvider` in `providers.ts`, so it has to be certain:
+ * anything it is not sure about returns `null` and falls through to a web
+ * search rather than turning a sentence into a number.
  */
 export interface ParsedConversion {
   value: number;
@@ -238,9 +238,14 @@ export interface ParsedConversion {
 }
 
 export function parseConversion(input: string): ParsedConversion | null {
-  const match = /^\s*(-?[\d.,]+)\s*([a-zA-Z°"'µ/]+)\s*(?:to|in|as|→|>)\s*([a-zA-Z°"'µ/]+)\s*$/.exec(
-    input,
-  );
+  // The unit tokens allow digits (`m2`, `ft2`) but the *value* is anchored to
+  // the start, so "12 km" cannot be read as the unit. `to|in|as` are the words
+  // people actually type; `in` is also a unit, which is why it only counts as
+  // a separator when something follows it.
+  const match =
+    /^\s*(-?[\d.,]+)\s*([a-zA-Z0-9°"'µ/]+)\s*(?:to|in|as|→|>)\s+([a-zA-Z0-9°"'µ/]+)\s*$/.exec(
+      input,
+    );
   if (!match) return null;
 
   const value = Number.parseFloat(match[1].replace(/,/g, ""));

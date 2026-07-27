@@ -2514,6 +2514,182 @@ function appCommand(spec: AppCommandSpec): CommandDef {
 const APP_COMMANDS: CommandDef[] = [...SPOTIFY_SPECS, ...BROWSER_SPECS].map(appCommand);
 
 // ---------------------------------------------------------------------------
+// The small system things
+// ---------------------------------------------------------------------------
+
+/**
+ * The ones a launcher is expected to have.
+ *
+ * Every one of these is a thing macOS can already do and has hidden behind a
+ * menu, a keyboard shortcut nobody remembers, or a Finder window. None of them
+ * is clever; all of them are faster typed than found, which is the entire
+ * argument for a launcher.
+ */
+const DESK_COMMANDS: CommandDef[] = [
+  {
+    id: "desk.emoji",
+    title: "Emoji and symbols",
+    detail:
+      "Opens macOS's own emoji and symbol picker, which inserts straight into whatever you were typing in.",
+    group: "system",
+    icon: "☺",
+    keywords: ["emoji", "symbol", "symbols", "character", "characters", "picker", "smiley", "unicode", "special"],
+    reach: 72,
+    async run({ actions }) {
+      // The picker inserts into the frontmost text field, so Caduceus has to
+      // get out of the way before opening it — otherwise the emoji lands in
+      // the search box you were about to close.
+      await api.hideCommandCenter();
+      try {
+        // The Edit menu item, which is the only supported way in. The key
+        // equivalent is ⌃⌘Space; sending it needs Accessibility, and this does
+        // not.
+        await api.runAppleScript(
+          'tell application "System Events" to tell (first process whose frontmost is true) to ' +
+            'click menu item "Emoji & Symbols" of menu 1 of menu bar item "Edit" of menu bar 1',
+        );
+      } catch {
+        // Not every app has that menu item. `Character Viewer` is the fallback
+        // and works from anywhere.
+        try {
+          await api.runAppleScript(
+            'tell application "System Events" to keystroke space using {control down, command down}',
+          );
+        } catch (error) {
+          actions.notify(api.errorMessage(error), "error");
+        }
+      }
+      return true;
+    },
+  },
+  {
+    id: "desk.open-trash",
+    title: "Open the Trash",
+    detail: "Shows what is in it, before you empty it.",
+    group: "files",
+    icon: "▽",
+    keywords: ["trash", "bin", "rubbish", "deleted", "recycle", "open"],
+    reach: 60,
+    run: ({ actions }) =>
+      outcome(actions, "Trash", async () => {
+        await api.runAppleScript('tell application "Finder" to open trash\nactivate application "Finder"');
+        return { ok: true, message: "Opened the Trash.", copied: null };
+      }, true),
+  },
+  {
+    id: "desk.empty-trash",
+    title: "Empty the Trash",
+    detail: "Deletes everything in it. There is no undo for this one, which is why it asks first.",
+    group: "files",
+    icon: "▼",
+    keywords: ["trash", "bin", "empty", "delete", "purge", "clear", "space"],
+    reach: 58,
+    confirm: "Everything in the Trash will be gone for good.",
+    run: ({ actions }) =>
+      outcome(actions, "Trash", async () => {
+        await api.runAppleScript('tell application "Finder" to empty trash');
+        return { ok: true, message: "Trash emptied.", copied: null };
+      }),
+  },
+  {
+    id: "desk.open-camera",
+    title: "Open the camera",
+    detail: "Photo Booth, for when you need to check what the camera can see.",
+    group: "system",
+    icon: "◎",
+    keywords: ["camera", "webcam", "photo", "booth", "video", "selfie", "mirror"],
+    reach: 44,
+    run: ({ actions }) =>
+      outcome(actions, "Camera", async () => {
+        await api.launchApp("Photo Booth");
+        return { ok: true, message: "Opened Photo Booth.", copied: null };
+      }, true),
+  },
+  {
+    id: "desk.hide-others",
+    title: "Hide every app except this one",
+    detail: "Clears the screen down to what you are actually working in. ⌥⌘H, without the finger gymnastics.",
+    group: "windows",
+    icon: "◫",
+    keywords: ["hide", "others", "focus", "declutter", "clear", "minimise", "minimize", "distraction"],
+    reach: 66,
+    run: ({ actions }) =>
+      outcome(actions, "Windows", async () => {
+        await api.runAppleScript(
+          'tell application "System Events" to set visible of (every process whose visible is true ' +
+            'and frontmost is false and name is not "Finder") to false',
+        );
+        return { ok: true, message: "Hid everything else.", copied: null };
+      }, true),
+  },
+  {
+    id: "desk.quit-others",
+    title: "Quit every app except this one",
+    detail:
+      "Asks each app to quit, so anything with unsaved work gets to put its dialog up rather than losing it. Finder and Caduceus are left alone.",
+    group: "system",
+    icon: "⊗",
+    keywords: ["quit", "close", "all", "apps", "everything", "except", "clean", "restart"],
+    reach: 54,
+    confirm: "Every other app will be asked to quit.",
+    run: ({ actions }) =>
+      outcome(actions, "Apps", async () => {
+        const result = await api.runAppleScript(
+          'set skipped to {"Finder", "Caduceus", "System Events"}\n' +
+            'tell application "System Events" to set names to name of (every process whose ' +
+            "background only is false and frontmost is false)\n" +
+            "set closed to 0\n" +
+            "repeat with n in names\n" +
+            "  if skipped does not contain (n as text) then\n" +
+            '    try\n      tell application (n as text) to quit\n      set closed to closed + 1\n    end try\n' +
+            "  end if\n" +
+            "end repeat\n" +
+            "return closed",
+        );
+        const count = Number.parseInt(result.trim(), 10) || 0;
+        return {
+          ok: true,
+          message: count ? `Asked ${count} app${count === 1 ? "" : "s"} to quit.` : "Nothing else was running.",
+          copied: null,
+        };
+      }),
+  },
+  {
+    id: "desk.mute",
+    title: "Mute",
+    detail: "Sets the system volume to zero. Running it again puts it back where it was.",
+    group: "sound",
+    icon: "◁",
+    keywords: ["mute", "silence", "quiet", "volume", "zero", "sound", "off"],
+    reach: 68,
+    async run({ actions }) {
+      try {
+        // Remembering the level is the difference between a mute and a
+        // volume-to-zero you then have to guess your way back from.
+        const result = await api.runAppleScript(
+          "set current to output volume of (get volume settings)\n" +
+            "if current > 0 then\n" +
+            "  do shell script \"defaults write com.caduceus.desktop lastVolume \" & current\n" +
+            "  set volume output volume 0\n" +
+            '  return "muted " & current\n' +
+            "else\n" +
+            '  set prior to (do shell script "defaults read com.caduceus.desktop lastVolume 2>/dev/null || echo 40")\n' +
+            "  set volume output volume (prior as integer)\n" +
+            '  return "restored " & prior\n' +
+            "end if",
+        );
+        actions.notify(
+          result.startsWith("muted") ? "Muted." : `Volume back to ${result.split(" ")[1]}%.`,
+        );
+      } catch (error) {
+        actions.notify(api.errorMessage(error), "error");
+      }
+      return true;
+    },
+  },
+];
+
+// ---------------------------------------------------------------------------
 // Apple Shortcuts
 // ---------------------------------------------------------------------------
 
@@ -2614,6 +2790,7 @@ export const COMMANDS: CommandDef[] = [
   ...SYSTEM_COMMANDS,
   ...LIST_COMMANDS,
   ...OTHER_COMMANDS,
+  ...DESK_COMMANDS,
   ...APP_COMMANDS,
   ...SHORTCUTS_COMMANDS,
 ];

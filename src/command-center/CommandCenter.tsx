@@ -30,6 +30,7 @@ import { Spinner, cx } from "@/shared/ui";
 import { ThemeToggle } from "@/shared/ThemeToggle";
 
 import { HomeTab } from "./HomeTab";
+import { TabBoundary } from "./TabBoundary";
 import { ClipboardTabPage } from "./pages/ClipboardTabPage";
 import { SystemTabPage } from "./pages/SystemTabPage";
 import { AwakePage } from "./pages/AwakePage";
@@ -282,12 +283,16 @@ export function CommandCenter() {
           const isActive = tab.id === activeId;
           return (
             <div key={tab.id} className={cx("h-full", !isActive && "hidden")}>
-              <TabContent
-                tab={tab}
-                active={isActive}
-                onOpenTab={openTab}
-                onSetTitle={(title) => setTabTitle(tab.id, title)}
-              />
+              {/* Per tab, not around the lot: a page that throws should lose
+                  its own tab and nothing else. */}
+              <TabBoundary label={tabLabel(tab)} onClose={() => closeTab(tab.id)}>
+                <TabContent
+                  tab={tab}
+                  active={isActive}
+                  onOpenTab={openTab}
+                  onSetTitle={(title) => setTabTitle(tab.id, title)}
+                />
+              </TabBoundary>
             </div>
           );
         })}

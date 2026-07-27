@@ -495,6 +495,16 @@ export interface InstalledAppSize {
 /** Measure everything reclaimable. Slow on a full disk, because it measures. */
 export const scanJunk = () => invoke<JunkGroup[]>("scan_junk");
 
+/**
+ * Reclaim the space in the chosen categories.
+ *
+ * Takes the category names rather than a list of paths, deliberately: one of
+ * the categories *is* the Trash, and emptying it is a different operation from
+ * moving things into it. Passing paths made "empty the Trash" a silent no-op.
+ * Rust re-scans, so the removal also cannot act on a stale list.
+ */
+export const cleanJunk = (kinds: string[]) => invoke<ToolOutcome>("clean_junk", { kinds });
+
 export const listInstalledAppSizes = () =>
   invoke<InstalledAppSize[]>("list_installed_app_sizes");
 

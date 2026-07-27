@@ -352,7 +352,15 @@ export function HomeTab({
 
   /**
    * Escape, in order of what is on screen: cancel the confirmation, dismiss the
-   * output, leave the agent session, clear the query, close the window.
+   * output, leave the agent session, clear the query.
+   *
+   * Returns whether it found something to do. **False when the palette is
+   * already empty** — and that matters, because `document` is reached before
+   * `window` in the bubble phase, so claiming the key unconditionally meant the
+   * shell's handler never ran. Escape on an empty search box hid the entire
+   * window, taking every other open tab with it, which directly contradicts
+   * what `CommandCenter` says it does ("with pages open it closes the page in
+   * front"). Declining here is what lets the shell decide.
    */
   const handleEscape = (): boolean => {
     if (pendingConfirm) {
@@ -372,8 +380,7 @@ export function HomeTab({
       inputRef.current?.focus();
       return true;
     }
-    void api.hideCommandCenter();
-    return true;
+    return false;
   };
 
   // Reassigned on every render so the listener below can stay registered once
@@ -414,8 +421,10 @@ export function HomeTab({
       }
 
       case "Escape":
-        event.preventDefault();
-        handleEscape();
+        // Only claimed when it was used for something. An unclaimed Escape
+        // falls through to the shell, which closes this tab — or hides the
+        // window, when this is the only tab there is.
+        if (handleEscape()) event.preventDefault();
         return;
 
       case "Tab":

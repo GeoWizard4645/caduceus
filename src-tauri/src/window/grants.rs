@@ -29,6 +29,7 @@
 //! for you.
 
 use std::process::Command;
+use std::time::{Duration, Instant};
 
 /// The grants Caduceus can repair, and what `tccutil` calls each of them.
 ///
@@ -73,14 +74,46 @@ pub struct RepairOutcome {
 
 const BUNDLE_ID: &str = "com.caduceus.desktop";
 
+/// Run a command, killing it if it outstays `limit`.
+fn run_bounded(command: &mut Command, limit: Duration) -> std::io::Result<std::process::Output> {
+    use std::process::Stdio;
+
+    let mut child = command
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()?;
+
+    let deadline = Instant::now() + limit;
+    loop {
+        match child.try_wait()? {
+            Some(_) => break,
+            None => {}
+        }
+        if Instant::now() >= deadline {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::TimedOut,
+                "tccutil did not answer",
+            ));
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    }
+
+    child.wait_with_output()
+}
+
 /// Delete the stale entry and ask macOS for the grant again.
 #[cfg(target_os = "macos")]
 pub fn repair(grant: Grant) -> RepairOutcome {
-    let output = Command::new("tccutil")
-        .arg("reset")
-        .arg(grant.service())
-        .arg(BUNDLE_ID)
-        .output();
+    // Bounded, like every other subprocess Caduceus starts. `tccutil` talks to
+    // the TCC daemon, and a daemon that does not answer would otherwise hold
+    // whichever thread is servicing this call indefinitely.
+    let output = run_bounded(
+        Command::new("tccutil").arg("reset").arg(grant.service()).arg(BUNDLE_ID),
+        Duration::from_secs(8),
+    );
 
     match output {
         Ok(out) if out.status.success() => {}

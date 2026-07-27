@@ -24,7 +24,7 @@
  * nothing needs disk access it did not already have.
  */
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import type { Field, FieldValues } from "@/shared/commands";
 import { Select, Toggle, cx } from "@/shared/ui";
@@ -173,12 +173,12 @@ function FieldControl({
       );
 
     case "select":
+      // The displayed fallback is also *written back*, so what is submitted is
+      // what is on screen. Picking a fallback for display only meant a select
+      // the user never touched showed its first option and submitted an empty
+      // string — a landmine for the first command to declare one.
       return (
-        <Select
-          value={value || field.default || field.options[0]?.value || ""}
-          onChange={onChange}
-          options={field.options}
-        />
+        <SelectField field={field} value={value} onChange={onChange} />
       );
 
     case "toggle":
@@ -227,6 +227,29 @@ function FieldControl({
         </div>
       );
   }
+}
+
+function SelectField({
+  field,
+  value,
+  onChange,
+}: {
+  field: Extract<Field, { kind: "select" }>;
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  const fallback = field.default ?? field.options[0]?.value ?? "";
+
+  // Written on mount rather than during render: setting parent state from a
+  // render is the classic React footgun, and this only needs to happen once.
+  useEffect(() => {
+    if (!value && fallback) onChange(fallback);
+    // Only ever corrects an empty value; re-running on every change would
+    // fight the user.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fallback]);
+
+  return <Select value={value || fallback} onChange={onChange} options={field.options} />;
 }
 
 /**

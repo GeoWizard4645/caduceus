@@ -125,6 +125,19 @@ export function isTabKind(value: unknown): value is TabKind {
   return typeof value === "string" && value in TAB_KINDS;
 }
 
+/** Every grant the permission page knows how to render. */
+const PERMISSION_IDS: PermissionId[] = [
+  "accessibility",
+  "screen-recording",
+  "microphone",
+  "automation",
+  "speech-recognition",
+];
+
+export function isPermissionId(value: unknown): value is PermissionId {
+  return typeof value === "string" && (PERMISSION_IDS as string[]).includes(value);
+}
+
 export function tabLabel(tab: Tab): string {
   return tab.title ?? TAB_KINDS[tab.kind].label;
 }
@@ -288,6 +301,12 @@ export function loadTabs(): { tabs: Tab[]; activeId: string } | null {
 
   const restored = tabs
     .filter((tab): tab is Tab => Boolean(tab) && isTabKind((tab as Tab).kind))
+    // Kind alone is not enough. A `permission` tab whose `permission` is a
+    // string no longer in the union, or a `tool` tab with no `commandId`, is a
+    // page that cannot render — and a crash during render takes the whole
+    // window with it, not just the tab.
+    .filter((tab) => tab.kind !== "permission" || isPermissionId(tab.permission))
+    .filter((tab) => tab.kind !== "tool" || typeof tab.commandId === "string")
     .slice(0, MAX_TABS);
   if (restored.length === 0) return null;
 

@@ -65,11 +65,21 @@ func runOCR(path: String) -> Never {
     let request = VNRecognizeTextRequest()
     request.recognitionLevel = .accurate
     request.usesLanguageCorrection = true
-    if let supported = try? request.supportedRecognitionLanguages() {
-        // Ask for the user's own languages where Vision has them, so a German
-        // or Japanese screenshot is not forced through an English model.
-        let preferred = Locale.preferredLanguages.filter { supported.contains($0) }
-        if !preferred.isEmpty { request.recognitionLanguages = preferred }
+    // Ask for the user's own languages where Vision has them, so a German or
+    // Japanese screenshot is not forced through an English model.
+    //
+    // `supportedRecognitionLanguages()` is macOS 12+. This helper is built with
+    // a macOS 11 deployment target — the same minimum the app claims — so the
+    // call has to be guarded rather than assumed. It compiled before only
+    // because the build passed no `-target` at all and silently inherited the
+    // build machine's much newer OS, which is also why the shipped helpers were
+    // arm64-only. On macOS 11 Vision recognises English and does it well; that
+    // is a better outcome than a helper that will not launch.
+    if #available(macOS 12.0, *) {
+        if let supported = try? request.supportedRecognitionLanguages() {
+            let preferred = Locale.preferredLanguages.filter { supported.contains($0) }
+            if !preferred.isEmpty { request.recognitionLanguages = preferred }
+        }
     }
 
     let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
