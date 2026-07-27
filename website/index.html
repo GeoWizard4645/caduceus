@@ -4,10 +4,10 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Caduceus — a command centre for your Mac</title>
-<meta name="description" content="A floating staff, a command palette that launches apps and does maths, a clipboard that remembers, and an AI agent that can drive your Mac. Free and open source.">
+<meta name="description" content="A private, local-first command centre for macOS — fully open source and customizable, with no monetization, no data collection, no telemetry, and no tracking.">
 
 <meta property="og:title" content="Caduceus">
-<meta property="og:description" content="A fast, local-first command centre for your Mac.">
+<meta property="og:description" content="Private, secure, and as local as you want. Open source, customizable, and free — no accounts, no tracking.">
 <meta property="og:type" content="website">
 
 <link rel="icon" href="caduceus-mark.png">
@@ -527,6 +527,16 @@
 
   .card p { margin: 0; font-size: 0.9rem; color: var(--ink-mute); }
 
+  .hero-trust {
+    margin: 14px auto 0;
+    max-width: 52ch;
+    font-size: 0.95rem;
+    line-height: 1.55;
+    color: var(--ink-mute);
+  }
+
+  #why .sub { max-width: none; text-align: center; margin-left: auto; margin-right: auto; }
+
   /* --- the typing table ------------------------------------------------ */
 
   table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
@@ -644,6 +654,7 @@
   <p class="page-toc-label">On this page</p>
   <ol>
     <li><a href="#install">Install</a></li>
+    <li><a href="#why">Why Caduceus</a></li>
     <li><a href="#type-anything">Type anything</a></li>
     <li><a href="#features">What you get</a></li>
     <li><a href="#hermes">Hermes &amp; AI</a></li>
@@ -661,8 +672,15 @@
     <img class="mark" src="caduceus-mark.png" alt="The Caduceus mark: a pixel-art winged staff with two coiled snakes">
     <h1>Caduceus</h1>
     <p class="tagline">A fast, local-first command centre for your Mac.</p>
+    <p class="hero-trust">
+      Private, secure, and as local as you want it to be — fully open source,
+      fully customizable, with no monetization, no data collection, no telemetry,
+      and no tracking.
+    </p>
 
     <div class="badges">
+      <span class="badge">Open source</span>
+      <span class="badge">No tracking</span>
       <span class="badge">macOS 11+</span>
       <span class="badge">Apple Silicon &amp; Intel</span>
       <span class="badge">MIT licensed</span>
@@ -762,6 +780,69 @@
     </div>
   </div>
 </header>
+
+<section id="why">
+  <div class="wrap">
+    <h2>Why Caduceus</h2>
+    <p class="sub">Private, secure, and as local as you want it to be.</p>
+
+    <div class="grid">
+      <div class="card">
+        <h3><span class="glyph">⌘</span> Fully open source</h3>
+        <p>
+          MIT-licensed from top to bottom. Read the Rust, the UI, and the installer
+          on <a href="https://github.com/GeoWizard4645/caduceus">GitHub</a> — or build
+          the app yourself and run only what you compiled.
+        </p>
+      </div>
+
+      <div class="card">
+        <h3><span class="glyph">✎</span> Fully customizable</h3>
+        <p>
+          Hotkeys, palette prefixes, search engine, staff shortcuts, clipboard rules,
+          and AI backends are yours to change. Optional extensions are plain JavaScript
+          files you drop in — no store, no vendor lock-in.
+        </p>
+      </div>
+
+      <div class="card">
+        <h3><span class="glyph">○</span> No monetization</h3>
+        <p>
+          No subscription, no in-app purchases, no upsell tier. Everything built into
+          the app stays free; paid cloud APIs are only involved if <em>you</em> choose
+          to wire them up for AI.
+        </p>
+      </div>
+
+      <div class="card">
+        <h3><span class="glyph">◌</span> No data collection</h3>
+        <p>
+          Caduceus does not operate a backend for your usage. Clipboard history,
+          settings, and dictation stay on your Mac unless you explicitly send text
+          to a search engine or AI endpoint you configured.
+        </p>
+      </div>
+
+      <div class="card">
+        <h3><span class="glyph">⊘</span> No telemetry</h3>
+        <p>
+          No analytics SDK, no crash reporter that phones home, no “product
+          improvement” pipeline. If something breaks, you report it because you
+          want to — not because the app already told someone.
+        </p>
+      </div>
+
+      <div class="card">
+        <h3><span class="glyph">⊗</span> No tracking</h3>
+        <p>
+          No fingerprinting, no ad pixels, no session replay. The marketing site is
+          static HTML; the app does not watch what you type beyond what it needs to
+          run the command you asked for.
+        </p>
+      </div>
+    </div>
+  </div>
+</section>
 
 <section id="type-anything">
   <div class="wrap">

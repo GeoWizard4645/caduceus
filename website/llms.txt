@@ -4,6 +4,8 @@
 
 Important notes:
 
+- Fully open source (MIT) and fully customizable — hotkeys, prefixes, backends, and optional extensions.
+- No monetization, no data collection, no telemetry, and no tracking. Private and secure by default; as local as you want (offline core workflow, optional local or cloud AI only if you configure it).
 - macOS 11 (Big Sur) or later; universal binary (Apple Silicon and Intel).
 - Menu bar app only — no Dock icon. Notarized signing is not in place yet; the installer clears the quarantine attribute after download.
 - AI is optional: `/` routes to your configured chat backend; `/c` starts computer-use (Hermes is the supported path for screen control). Caduceus does not ship its own mouse or screen driver.
