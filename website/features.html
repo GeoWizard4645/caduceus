@@ -343,9 +343,10 @@
    *
    * The `tools` capability group is deliberately left out entirely: it is
    * a hand-maintained list that predates several of the actual commands it
-   * describes, and two of its entries (image resize/convert, add-to-Notes
-   * as a standalone command) do not correspond to anything callable today.
-   * Everything real in it is already covered, more precisely, by the
+   * describes. Image resize/convert is now covered, more precisely, by the
+   * generated "Image tools" command below; add-to-Notes as a standalone
+   * command still does not correspond to anything callable today.
+   * Everything else real in it is already covered, more precisely, by the
    * generated command groups below.
    * ------------------------------------------------------------------ */
 
@@ -356,7 +357,7 @@
     { id: "clipboard", title: "Clipboard", blurb: "Local history in SQLite, optionally encrypted at rest, with nothing leaving the machine." },
     { id: "screen", title: "Screen", blurb: "Screenshots, screen recording, and reading text off whatever is on screen — recognised on-device, never uploaded as an image." },
     { id: "windows", title: "Windows", blurb: "Snap, resize and move the frontmost window of any application. Needs the Accessibility permission, granted once." },
-    { id: "documents", title: "Documents & the web", blurb: "Get the text out of a web page or a meeting, and cite what you read. There is no PDF reader yet — that one isn't wired up to anything you can run." },
+    { id: "documents", title: "Documents & the web", blurb: "Summarise a PDF or ask it a question, get the text out of a web page or a meeting, and cite what you read." },
     { id: "time", title: "Time & calendar", blurb: "World clocks, timers, a pomodoro cycle, and putting things on — or reading what's on — Apple Calendar." },
     { id: "developer", title: "Developer tools", blurb: "Encoders, hashes, identifiers, formatters and inspectors, plus what's running on this machine: ports, repos, SSH hosts, containers. All local — a JWT should never be pasted into a website to be read." },
     { id: "files", title: "Files & Finder", blurb: "Actions on the current Finder selection. Deletion always means the Trash, never an unrecoverable remove." },
