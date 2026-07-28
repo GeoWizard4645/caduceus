@@ -2,7 +2,7 @@
 #
 # Caduceus installer.
 #
-#   curl -fsSL https://vivaanshahani.com/caduceus/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/GeoWizard4645/caduceus/main/website/install.sh | bash
 #
 # With no flags this installs Caduceus alone: downloads the universal .dmg from
 # the latest release, copies the app to /Applications, clears the quarantine
@@ -36,6 +36,8 @@
 set -euo pipefail
 
 REPO="GeoWizard4645/caduceus"
+# Served from GitHub so curl works (the marketing domain may require a browser challenge).
+INSTALL_SCRIPT_URL="https://raw.githubusercontent.com/GeoWizard4645/caduceus/main/website/install.sh"
 APP_NAME="Caduceus"
 INSTALL_DIR="/Applications"
 BUNDLE_ID="com.caduceus.desktop"
@@ -287,7 +289,7 @@ download_caduceus() {
     body=$(curl -fsSL "https://api.github.com/repos/${REPO}/releases?per_page=1" 2>/dev/null) \
       || die "Could not reach the GitHub API for ${REPO}.
 If you are offline or rate-limited, try again shortly — or compile it yourself:
-  curl -fsSL https://vivaanshahani.com/caduceus/install.sh | bash -s -- --from-source"
+  curl -fsSL ${INSTALL_SCRIPT_URL} | bash -s -- --from-source"
 
     dmgs=$(echo "$body" \
       | grep -o '"browser_download_url": *"[^"]*\.dmg"' \
@@ -298,7 +300,7 @@ If you are offline or rate-limited, try again shortly — or compile it yourself
 
   [ -n "$dmg_url" ] || die "No .dmg for this Mac ($(uname -m)) in the latest release of ${REPO}.
 Compile it yourself instead — same command, one extra flag:
-  curl -fsSL https://vivaanshahani.com/caduceus/install.sh | bash -s -- --from-source"
+  curl -fsSL ${INSTALL_SCRIPT_URL} | bash -s -- --from-source"
 
   # Deliberately not `local`: the EXIT trap fires after this function has
   # returned, so a local here is out of scope by the time cleanup runs — which

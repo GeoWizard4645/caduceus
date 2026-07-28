@@ -17,11 +17,12 @@
 import { useState } from "react";
 
 import * as api from "@/shared/api";
+import { INSTALL_SCRIPT_URL } from "@/shared/docsUrls";
 import { useUpdateCheck } from "@/shared/hooks";
 import { Button, Callout, Section } from "@/shared/ui";
 
 /** Shown, never executed from here. Mirrors `update::INSTALL_COMMAND`. */
-const INSTALL_COMMAND = "curl -fsSL https://vivaanshahani.com/caduceus/install.sh | bash";
+const INSTALL_COMMAND = `curl -fsSL ${INSTALL_SCRIPT_URL} | bash`;
 
 export function UpdateSection() {
   const update = useUpdateCheck(true);

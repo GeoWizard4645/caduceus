@@ -64,7 +64,7 @@ pub async fn check() -> UpdateCheck {
 /// The one-liner from the website. A constant, and deliberately not built from
 /// anything the UI passes in — this string becomes an executable file.
 pub const INSTALL_COMMAND: &str =
-    "curl -fsSL https://vivaanshahani.com/caduceus/install.sh | bash";
+    "curl -fsSL https://raw.githubusercontent.com/GeoWizard4645/caduceus/main/website/install.sh | bash";
 
 /// The contents of the `.command` file, split out so it can be checked.
 ///

@@ -152,7 +152,7 @@ Short summary of what changed.
 ## Install
 
 \`\`\`bash
-curl -fsSL https://vivaanshahani.com/caduceus/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/GeoWizard4645/caduceus/main/website/install.sh | bash
 \`\`\`
 
 ## Issues
@@ -195,7 +195,7 @@ curl -fsSL "https://api.github.com/repos/GeoWizard4645/caduceus/releases/latest"
   | grep -E '"tag_name"|Caduceus_.*\.dmg'
 
 # End-to-end install (optional)
-curl -fsSL https://vivaanshahani.com/caduceus/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/GeoWizard4645/caduceus/main/website/install.sh | bash
 ```
 
 Confirm the log line shows **`Caduceus_<version>_universal.dmg`**, then open the app from `/Applications/Caduceus.app`.
@@ -313,4 +313,8 @@ xcrun notarytool history --key … --key-id … --issuer …
 ## Related docs
 
 - [README.md](./README.md) — development build and local install
-- [website/install.sh](./website/install.sh) — what users run; redeploy only when this script changes (Cloudflare Worker / site)
+- [website/install.sh](./website/install.sh) — what users run (canonical URL is the GitHub raw link in the script header; redeploy the Worker when the script changes)
+
+### Install script and Cloudflare
+
+The public one-liner uses `raw.githubusercontent.com/.../website/install.sh` so **curl** is never blocked by a browser-only challenge on `vivaanshahani.com`. If you want the vanity URL to work from Terminal too, add a Cloudflare WAF **Skip** rule for paths ending in `install.sh` on `caduceus.vivaanshahani.com` and `vivaanshahani.com/caduceus/install.sh`.

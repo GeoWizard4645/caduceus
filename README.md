@@ -47,7 +47,7 @@ the source of before you run it — that is what this is.
 **macOS 11+, Apple Silicon or Intel.** One line:
 
 ```bash
-curl -fsSL https://vivaanshahani.com/caduceus/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/GeoWizard4645/caduceus/main/website/install.sh | bash
 ```
 
 That downloads the universal `.dmg` from the latest release, mounts it, copies
@@ -94,7 +94,7 @@ Would rather run only code you compiled? The installer will do that too, at the
 cost of a Rust and Node toolchain and a few minutes:
 
 ```bash
-curl -fsSL https://vivaanshahani.com/caduceus/install.sh | bash -s -- --from-source
+curl -fsSL https://raw.githubusercontent.com/GeoWizard4645/caduceus/main/website/install.sh | bash -s -- --from-source
 ```
 
 Caduceus lives in your menu bar. There is no Dock icon.

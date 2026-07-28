@@ -9,5 +9,9 @@ export const DOCS_INSTALL = `${SITE}/#install`;
 export const DOCS_SOURCE = "https://github.com/GeoWizard4645/caduceus";
 export const DOCS_ISSUES = "https://github.com/GeoWizard4645/caduceus/issues";
 
+/** Curl-friendly; the marketing domain may sit behind a browser-only Cloudflare challenge. */
+export const INSTALL_SCRIPT_URL =
+  "https://raw.githubusercontent.com/GeoWizard4645/caduceus/main/website/install.sh";
+
 export const SUPPORT_EMAIL = "caduceus@vivaanshahani.com";
 export const SUPPORT_MAILTO = `mailto:${SUPPORT_EMAIL}`;

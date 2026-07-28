@@ -1255,7 +1255,7 @@
           Add AI whenever you are ready.
         </p>
         <div class="cmd">
-          <code id="cmd"><span class="prompt">$ </span>curl -fsSL https://vivaanshahani.com/caduceus/install.sh | bash</code>
+          <code id="cmd"><span class="prompt">$ </span>curl -fsSL https://raw.githubusercontent.com/GeoWizard4645/caduceus/main/website/install.sh | bash</code>
           <button class="copy" id="copy" type="button">Copy</button>
         </div>
         <p class="cmd-meta" id="cmd-meta">
@@ -2091,7 +2091,9 @@ export default async function (input, ctx) {
       depsLabel.classList.toggle("required", needsDeps);
 
       const components = [...picked("dependency"), ...picked("component")];
-      const parts = ["curl -fsSL https://vivaanshahani.com/caduceus/install.sh | bash -s --"];
+      const INSTALL_SCRIPT =
+        "https://raw.githubusercontent.com/GeoWizard4645/caduceus/main/website/install.sh";
+      const parts = [`curl -fsSL ${INSTALL_SCRIPT} | bash -s --`];
       if (components.length) parts.push("--with=" + components.map((p) => p.id).join(","));
       if (models.length) parts.push("--pull=" + models.map((p) => p.id).join(","));
 

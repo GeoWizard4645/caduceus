@@ -325,7 +325,7 @@ else
   BODY="$MESSAGE"
 fi
 
-NOTES="$BODY"$'\n\n## Install\n\n```bash\ncurl -fsSL https://vivaanshahani.com/caduceus/install.sh | bash\n```\n\n## Issues\n\nhttps://github.com/'"$REPO"$'/issues\n'
+NOTES="$BODY"$'\n\n## Install\n\n```bash\ncurl -fsSL https://raw.githubusercontent.com/GeoWizard4645/caduceus/main/website/install.sh | bash\n```\n\n## Issues\n\nhttps://github.com/'"$REPO"$'/issues\n'
 
 # --- commit, tag, push -----------------------------------------------------
 
@@ -423,5 +423,5 @@ fi
 
 step "Released $TAG"
 note "https://github.com/$REPO/releases/tag/$TAG"
-note "curl -fsSL https://vivaanshahani.com/caduceus/install.sh | bash"
+note "curl -fsSL https://raw.githubusercontent.com/GeoWizard4645/caduceus/main/website/install.sh | bash"
 (( SKIP_CASK )) || note "brew install --cask geowizard4645/caduceus/caduceus"
