@@ -8,25 +8,14 @@
  * on/off switch and a user pin. See that file's module doc for the full
  * reasoning; the short version is in the Callout below.
  *
- * # Why this tab exists before the feature is wired up
- *
- * `routing.rs` is fully built and tested but, as of this tab, is not
- * reachable from the UI at all: `classify`/`route` are plain Rust functions,
- * not `#[tauri::command]`s, and `AgentSettings` does not yet carry the two
- * fields the policy needs (`autoRoutingEnabled`, `routingOverrideBackendId`).
- * Rather than wait for that wiring to write this tab, it is built against the
- * intended shape now — the explanation, the two controls, and a live
- * "preview a decision" box — and every control that would need the missing
- * plumbing is explicit about not being real yet, instead of silently doing
- * nothing or (worse) claiming to save something that evaporates on restart.
- * See the `Callout` at the top for exactly what closes the gap.
- *
- * Concretely, that means the on/off switch and the backend pin below are
- * **local component state**, not `draft.update(...)`: `AgentSettings` has no
- * home for them yet, and round-tripping an unknown field through
- * `update_settings` would just have the backend echo back a value without
- * it, snapping the switch back a moment after you flipped it — worse than a
- * control that is honest about being a preview.
+ * The on/off switch and the backend pin below are real `draft.update(...)`
+ * calls against `AgentSettings.autoRoutingEnabled` /
+ * `routingOverrideBackendId` (see `src-tauri/src/settings/model.rs`), same as
+ * every other tab in this directory — they persist through Settings and take
+ * effect on the next `/`-prefixed chat, which resolves its backend through
+ * `agent::chat_with_history` → `resolve_chat_backend`, consulting
+ * `tools::routing::route` exactly the way the "Preview a decision" box below
+ * does.
  */
 
 import { useState } from "react";
@@ -41,13 +30,7 @@ export function RoutingTab({ draft }: { draft: Draft }) {
   const settings = draft.settings;
   if (!settings) return null;
   const backends = settings.agents.backends;
-
-  // Local-only stand-ins for the two settings fields that do not exist on
-  // `AgentSettings` yet — see the module doc above. Defaults match what the
-  // report proposes for `Default for AgentSettings`: routing on, nothing
-  // pinned.
-  const [enabled, setEnabled] = useState(true);
-  const [pinnedId, setPinnedId] = useState<string>("");
+  const { autoRoutingEnabled, routingOverrideBackendId } = settings.agents;
 
   return (
     <>
@@ -92,19 +75,21 @@ export function RoutingTab({ draft }: { draft: Draft }) {
         <Toggle
           label="Route short, mechanical prompts to a fast local backend"
           hint="Complex prompts always go to your primary backend regardless of this setting."
-          checked={enabled}
-          onChange={setEnabled}
+          checked={autoRoutingEnabled}
+          onChange={(checked) => draft.update((d) => (d.agents.autoRoutingEnabled = checked))}
         />
       </Section>
 
       <Section
         title="Pin a backend"
-        description="Bypass the classifier entirely and always use one specific backend, no matter what a prompt looks like. An explicit pin always wins — it does not even need the classifier to agree."
+        description="Bypass the classifier entirely and always use one specific backend, no matter what a prompt looks like. An explicit pin always wins — it does not even need the classifier to agree, and it wins even while auto-routing above is off."
       >
         <Field label="Always use">
           <Select
-            value={pinnedId}
-            onChange={setPinnedId}
+            value={routingOverrideBackendId ?? ""}
+            onChange={(value) =>
+              draft.update((d) => (d.agents.routingOverrideBackendId = value || null))
+            }
             options={[
               { value: "", label: "Automatic (let auto-routing decide)" },
               ...backends.map((b) => ({ value: b.id, label: b.displayName || b.kind })),
@@ -119,19 +104,6 @@ export function RoutingTab({ draft }: { draft: Draft }) {
       >
         <RoutingPreview />
       </Section>
-
-      <Section title="What this needs to become real">
-        <Callout tone="warn" title="Not wired up yet">
-          This tab is a preview of the intended experience. Turning routing off or pinning a
-          backend above will not survive closing Settings, and the preview box will show an
-          explanatory error instead of a real decision, until two things land on the Rust side:
-          a <code>autoRoutingEnabled</code> / <code>routingOverrideBackendId</code> pair of fields
-          on <code>AgentSettings</code>, and a <code>routing_preview</code> command that calls the
-          already-tested <code>tools::routing::route</code> with them. Nothing in this tab will
-          need to change when that lands — it already calls that command and reads settings in the
-          shape they'll be in.
-        </Callout>
-      </Section>
     </>
   );
 }
@@ -140,24 +112,22 @@ function RoutingPreview() {
   const [prompt, setPrompt] = useState("");
   const [loading, setLoading] = useState(false);
   const [decision, setDecision] = useState<RoutingDecision | null>(null);
-  const [notWired, setNotWired] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-  // No debounce-and-auto-run here: unlike the expander's placeholder preview,
-  // this would be a real backend call once wired, and a preview box that
-  // fires on every keystroke against a real classifier is a worse interface
-  // than one with a button, not a better one.
+  // No debounce-and-auto-run here: this is a real backend call, and a preview
+  // box that fires on every keystroke against a real classifier is a worse
+  // interface than one with a button, not a better one.
   const run = async () => {
     if (!prompt.trim()) return;
     setLoading(true);
     setDecision(null);
-    setNotWired(null);
+    setError(null);
     try {
       setDecision(await api.routingPreview(prompt));
     } catch (e) {
-      // Expected today: `routing_preview` is not a registered command yet.
-      // Shown verbatim rather than swallowed, so it is obvious exactly what
-      // is missing rather than looking like a silent failure.
-      setNotWired(api.errorMessage(e));
+      // The only way this command fails is "no backend is configured yet" —
+      // shown verbatim rather than swallowed, so it is obvious what to fix.
+      setError(api.errorMessage(e));
     } finally {
       setLoading(false);
     }
@@ -196,11 +166,10 @@ function RoutingPreview() {
         </div>
       )}
 
-      {notWired && (
+      {error && (
         <div className="mt-3">
-          <Callout tone="warn" title="Can't run this yet">
-            Caduceus doesn't have a <code>routing_preview</code> command to call, so nothing ran.
-            ({notWired})
+          <Callout tone="warn" title="Can't preview a decision">
+            {error}
           </Callout>
         </div>
       )}
