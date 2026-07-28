@@ -19,9 +19,12 @@ import { CitationsPage } from "./CitationsPage";
 import { ColorsPage } from "./ColorsPage";
 import { ConvertPage } from "./ConvertPage";
 import { CronPage } from "./CronPage";
+import { CurlPage } from "./CurlPage";
+import { DependenciesPage } from "./DependenciesPage";
 import { DesktopShapesPage } from "./DesktopShapesPage";
 import { DesktopSortPage } from "./DesktopSortPage";
 import { DocumentsPage } from "./DocumentsPage";
+import { GitCommitPage } from "./GitCommitPage";
 import { ImagesPage } from "./ImagesPage";
 import { MeetingPage } from "./MeetingPage";
 import { PermissionsSetupPage } from "./PermissionsSetupPage";
@@ -57,4 +60,7 @@ export const TOOL_PAGES: Record<ToolPageId, ComponentType<ToolPageProps>> = {
   search: SearchPage,
   documents: DocumentsPage,
   snippets: SnippetsPage,
+  curl: CurlPage,
+  "git-commit": GitCommitPage,
+  dependencies: DependenciesPage,
 };

@@ -19,6 +19,9 @@ import type {
   BrowserInstall,
   ClipboardEntry,
   ClipboardStats,
+  CurlRequest,
+  DependencyEntry,
+  DependencyReport,
   DesktopShape,
   DesktopShapePlan,
   DesktopShapeResult,
@@ -31,12 +34,16 @@ import type {
   ExtensionFetchRequest,
   ExtraToolId,
   ExtensionFetchResponse,
+  GitCommitAssist,
+  GitFileChange,
+  HttpPlaygroundResult,
   InstallReport,
   UninstallRequest,
   UninstallResult,
   UninstallSnapshot,
   Conversation,
   ParsedInput,
+  PinKind,
   RoutedText,
   RuntimeInfo,
   UpdateCheck,
@@ -61,6 +68,18 @@ import type {
   WindowOutcome,
   WindowVerb,
 } from "./types";
+
+// Re-exported so pages can write `api.HttpPlaygroundResult` etc., matching the
+// convention `RegexPage`/`CronPage` already use for their own result types.
+export type {
+  CurlRequest,
+  DependencyEntry,
+  DependencyReport,
+  GitCommitAssist,
+  GitFileChange,
+  HttpPlaygroundResult,
+  PinKind,
+};
 
 // --- settings --------------------------------------------------------------
 
@@ -1192,14 +1211,16 @@ export const semanticSearch = (query: string, limit = 40) =>
 export const runExtraTool = (id: ExtraToolId, input = "") =>
   invoke<ToolResult>("run_extra_tool", { id, input });
 
-export const runCurl = (command: string) => invoke<unknown>("run_curl", { command });
+/** Parse and replay a pasted `curl` command. Never honours `-k`/`--insecure`. */
+export const runCurl = (command: string) =>
+  invoke<HttpPlaygroundResult>("run_curl", { command });
 
 /** Reads the repo and drafts a message. Never stages, never commits. */
 export const gitCommitAssist = (repoPath: string) =>
-  invoke<unknown>("git_commit_assist", { repoPath });
+  invoke<GitCommitAssist>("git_commit_assist", { repoPath });
 
 export const inspectDependencies = (manifestPath: string) =>
-  invoke<unknown>("inspect_dependencies", { manifestPath });
+  invoke<DependencyReport>("inspect_dependencies", { manifestPath });
 
 /** Encode text as an SVG QR code. Generated locally; nothing is uploaded. */
 export const generateQr = (text: string, ecc = "medium") =>

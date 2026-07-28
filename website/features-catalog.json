@@ -1070,6 +1070,10 @@
           "detail": "Reads a standard five-field cron expression, describes it in plain English, and lists its next several run times in this Mac's own time zone — including the day-of-month/day-of-week quirk that makes a schedule look stricter than it runs."
         },
         {
+          "name": "cURL / HTTP playground",
+          "detail": "Paste a curl command — including whatever a browser’s “Copy as cURL” produces — and it is parsed, shown back, and replayed for real. –k/--insecure is recorded but never honoured: TLS is always verified regardless of what the pasted command asked for."
+        },
+        {
           "name": "Generate a UUID",
           "detail": "A random version-4 UUID, copied as soon as it appears."
         },
@@ -1180,6 +1184,34 @@
         {
           "name": "MD5 hash  ·  md5 …",
           "detail": "Hashes the input with MD5. Fine for checking a download, never for a password."
+        },
+        {
+          "name": "Format YAML  ·  yaml …",
+          "detail": "Pretty-prints the block and flow YAML people actually write — comments and multi-document ‘---’ streams included. Anchors, aliases, explicit tags and merge keys are reported as errors rather than silently reshaped."
+        },
+        {
+          "name": "Validate YAML",
+          "detail": "Checks whether text is valid YAML without changing it, under the same rules as the formatter — anchors, aliases and merge keys are refused rather than guessed at."
+        },
+        {
+          "name": "Format XML  ·  xml …",
+          "detail": "Checks well-formedness the way a browser's parser would — matching tags, quoted attributes, exactly one root, no bare & or < — and pretty-prints what parses. Not DTD or schema validation, since neither is fetched."
+        },
+        {
+          "name": "Validate XML",
+          "detail": "Checks whether markup is well-formed XML, without changing it."
+        },
+        {
+          "name": "HTML entity encode  ·  htmlentity …",
+          "detail": "The wide version: escapes the five markup-significant characters by name and every other non-ASCII character as a numeric reference — not just the five “HTML escape” covers."
+        },
+        {
+          "name": "HTML entity decode  ·  unhtmlentity …",
+          "detail": "Decodes the classic named HTML entity set (©, —, ½, Greek letters and more) plus decimal and hex numeric references back to text. An entity missing its ‘;’, or naming something unknown, is left exactly as written."
+        },
+        {
+          "name": "Format SQL  ·  sql …",
+          "detail": "Breaks a query onto readable lines: one major clause per line, joins and boolean conjunctions indented beneath, keywords uppercased, strings and identifiers left alone. A line-breaker, not a full parser — it works across dialects rather than getting one exactly right."
         }
       ]
     },
@@ -1395,6 +1427,10 @@
       "blurb": "Addresses, name resolution and reachability.",
       "items": [
         {
+          "name": "View /etc/hosts",
+          "detail": "Every alias entry in /etc/hosts, this machine's local overrides for name resolution. Read-only — editing needs root, which this never asks for."
+        },
+        {
           "name": "Toggle Wi-Fi",
           "detail": "Turns Wi-Fi on or off on whichever interface is actually the Wi-Fi one — not a hardcoded en0."
         },
@@ -1425,6 +1461,14 @@
       "title": "Developer environment",
       "blurb": "What is running on this machine: ports, repositories, SSH hosts and containers.",
       "items": [
+        {
+          "name": "Git commit assist",
+          "detail": "Reads a repository’s status and diff and drafts a commit message through whichever AI backend is configured. Every git call is read-only — this never stages or commits; you still press commit yourself."
+        },
+        {
+          "name": "Dependency inspector",
+          "detail": "Reads a package.json, Cargo.toml, or requirements.txt and shows how tightly each dependency is pinned — exact, a movable range, or unpinned entirely. No network lookups: only what the manifest itself says."
+        },
         {
           "name": "Listening ports",
           "detail": "Every process holding a TCP port open, with its pid. Choosing one stops it with SIGTERM, so a dev server flushes its logs and removes its socket rather than being killed outright. Type a number after the keyword to narrow to one port."
