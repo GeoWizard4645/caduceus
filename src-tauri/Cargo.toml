@@ -89,6 +89,8 @@ parking_lot = "0.12"
 dirs = "6"
 sysinfo = { version = "0.39", default-features = false, features = ["system", "disk", "network", "component"] }
 qrcodegen = "1.8"
+regex = "1.13.1"
+argon2 = "0.5.3"
 
 # ---- Platform-specific ----------------------------------------------------
 [target.'cfg(target_os = "macos")'.dependencies]

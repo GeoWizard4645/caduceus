@@ -1062,6 +1062,14 @@
       "blurb": "Encoders, hashes, identifiers, formatters and inspectors. Every one of these runs locally, which is the point — a JWT or an API payload should never be pasted into a website to be read.",
       "items": [
         {
+          "name": "Regex tester",
+          "detail": "Tests a pattern against sample text, shows every match with its capture groups and positions, and explains the pattern in plain English one token at a time. Runs on this Mac — nothing is sent anywhere."
+        },
+        {
+          "name": "Cron parser",
+          "detail": "Reads a standard five-field cron expression, describes it in plain English, and lists its next several run times in this Mac's own time zone — including the day-of-month/day-of-week quirk that makes a schedule look stricter than it runs."
+        },
+        {
           "name": "Generate a UUID",
           "detail": "A random version-4 UUID, copied as soon as it appears."
         },
@@ -1180,6 +1188,50 @@
       "title": "Text",
       "blurb": "Reshape whatever you type or paste: case, line order, counts and cleanup.",
       "items": [
+        {
+          "name": "Summarise",
+          "detail": "Boils the text down to its point. Runs against whichever AI backend you configured — a local model or your own key — and puts the result on the clipboard."
+        },
+        {
+          "name": "Rewrite: professional",
+          "detail": "Same meaning, work register. Runs against whichever AI backend you configured — a local model or your own key — and puts the result on the clipboard."
+        },
+        {
+          "name": "Rewrite: friendly",
+          "detail": "Same meaning, warmer. Runs against whichever AI backend you configured — a local model or your own key — and puts the result on the clipboard."
+        },
+        {
+          "name": "Rewrite: concise",
+          "detail": "Same meaning, fewer words. Runs against whichever AI backend you configured — a local model or your own key — and puts the result on the clipboard."
+        },
+        {
+          "name": "Rewrite: diplomatic",
+          "detail": "Same meaning, less edge. Runs against whichever AI backend you configured — a local model or your own key — and puts the result on the clipboard."
+        },
+        {
+          "name": "Fix grammar and style",
+          "detail": "Typos, run-ons and passive voice. Runs against whichever AI backend you configured — a local model or your own key — and puts the result on the clipboard."
+        },
+        {
+          "name": "Explain simply",
+          "detail": "Jargon turned into plain language. Runs against whichever AI backend you configured — a local model or your own key — and puts the result on the clipboard."
+        },
+        {
+          "name": "Draft a polite reply",
+          "detail": "Reads it and writes the answer. Runs against whichever AI backend you configured — a local model or your own key — and puts the result on the clipboard."
+        },
+        {
+          "name": "Bullet-point it",
+          "detail": "A paragraph becomes three or four lines. Runs against whichever AI backend you configured — a local model or your own key — and puts the result on the clipboard."
+        },
+        {
+          "name": "Suggest a title",
+          "detail": "Headlines and subject lines. Runs against whichever AI backend you configured — a local model or your own key — and puts the result on the clipboard."
+        },
+        {
+          "name": "Text expander",
+          "detail": "Snippets with placeholders that fill themselves in — today’s date, next week’s, whatever is on the clipboard — plus emoji searched by meaning rather than name, Markdown pasted as styled text, and a proofreader for what a spellchecker cannot see."
+        },
         {
           "name": "Lorem ipsum",
           "detail": "Three sentences of placeholder text."
@@ -1399,6 +1451,46 @@
         {
           "name": "Sticky notes",
           "detail": "Somewhere to put four words before you lose them. Saves as you type, survives a restart, and never asks you to name a file."
+        },
+        {
+          "name": "Ask about part of my screen",
+          "detail": "Drag a box around anything — a stack trace, an error dialog, a chart — and ask about it. The text is read on this Mac by Apple’s own Vision framework; only that text reaches the model, never the picture."
+        },
+        {
+          "name": "Ask about this window",
+          "detail": "Reads the frontmost window instead of asking you to drag a box. Same on-device OCR; the same rule that only the text leaves your Mac."
+        },
+        {
+          "name": "Summarise a web page",
+          "detail": "Fetches a URL, strips the navigation and the adverts, and summarises what is left. The page is fetched by Caduceus, not by a model — nothing about you goes with the request."
+        },
+        {
+          "name": "Add a calendar event",
+          "detail": "“Lunch with Mark next Tuesday at 12:30pm” becomes a real Apple Calendar event. The date is parsed on this Mac, not by a model, so it works offline and answers instantly — and refuses rather than guessing when it cannot read what you meant."
+        },
+        {
+          "name": "What is on today",
+          "detail": "Today’s remaining calendar events, read straight from Apple Calendar. Does not launch Calendar to look."
+        },
+        {
+          "name": "Search my files by meaning",
+          "detail": "Finds a document by what it is about rather than what it is called — “the note where I worked out the database schema”. The index is built and searched entirely on this Mac; if a local model is running it is used to understand meaning, and if not the search still works on words alone."
+        },
+        {
+          "name": "Read a document or page",
+          "detail": "Summarise a PDF or ask it a question, or paste a URL and get the article without the adverts. Long documents are read in sections and the answer says when it only covered part of one."
+        },
+        {
+          "name": "Image tools",
+          "detail": "Compress and convert, resize to a preset, strip EXIF and GPS before sharing a photo, and find duplicates in a folder. Originals are never overwritten — every result is written beside the file it came from."
+        },
+        {
+          "name": "Privacy and security",
+          "detail": "A passphrase generator, a clipboard that clears itself, a microphone mute, a log of which apps recently used the camera or microphone, and a file vault. The vault uses Argon2id — a forgotten passphrase means the file is gone, and it says so before you encrypt anything."
+        },
+        {
+          "name": "Time management",
+          "detail": "A world clock for a handful of zones side by side, a converter for “5pm EST in Tokyo”, named countdown timers, a stopwatch with laps, and a pomodoro cycle. The counting happens in Caduceus itself, so a timer keeps running — and still notifies you — after this window is closed."
         },
         {
           "name": "QR code",

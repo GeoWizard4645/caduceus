@@ -307,20 +307,37 @@ pub async fn open_app(target: &str, args: &[String]) -> ExecOutcome {
 
     #[cfg(target_os = "macos")]
     let mut cmd = {
-        let mut c = Command::new("open");
-        // A bundle id looks like `com.foo.Bar`; a path contains a separator or
-        // ends in `.app`.
-        let looks_like_bundle_id =
-            target.contains('.') && !target.contains('/') && !target.ends_with(".app");
-        if looks_like_bundle_id {
-            c.arg("-b").arg(target);
-        } else {
-            c.arg("-a").arg(target);
+        // The same bug documented on `open_url`: `open -b/-a … --args` only
+        // hands `--args` to the app when `open` has to start it fresh. If a
+        // Chromium browser is already running — which it usually is — `open`
+        // instead reuses that process and drops every arg after `--args`, so
+        // a shortcut like "open Chrome in my Work profile" just reopens
+        // whichever profile was already active. Skip `open` entirely for a
+        // browser we can find on disk and exec it the same way `open_url`
+        // does, so the args always reach the process that reads them.
+        match browser::chromium_binary_for_target(target).filter(|_| !args.is_empty()) {
+            Some(bin) => {
+                let mut c = Command::new(bin);
+                c.args(args);
+                c
+            }
+            None => {
+                let mut c = Command::new("open");
+                // A bundle id looks like `com.foo.Bar`; a path contains a separator or
+                // ends in `.app`.
+                let looks_like_bundle_id =
+                    target.contains('.') && !target.contains('/') && !target.ends_with(".app");
+                if looks_like_bundle_id {
+                    c.arg("-b").arg(target);
+                } else {
+                    c.arg("-a").arg(target);
+                }
+                if !args.is_empty() {
+                    c.arg("--args").args(args);
+                }
+                c
+            }
         }
-        if !args.is_empty() {
-            c.arg("--args").args(args);
-        }
-        c
     };
 
     #[cfg(target_os = "windows")]

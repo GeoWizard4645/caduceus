@@ -30,6 +30,7 @@ export type TabKind =
   | "machine"
   | "tool"
   | "extension"
+  | "workflow-import"
   | "permission";
 
 export interface Tab {
@@ -48,6 +49,8 @@ export interface Tab {
   commandId?: string;
   /** For `extension`: which installed extension this page runs. */
   extensionId?: string;
+  /** For `workflow-import`: which staged import to highlight on arrival. */
+  token?: string;
   /** For `tool` / `chat`: text to start the input with. */
   prefill?: string;
   /** For `chat`: open in Cowork (computer use) instead of plain chat. */
@@ -103,6 +106,7 @@ export const TAB_KINDS: Record<TabKind, KindMeta> = {
   machine: { label: "This Mac", icon: "◍", singleton: true, page: true },
   tool: { label: "Tool", icon: "⌂", singleton: true, page: true },
   extension: { label: "Extension", icon: "⊞", singleton: true, page: true },
+  "workflow-import": { label: "Import", icon: "⇩", singleton: true, page: true },
   permission: { label: "Permission", icon: "⚠", singleton: true, page: true },
 };
 

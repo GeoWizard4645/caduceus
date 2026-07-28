@@ -197,6 +197,10 @@ export interface AgentSettings {
   primaryBackendId: string | null;
   computerUseBackendId: string | null;
   confirmBeforeFirstAction: boolean;
+  /** Master switch for smart routing; false always uses the primary backend. */
+  autoRoutingEnabled: boolean;
+  /** A hand-picked backend that always beats the classifier. */
+  routingOverrideBackendId: string | null;
 }
 
 export interface ClipboardSettings {
@@ -592,6 +596,44 @@ export interface ChatReply {
   conversationId: number;
   text: string;
 }
+
+/**
+ * What "Highlight & Act" can do to a selection.
+ *
+ * Mirrors `tools::textai::TextAiAction` (serde `snake_case`). The frontend
+ * names an action rather than sending a prompt, so the wording of every prompt
+ * stays on the Rust side where it can be tested — and so a compromised webview
+ * cannot ask the user's model anything it likes.
+ */
+export type TextAiAction =
+  | "summarize"
+  | "rewrite_professional"
+  | "rewrite_friendly"
+  | "rewrite_concise"
+  | "rewrite_diplomatic"
+  | "fix_grammar"
+  | "explain_simply"
+  | "translate"
+  | "reply_politely"
+  | "bullet_point"
+  | "generate_title";
+
+/**
+ * The second bench of developer tools.
+ *
+ * Mirrors `tools::devextra::ExtraToolId`. Separate from {@link ToolId} because
+ * these are a different bench, not more of the same — and because one enum of
+ * fifty variants had already become the hardest thing in that file to read.
+ */
+export type ExtraToolId =
+  | "yaml_format"
+  | "yaml_validate"
+  | "xml_format"
+  | "xml_validate"
+  | "html_entity_encode"
+  | "html_entity_decode"
+  | "sql_format"
+  | "hosts_view";
 
 // --- extensions --------------------------------------------------------------
 

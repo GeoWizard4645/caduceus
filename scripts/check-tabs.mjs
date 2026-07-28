@@ -131,7 +131,7 @@ try {
   // --- labels -------------------------------------------------------------
   check("every kind has a label",
     ["home", "clipboard", "chat", "settings", "system", "awake", "sound", "ports", "docker",
-     "machine", "tool", "extension", "permission"]
+     "machine", "tool", "extension", "workflow-import", "permission"]
       .every((kind) => tabLabel({ id: "x", kind }).length > 0));
   check("a Home tab shows its query once there is one",
     tabLabel({ id: "x", kind: "home", title: "sha256 hello" }) === "sha256 hello");

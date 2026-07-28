@@ -243,7 +243,15 @@ export type ToolPageId =
   | "citations"
   | "meeting"
   | "permissions"
-  | "screen-record";
+  | "screen-record"
+  | "time"
+  | "regex"
+  | "cron"
+  | "images"
+  | "search"
+  | "documents"
+  | "security"
+  | "snippets";
 
 /**
  * The form a command's page should render.
@@ -2376,6 +2384,331 @@ const PAGE_COMMANDS: CommandDef[] = [
     reach: 96,
     run: ({ actions }) => {
       actions.openTab({ kind: "tool", commandId: "page.sticky-notes", title: "Sticky Notes" });
+      return false;
+    },
+  },
+  // --- Highlight & Act -----------------------------------------------------
+  //
+  // Generated rather than written out eleven times: every one of these is the
+  // same shape and differs only in which action it names. A hand-written block
+  // would be eleven chances to get the copy/rewrite wrong.
+  //
+  // Each falls back to the clipboard when nothing was typed, which is what
+  // makes them usable straight after a copy without leaving the palette.
+  ...(
+    [
+      ["summarize", "Summarise", "Boils the text down to its point.", "\u2261"],
+      ["rewrite_professional", "Rewrite: professional", "Same meaning, work register.", "\u25f0"],
+      ["rewrite_friendly", "Rewrite: friendly", "Same meaning, warmer.", "\u25f1"],
+      ["rewrite_concise", "Rewrite: concise", "Same meaning, fewer words.", "\u25f2"],
+      ["rewrite_diplomatic", "Rewrite: diplomatic", "Same meaning, less edge.", "\u25f3"],
+      ["fix_grammar", "Fix grammar and style", "Typos, run-ons and passive voice.", "\u2713"],
+      ["explain_simply", "Explain simply", "Jargon turned into plain language.", "\u25cb"],
+      ["reply_politely", "Draft a polite reply", "Reads it and writes the answer.", "\u21a9"],
+      ["bullet_point", "Bullet-point it", "A paragraph becomes three or four lines.", "\u2022"],
+      ["generate_title", "Suggest a title", "Headlines and subject lines.", "\u25c8"],
+    ] as const
+  ).map(([action, title, detail, icon]) => ({
+    id: `textai.${action}`,
+    title,
+    detail: `${detail} Runs against whichever AI backend you configured \u2014 a local model or your own key \u2014 and puts the result on the clipboard.`,
+    group: "text" as const,
+    icon,
+    keywords: ["ai", "rewrite", "text", "selection", "highlight", title.toLowerCase()],
+    argument: "text",
+    async run({ input, actions }: CommandContext): Promise<CommandResult> {
+      const text = input.trim() || (await readClipboard());
+      if (!text) {
+        actions.notify("Type some text after the command, or copy some first.", "error");
+        return false;
+      }
+      try {
+        const result = await api.textAiRun(action, text);
+        const copied = await copyText(result);
+        actions.showOutput({
+          title,
+          text: result,
+          message: copied ? "Copied" : "Could not copy",
+        });
+        return false;
+      } catch (error) {
+        actions.notify(api.errorMessage(error), "error");
+        return false;
+      }
+    },
+  })),
+
+  // --- screen perception ---------------------------------------------------
+  {
+    id: "vision.ask_region",
+    title: "Ask about part of my screen",
+    detail:
+      "Drag a box around anything \u2014 a stack trace, an error dialog, a chart \u2014 and ask about it. The text is read on this Mac by Apple\u2019s own Vision framework; only that text reaches the model, never the picture.",
+    group: "utilities",
+    icon: "\u25a3",
+    keywords: [
+      "screen", "vision", "ocr", "read screen", "stack trace", "error", "debug",
+      "explain this", "what is this", "screenshot",
+    ],
+    argument: "question",
+    async run({ input, actions }) {
+      const question = input.trim() || "What is this, and what should I do about it?";
+      try {
+        const answer = await api.visionDescribeRegion(question);
+        actions.showOutput({ title: "About your screen", text: answer.answer });
+        return false;
+      } catch (error) {
+        actions.notify(api.errorMessage(error), "error");
+        return false;
+      }
+    },
+  },
+  {
+    id: "vision.ask_window",
+    title: "Ask about this window",
+    detail:
+      "Reads the frontmost window instead of asking you to drag a box. Same on-device OCR; the same rule that only the text leaves your Mac.",
+    group: "utilities",
+    icon: "\u25a4",
+    keywords: ["window", "screen", "vision", "ocr", "read", "explain", "debug", "frontmost"],
+    argument: "question",
+    async run({ input, actions }) {
+      const question = input.trim() || "What is this, and what should I do about it?";
+      try {
+        const answer = await api.visionDescribeActiveWindow(question);
+        actions.showOutput({ title: "About this window", text: answer.answer });
+        return false;
+      } catch (error) {
+        actions.notify(api.errorMessage(error), "error");
+        return false;
+      }
+    },
+  },
+
+  // --- documents -----------------------------------------------------------
+  {
+    id: "docs.article",
+    title: "Summarise a web page",
+    detail:
+      "Fetches a URL, strips the navigation and the adverts, and summarises what is left. The page is fetched by Caduceus, not by a model \u2014 nothing about you goes with the request.",
+    group: "utilities",
+    icon: "\u25a5",
+    keywords: ["article", "web", "url", "page", "summarise", "summarize", "read", "reader"],
+    argument: "url",
+    async run({ input, actions }) {
+      const url = input.trim();
+      if (!url) {
+        actions.notify("Paste a URL after the command.", "error");
+        return false;
+      }
+      try {
+        actions.showOutput({ title: "Summary", text: await api.articleSummary(url) });
+        return false;
+      } catch (error) {
+        actions.notify(api.errorMessage(error), "error");
+        return false;
+      }
+    },
+  },
+
+  // --- calendar ------------------------------------------------------------
+  {
+    id: "calendar.create_event",
+    title: "Add a calendar event",
+    detail:
+      "\u201cLunch with Mark next Tuesday at 12:30pm\u201d becomes a real Apple Calendar event. The date is parsed on this Mac, not by a model, so it works offline and answers instantly \u2014 and refuses rather than guessing when it cannot read what you meant.",
+    group: "utilities",
+    icon: "\u25f7",
+    keywords: [
+      "calendar", "event", "meeting", "schedule", "appointment", "add event", "book",
+      "ical", "reminder",
+    ],
+    argument: "what and when",
+    async run({ input, actions }) {
+      const text = input.trim();
+      if (!text) {
+        actions.notify("Say what and when \u2014 e.g. \u201clunch with Mark next Tuesday at 1pm\u201d.", "error");
+        return false;
+      }
+      // The title is everything before the first time-ish word; the parser in
+      // Rust owns the hard half, and reports what it actually created.
+      try {
+        const created = await api.createCalendarEvent(text, text);
+        actions.notify(`Added \u201c${created.title}\u201d \u2014 ${created.when}.`);
+        return true;
+      } catch (error) {
+        actions.notify(api.errorMessage(error), "error");
+        return false;
+      }
+    },
+  },
+  {
+    id: "calendar.today",
+    title: "What is on today",
+    detail: "Today\u2019s remaining calendar events, read straight from Apple Calendar. Does not launch Calendar to look.",
+    group: "utilities",
+    icon: "\u2637",
+    keywords: ["today", "agenda", "calendar", "schedule", "meetings", "what is on", "next meeting"],
+    async run({ actions }) {
+      try {
+        const events = await api.calendarEventsToday();
+        if (events.length === 0) {
+          actions.notify("Nothing left on the calendar today.");
+          return true;
+        }
+        actions.showOutput({
+          title: "Today",
+          text: events.map((e: { start: string; title: string }) => `${e.start}  ${e.title}`).join("\n"),
+        });
+        return false;
+      } catch (error) {
+        actions.notify(api.errorMessage(error), "error");
+        return false;
+      }
+    },
+  },
+
+  {
+    id: "page.snippets",
+    title: "Text expander",
+    detail:
+      "Snippets with placeholders that fill themselves in \u2014 today\u2019s date, next week\u2019s, whatever is on the clipboard \u2014 plus emoji searched by meaning rather than name, Markdown pasted as styled text, and a proofreader for what a spellchecker cannot see.",
+    group: "text",
+    icon: "\u270e",
+    keywords: [
+      "snippet", "snippets", "expander", "expand", "shortcut text", "emoji",
+      "markdown", "rich text", "proofread", "proofreader", "grammar", "paste",
+    ],
+    page: "snippets",
+    reach: 66,
+    run: ({ actions }) => {
+      actions.openTab({ kind: "tool", commandId: "page.snippets", title: "Text expander" });
+      return false;
+    },
+  },
+  {
+    id: "page.search",
+    title: "Search my files by meaning",
+    detail:
+      "Finds a document by what it is about rather than what it is called \u2014 \u201cthe note where I worked out the database schema\u201d. The index is built and searched entirely on this Mac; if a local model is running it is used to understand meaning, and if not the search still works on words alone.",
+    group: "utilities",
+    icon: "\u2315",
+    keywords: [
+      "search", "find", "semantic", "files", "notes", "documents", "meaning",
+      "natural language", "index", "pdf", "markdown",
+    ],
+    page: "search",
+    reach: 80,
+    run: ({ actions }) => {
+      actions.openTab({ kind: "tool", commandId: "page.search", title: "Search" });
+      return false;
+    },
+  },
+  {
+    id: "page.documents",
+    title: "Read a document or page",
+    detail:
+      "Summarise a PDF or ask it a question, or paste a URL and get the article without the adverts. Long documents are read in sections and the answer says when it only covered part of one.",
+    group: "utilities",
+    icon: "\u25a4",
+    keywords: [
+      "pdf", "document", "summarise", "summarize", "article", "web page", "read",
+      "ask", "question", "youtube", "transcript",
+    ],
+    page: "documents",
+    reach: 76,
+    run: ({ actions }) => {
+      actions.openTab({ kind: "tool", commandId: "page.documents", title: "Documents" });
+      return false;
+    },
+  },
+  {
+    id: "page.images",
+    title: "Image tools",
+    detail:
+      "Compress and convert, resize to a preset, strip EXIF and GPS before sharing a photo, and find duplicates in a folder. Originals are never overwritten \u2014 every result is written beside the file it came from.",
+    group: "utilities",
+    icon: "\u25f0",
+    keywords: [
+      "image", "photo", "compress", "convert", "resize", "png", "jpeg", "heic",
+      "exif", "metadata", "gps", "strip", "duplicate", "shrink",
+    ],
+    page: "images",
+    reach: 72,
+    run: ({ actions }) => {
+      actions.openTab({ kind: "tool", commandId: "page.images", title: "Images" });
+      return false;
+    },
+  },
+  {
+    id: "page.security",
+    title: "Privacy and security",
+    detail:
+      "A passphrase generator, a clipboard that clears itself, a microphone mute, a log of which apps recently used the camera or microphone, and a file vault. The vault uses Argon2id \u2014 a forgotten passphrase means the file is gone, and it says so before you encrypt anything.",
+    group: "utilities",
+    icon: "\u26bf",
+    keywords: [
+      "security", "privacy", "password", "passphrase", "encrypt", "vault", "lock",
+      "clipboard", "clear", "microphone", "mute", "camera", "firewall", "touchid",
+    ],
+    page: "security",
+    reach: 70,
+    run: ({ actions }) => {
+      actions.openTab({ kind: "tool", commandId: "page.security", title: "Security" });
+      return false;
+    },
+  },
+  {
+    id: "page.time",
+    title: "Time management",
+    detail:
+      "A world clock for a handful of zones side by side, a converter for \u201c5pm EST in Tokyo\u201d, named countdown timers, a stopwatch with laps, and a pomodoro cycle. The counting happens in Caduceus itself, so a timer keeps running \u2014 and still notifies you \u2014 after this window is closed.",
+    group: "utilities",
+    icon: "\u25f7",
+    keywords: [
+      "time", "clock", "world clock", "timezone", "time zone", "convert time", "countdown",
+      "timer", "timers", "stopwatch", "pomodoro", "focus", "tomato", "break", "cycle",
+      "alarm",
+    ],
+    page: "time",
+    reach: 88,
+    run: ({ actions }) => {
+      actions.openTab({ kind: "tool", commandId: "page.time", title: "Time" });
+      return false;
+    },
+  },
+  {
+    id: "page.regex",
+    title: "Regex tester",
+    detail:
+      "Tests a pattern against sample text, shows every match with its capture groups and positions, and explains the pattern in plain English one token at a time. Runs on this Mac \u2014 nothing is sent anywhere.",
+    group: "developer",
+    icon: ".*",
+    keywords: [
+      "regex", "regexp", "regular expression", "pattern", "match", "capture group",
+      "explain", "test", "grep",
+    ],
+    page: "regex",
+    reach: 58,
+    run: ({ actions }) => {
+      actions.openTab({ kind: "tool", commandId: "page.regex", title: "Regex tester" });
+      return false;
+    },
+  },
+  {
+    id: "page.cron",
+    title: "Cron parser",
+    detail:
+      "Reads a standard five-field cron expression, describes it in plain English, and lists its next several run times in this Mac's own time zone \u2014 including the day-of-month/day-of-week quirk that makes a schedule look stricter than it runs.",
+    group: "developer",
+    icon: "\u23f2",
+    keywords: [
+      "cron", "crontab", "schedule", "scheduler", "job", "expression", "next run",
+    ],
+    page: "cron",
+    reach: 46,
+    run: ({ actions }) => {
+      actions.openTab({ kind: "tool", commandId: "page.cron", title: "Cron parser" });
       return false;
     },
   },

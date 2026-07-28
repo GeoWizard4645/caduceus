@@ -564,6 +564,17 @@ pub struct AgentSettings {
     /// Ask before an agent is allowed to control the machine. Strongly
     /// recommended, and on by default: `/c` is one keystroke away from `/`.
     pub confirm_before_first_action: bool,
+    /// Master switch for smart routing (`tools::routing`).
+    ///
+    /// `false` sends every prompt to `primary_backend_id`, which is exactly
+    /// what happened before routing existed — so turning this off is a return
+    /// to known behaviour rather than a different one.
+    pub auto_routing_enabled: bool,
+    /// A backend pinned by hand, which always beats the classifier.
+    ///
+    /// `None` means "let routing decide". An explicit choice must win: a user
+    /// who has picked a model is answering the question routing was guessing at.
+    pub routing_override_backend_id: Option<String>,
 }
 
 impl Default for AgentSettings {
@@ -576,6 +587,10 @@ impl Default for AgentSettings {
             primary_backend_id: Some("hermes".into()),
             computer_use_backend_id: Some("hermes".into()),
             confirm_before_first_action: true,
+            // On by default: the whole point is that fast work feels fast
+            // without anyone having to configure it.
+            auto_routing_enabled: true,
+            routing_override_backend_id: None,
         }
     }
 }

@@ -29,6 +29,8 @@ CHECKS = [
     ("MediaAction", "src-tauri/src/tools/media.rs", "MediaAction"),
     ("WindowVerb", "src-tauri/src/window/manage.rs", "Verb"),
     ("DesktopShape", "src-tauri/src/tools/shapes.rs", "Shape"),
+    ("TextAiAction", "src-tauri/src/tools/textai.rs", "TextAiAction"),
+    ("ExtraToolId", "src-tauri/src/tools/devextra.rs", "ExtraToolId"),
 ]
 
 

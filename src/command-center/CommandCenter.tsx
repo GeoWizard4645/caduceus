@@ -21,6 +21,7 @@
 import { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react";
 
 import * as api from "@/shared/api";
+import { WORKFLOW_PENDING_EVENT } from "@/shared/api";
 import { useTauriEvent, useToasts } from "@/shared/hooks";
 import { EVENTS, type CommandCenterOpenPayload } from "@/shared/types";
 import { Spinner, cx } from "@/shared/ui";
@@ -38,6 +39,7 @@ import { MachinePage } from "./pages/MachinePage";
 import { PermissionPage } from "./pages/PermissionPage";
 import { ToolPage } from "./pages/ToolPage";
 import { ExtensionPage } from "./pages/ExtensionPage";
+import { WorkflowImportPage } from "./pages/WorkflowImportPage";
 import {
   MAX_TABS,
   closeTab as closeTabIn,
@@ -190,6 +192,22 @@ export function CommandCenter() {
       });
     },
   );
+
+  // A workflow link arrived. Bring the review page up.
+  //
+  // Without this the import is staged and completely invisible: nothing in the
+  // palette mentions it, and the only way to find it is to guess that Settings
+  // has a Workflows tab. A link the user clicked deliberately should land
+  // somewhere they can see — and just as importantly, one they did *not* click
+  // should announce itself rather than sit in a queue waiting to be confirmed
+  // by someone who never learns it is there.
+  //
+  // Showing the page runs nothing. It is a description of what would be added,
+  // with the commands quoted in full; committing is a separate, explicit act.
+  useTauriEvent<unknown>(WORKFLOW_PENDING_EVENT, () => {
+    openTab({ kind: "workflow-import", title: "Workflow import" });
+    void api.openCommandCenter();
+  });
 
   // Pressing the hotkey focuses the Home tab you left, or makes a new one —
   // the same thing ⌘T does, because that is what "open the launcher" means.
@@ -555,6 +573,8 @@ function TabContent({
           onSetTitle={onSetTitle}
         />
       );
+    case "workflow-import":
+      return <WorkflowImportPage active={active} token={tab.token} onSetTitle={onSetTitle} />;
     case "permission":
       return (
         <PermissionPage

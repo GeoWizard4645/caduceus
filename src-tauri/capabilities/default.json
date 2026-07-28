@@ -1,8 +1,15 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Capabilities granted to every Caduceus window. Caduceus deliberately does NOT enable the shell, fs or http plugins on the frontend: anything that touches the filesystem, spawns a process or talks to a network endpoint is implemented in Rust and exposed as an explicit #[tauri::command], so the webview can never be tricked into arbitrary execution. NOTE: `windows` is an allow-list and it is opt-in per window \u2014 a window missing from it silently loses every permission below, including the ability to receive events at all. Any new window must be added here. NOTE ALSO: the permissions below are the only thing this file scopes. Caduceus's own #[tauri::command]s are not covered by the ACL, so every window listed above can call every one of them \u2014 the recorder HUD has the same command surface as the Command Center. Adding a window here is granting it all of them.",
-  "windows": ["staff", "command-center", "recorder"],
+  "description": "Capabilities granted to every Caduceus window. Caduceus deliberately does NOT enable the shell, fs or http plugins on the frontend: anything that touches the filesystem, spawns a process or talks to a network endpoint is implemented in Rust and exposed as an explicit #[tauri::command], so the webview can never be tricked into arbitrary execution. NOTE: `windows` is an allow-list and it is opt-in per window \u2014 a window missing from it silently loses every permission below, including the ability to receive events at all. Any new window must be added here, and nothing will fail to compile if you forget: the window simply comes up and does nothing. `widget-*` is a pattern because widgets are created dynamically, one OS window per widget, labelled `widget-<uuid>`. NOTE ALSO: the permissions below are the only thing this file scopes. Caduceus's own #[tauri::command]s are not covered by the ACL, so every window listed above can call every one of them \u2014 the recorder HUD has the same command surface as the Command Center. Adding a window here is granting it all of them, which is the reason to think before adding one.",
+  "windows": [
+    "staff",
+    "command-center",
+    "recorder",
+    "widget-*",
+    "popbar",
+    "meeting-popout"
+  ],
   "permissions": [
     "core:default",
     "core:app:allow-app-hide",

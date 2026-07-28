@@ -18,15 +18,23 @@ import type { ToolPageProps } from "../ToolPage";
 import { CitationsPage } from "./CitationsPage";
 import { ColorsPage } from "./ColorsPage";
 import { ConvertPage } from "./ConvertPage";
+import { CronPage } from "./CronPage";
 import { DesktopShapesPage } from "./DesktopShapesPage";
 import { DesktopSortPage } from "./DesktopSortPage";
+import { DocumentsPage } from "./DocumentsPage";
+import { ImagesPage } from "./ImagesPage";
 import { MeetingPage } from "./MeetingPage";
 import { PermissionsSetupPage } from "./PermissionsSetupPage";
 import { ProcessesPage } from "./ProcessesPage";
 import { QrPage } from "./QrPage";
+import { RegexPage } from "./RegexPage";
 import { ScreenRecordPage } from "./ScreenRecordPage";
+import { SearchPage } from "./SearchPage";
+import { SecurityPage } from "./SecurityPage";
+import { SnippetsPage } from "./SnippetsPage";
 import { StickyNotesPage } from "./StickyNotesPage";
 import { StoragePage } from "./StoragePage";
+import { TimePage } from "./TimePage";
 
 export const TOOL_PAGES: Record<ToolPageId, ComponentType<ToolPageProps>> = {
   colors: ColorsPage,
@@ -41,4 +49,12 @@ export const TOOL_PAGES: Record<ToolPageId, ComponentType<ToolPageProps>> = {
   meeting: MeetingPage,
   permissions: PermissionsSetupPage,
   "screen-record": ScreenRecordPage,
+  security: SecurityPage,
+  time: TimePage,
+  regex: RegexPage,
+  cron: CronPage,
+  images: ImagesPage,
+  search: SearchPage,
+  documents: DocumentsPage,
+  snippets: SnippetsPage,
 };

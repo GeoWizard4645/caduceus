@@ -1,11 +1,12 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 
 import * as api from "@/shared/api";
 import { COMMANDS } from "@/shared/commands";
 import { GLYPH_NAMES, GLYPH_PREFIX } from "@/shared/glyphs";
 import { ShortcutIcon } from "@/shared/ShortcutIcon";
-import type { RuntimeInfo, Shortcut, ShortcutKind } from "@/shared/types";
+import type { InstalledApp, RuntimeInfo, Shortcut, ShortcutKind } from "@/shared/types";
 import { STAFF_POPOUT_LIMIT } from "@/shared/types";
 import {
   Button,
@@ -177,6 +178,7 @@ function ShortcutRow({
   onDelete: () => void;
 }) {
   const [testResult, setTestResult] = useState<string | null>(null);
+  const [appPickerOpen, setAppPickerOpen] = useState(false);
   // The frontend-handled kinds have nothing to point at.
   const needsTarget =
     shortcut.kind !== "clipboard_view" && shortcut.kind !== "system_monitor";
@@ -242,7 +244,7 @@ function ShortcutRow({
 
           <Field
             label="Icon"
-            hint="Pick a glyph, upload your own image, or type any emoji. Glyphs follow your accent colour; uploads and emoji are drawn as-is."
+            hint="Use the real icon from an app you already have installed, pick a glyph, upload your own image, or type any emoji. Glyphs follow your accent colour; uploads, extracted app icons, and emoji are drawn as-is."
           >
             <div className="row">
               <TextInput
@@ -250,6 +252,13 @@ function ShortcutRow({
                 onChange={(v) => onChange((s) => (s.icon = v))}
                 placeholder="glyph:sparkle or ✦"
               />
+              <Button
+                size="sm"
+                onClick={() => setAppPickerOpen((v) => !v)}
+                aria-pressed={appPickerOpen}
+              >
+                From an app…
+              </Button>
               <Button
                 size="sm"
                 onClick={async () => {
@@ -275,6 +284,19 @@ function ShortcutRow({
                 Upload…
               </Button>
             </div>
+
+            {appPickerOpen && (
+              <AppIconPicker
+                onPick={(token) => {
+                  onChange((s) => (s.icon = token));
+                  setAppPickerOpen(false);
+                  setTestResult("Icon saved");
+                }}
+                onError={(message) => setTestResult(message)}
+                onClose={() => setAppPickerOpen(false)}
+              />
+            )}
+
             <div className="mt-2 flex flex-wrap gap-1.5">
               {GLYPH_NAMES.map((name) => {
                 const token = `${GLYPH_PREFIX}${name}`;
@@ -418,6 +440,119 @@ function ShortcutRow({
               </Button>
             </div>
           </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * "Use a real app's icon" picker.
+ *
+ * This is the primary way to get "every major brand and app's glyph" onto a
+ * shortcut: rather than shipping a set of other companies' logos (a stale,
+ * trademark-encumbered exercise that starts going wrong the moment any of
+ * them rebrand), it reads the icon out of an app already installed on this
+ * Mac — Caduceus already indexes every one of them for the launcher, so the
+ * list here costs nothing extra to build.
+ *
+ * Extraction happens on demand, one app at a time, rather than up front for
+ * every installed app: converting an `.icns` shells out to `sips`, and doing
+ * that for a few hundred apps just to populate a list nobody has opened yet
+ * would turn opening this picker into the slow part of editing a shortcut.
+ */
+function AppIconPicker({
+  onPick,
+  onError,
+  onClose,
+}: {
+  onPick: (token: string) => void;
+  onError: (message: string) => void;
+  onClose: () => void;
+}) {
+  const [apps, setApps] = useState<InstalledApp[] | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
+  const [extracting, setExtracting] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .listInstalledApps()
+      .then((list) => {
+        if (!cancelled) setApps(list);
+      })
+      .catch((error) => {
+        if (!cancelled) setLoadError(api.errorMessage(error));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const filtered = useMemo(() => {
+    if (!apps) return [];
+    const q = query.trim().toLowerCase();
+    const sorted = [...apps].sort((a, b) => a.name.localeCompare(b.name));
+    if (!q) return sorted;
+    return sorted.filter((a) => a.name.toLowerCase().includes(q));
+  }, [apps, query]);
+
+  const pick = async (appItem: InstalledApp) => {
+    setExtracting(appItem.path);
+    try {
+      // Registered as `appicons::extract_app_icon_cmd` — see that module's
+      // report for what still needs wiring into `generate_handler!`.
+      const token = await invoke<string>("extract_app_icon_cmd", { appPath: appItem.path });
+      onPick(token);
+    } catch (error) {
+      onError(api.errorMessage(error));
+    } finally {
+      setExtracting(null);
+    }
+  };
+
+  return (
+    <div className="mt-2 rounded-md border border-line bg-raised p-2">
+      <div className="row">
+        <TextInput
+          value={query}
+          onChange={setQuery}
+          placeholder="Search installed apps…"
+          autoFocus
+        />
+        <IconButton label="Close" onClick={onClose}>
+          ×
+        </IconButton>
+      </div>
+
+      {loadError && (
+        <p className="mt-2 px-1 text-2xs text-danger">{loadError}</p>
+      )}
+
+      {!apps && !loadError && (
+        <p className="mt-2 px-1 text-2xs text-ink-faint">Loading installed apps…</p>
+      )}
+
+      {apps && (
+        <div className="mt-2 max-h-56 overflow-y-auto">
+          {filtered.length === 0 && (
+            <p className="px-1 py-2 text-2xs text-ink-faint">No installed apps match “{query}”.</p>
+          )}
+          {filtered.map((appItem) => (
+            <button
+              key={appItem.path}
+              type="button"
+              disabled={extracting === appItem.path}
+              onClick={() => pick(appItem)}
+              className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] text-ink transition-colors hover:bg-base/60 disabled:opacity-50"
+            >
+              <span className="truncate">{appItem.name}</span>
+              {extracting === appItem.path && (
+                <span className="ml-auto shrink-0 text-2xs text-ink-faint">Extracting…</span>
+              )}
+            </button>
+          ))}
         </div>
       )}
     </div>

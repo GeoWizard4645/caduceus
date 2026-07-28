@@ -868,10 +868,12 @@ pub fn system_snapshot(
     monitor: tauri::State<'_, crate::sysmon::SysMonitor>,
     limit: Option<usize>,
     sort_by_memory: Option<bool>,
+    sort_by_name: Option<bool>,
 ) -> crate::sysmon::SystemSnapshot {
     monitor.snapshot(
         limit.unwrap_or(40).clamp(1, 500),
         sort_by_memory.unwrap_or(false),
+        sort_by_name.unwrap_or(false),
     )
 }
 
@@ -1110,7 +1112,454 @@ pub fn search_files(query: String, limit: Option<usize>) -> Vec<tools::FileHit> 
     tools::search_files(&query, limit.unwrap_or(40))
 }
 
+/// Which backend a prompt would go to, and why.
+///
+/// A preview rather than a side effect: routing that happens invisibly is
+/// routing nobody trusts, and "why did that take eight seconds" has to be a
+/// question with an answer. Classification is pure and local, so this costs
+/// nothing and never reaches a model.
+#[tauri::command]
+pub fn routing_preview(
+    settings: tauri::State<'_, SettingsManager>,
+    prompt: String,
+) -> Res<tools::routing::RoutingDecision> {
+    let agents = settings.get().agents;
+    let ctx = tools::routing::RoutingContext {
+        backends: &agents.backends,
+        primary_backend_id: agents.primary_backend_id.as_deref(),
+        override_backend_id: agents.routing_override_backend_id.as_deref(),
+        auto_routing_enabled: agents.auto_routing_enabled,
+    };
+    tools::routing::route(&prompt, &ctx, tools::routing::latency_tracker())
+        .ok_or_else(|| "No backend is configured yet — add one in Settings → AI.".to_string())
+}
+
+// ---------------------------------------------------------------------------
+// Semantic search
+// ---------------------------------------------------------------------------
+//
+// The index and its cancel flag are process-wide, held behind a `OnceLock`
+// rather than Tauri managed state. Two reasons: opening the SQLite index is
+// fallible and doing it in `setup()` would mean a corrupt index stops the whole
+// app from starting; and `semantic_index_cancel` has to reach a sync that is
+// *already running*, which means both calls need the same flag instance rather
+// than one handed in per invocation.
+
+use std::sync::OnceLock;
+
+struct SemanticState {
+    index: tools::semantic::SemanticIndex,
+    cancel: tools::semantic::CancelFlag,
+}
+
+fn semantic_state<R: Runtime>(app: &AppHandle<R>) -> Res<&'static SemanticState> {
+    static STATE: OnceLock<Result<SemanticState, String>> = OnceLock::new();
+    STATE
+        .get_or_init(|| {
+            let dir = app_data(app)?;
+            std::fs::create_dir_all(&dir).map_err(|e| format!("Could not create {dir:?}: {e}"))?;
+            let index = tools::semantic::SemanticIndex::open(dir.join("semantic-index.sqlite"))?;
+            Ok(SemanticState { index, cancel: tools::semantic::CancelFlag::new() })
+        })
+        .as_ref()
+        .map_err(|e| e.clone())
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SemanticIndexSnapshot {
+    document_count: usize,
+    roots: Vec<String>,
+}
+
+#[tauri::command]
+pub fn semantic_index_stats<R: Runtime>(app: AppHandle<R>) -> Res<SemanticIndexSnapshot> {
+    let state = semantic_state(&app)?;
+    Ok(SemanticIndexSnapshot {
+        document_count: state.index.document_count()?,
+        roots: tools::semantic::default_roots()
+            .into_iter()
+            .map(|p| p.to_string_lossy().into_owned())
+            .collect(),
+    })
+}
+
+/// Index one bounded chunk. The caller loops while `truncated` is set, which is
+/// what keeps a first run over a large home directory interruptible and
+/// answerable rather than one opaque multi-minute call.
+#[tauri::command]
+pub async fn semantic_index_sync<R: Runtime>(
+    app: AppHandle<R>,
+) -> Res<tools::semantic::IndexStats> {
+    let state = semantic_state(&app)?;
+    state.cancel.reset();
+    state
+        .index
+        .sync(&tools::semantic::IndexConfig::default(), state.cancel.clone())
+        .await
+}
+
+#[tauri::command]
+pub fn semantic_index_cancel<R: Runtime>(app: AppHandle<R>) -> Res<()> {
+    semantic_state(&app)?.cancel.cancel();
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn semantic_search<R: Runtime>(
+    app: AppHandle<R>,
+    query: String,
+    limit: Option<usize>,
+) -> Res<Vec<tools::semantic::SearchHit>> {
+    let state = semantic_state(&app)?;
+    state.index.search(&query, limit.unwrap_or(30)).await
+}
+
+// ---------------------------------------------------------------------------
+// Window presets, menus, contacts, fonts, recent files
+// ---------------------------------------------------------------------------
+
+#[tauri::command]
+pub async fn window_preset_save<R: Runtime>(
+    app: AppHandle<R>,
+    name: String,
+) -> Res<tools::knowledge::WindowPreset> {
+    tauri::async_runtime::spawn_blocking(move || tools::knowledge::window_preset_save(&app, name))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn window_preset_restore<R: Runtime>(
+    app: AppHandle<R>,
+    name: String,
+) -> Res<tools::knowledge::PresetRestoreOutcome> {
+    tauri::async_runtime::spawn_blocking(move || tools::knowledge::window_preset_restore(&app, name))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub fn window_preset_list<R: Runtime>(app: AppHandle<R>) -> Vec<tools::knowledge::WindowPreset> {
+    tools::knowledge::window_preset_list(&app)
+}
+
+#[tauri::command]
+pub fn window_preset_delete<R: Runtime>(app: AppHandle<R>, name: String) -> Res<()> {
+    tools::knowledge::window_preset_delete(&app, name)
+}
+
+/// Every menu item in the frontmost app, so "Export as PDF" is searchable
+/// rather than three levels into a menu you have to remember the shape of.
+#[tauri::command]
+pub async fn menu_bar_items() -> Res<Vec<tools::knowledge::MenuItem>> {
+    tauri::async_runtime::spawn_blocking(tools::knowledge::frontmost_menu_items)
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn menu_bar_invoke(path: Vec<String>) -> Res<()> {
+    tauri::async_runtime::spawn_blocking(move || tools::knowledge::invoke_frontmost_menu_item(path))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn contacts_search(query: String) -> Res<Vec<tools::knowledge::ContactHit>> {
+    tauri::async_runtime::spawn_blocking(move || tools::knowledge::search_contacts(&query))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub fn contacts_copy(value: String) -> tools::ToolOutcome {
+    tools::knowledge::contacts_copy(value)
+}
+
+#[tauri::command]
+pub fn list_fonts() -> Vec<tools::knowledge::FontInfo> {
+    tools::knowledge::list_installed_fonts()
+}
+
+#[tauri::command]
+pub async fn recent_files(
+    days: Option<u32>,
+    limit: Option<usize>,
+) -> Res<Vec<tools::knowledge::RecentFile>> {
+    tauri::async_runtime::spawn_blocking(move || tools::knowledge::recent_files(days, limit))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+// ---------------------------------------------------------------------------
+// Images
+// ---------------------------------------------------------------------------
+//
+// Async, every one, unlike the older `convert_image` above. That one is a sync
+// `#[tauri::command]` that shells out to `sips` on the calling thread — which
+// on macOS is the thread drawing every window, so a large photo beachballs the
+// app. This file's own header says as much; these are written the way that one
+// should have been.
+
+#[tauri::command]
+pub async fn compress_image(
+    path: String,
+    format: Option<String>,
+    quality: Option<u8>,
+    max_dimension: Option<u32>,
+) -> tools::ToolOutcome {
+    blocking_outcome(move || {
+        tools::images::compress_or_convert(&path, format.as_deref(), quality, max_dimension)
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn resize_image_to_preset(
+    path: String,
+    preset: tools::images::ImagePreset,
+) -> tools::ToolOutcome {
+    blocking_outcome(move || tools::images::resize_to_preset(&path, preset)).await
+}
+
+/// Strip EXIF, including GPS, before sharing a photo.
+///
+/// Decode-and-re-encode rather than asking `sips` to delete the properties:
+/// `sips --deleteProperty all` refuses outright, and a format round-trip
+/// through it *carries GPS through* rather than dropping it. A metadata
+/// cleaner that quietly leaves the coordinates in is worse than none at all.
+#[tauri::command]
+pub async fn strip_image_metadata(path: String) -> tools::ToolOutcome {
+    blocking_outcome(move || tools::images::strip_metadata(&path)).await
+}
+
+#[tauri::command]
+pub async fn find_duplicate_images(
+    dir: String,
+    max_distance: Option<u32>,
+) -> Res<Vec<tools::images::DuplicateGroup>> {
+    tauri::async_runtime::spawn_blocking(move || {
+        tools::images::find_duplicate_images(&dir, max_distance)
+    })
+    .await
+    .map_err(|e| format!("Could not scan that folder: {e}"))?
+}
+
+/// Whether background removal is available at all, so the UI can grey it out
+/// rather than offering a button that always fails.
+#[tauri::command]
+pub fn background_removal_available() -> bool {
+    tools::images::background_removal_available()
+}
+
+// ---------------------------------------------------------------------------
+// Screen perception
+// ---------------------------------------------------------------------------
+//
+// OCR runs on-device through Apple Vision and only the extracted *text*
+// reaches a model — never the screenshot. That ordering is the privacy
+// property, not an implementation detail: "Caduceus can read your screen"
+// and "Caduceus uploads your screen" are very different sentences, and only
+// the first one is true here.
+
+#[tauri::command]
+pub async fn vision_describe_region(
+    settings: tauri::State<'_, SettingsManager>,
+    question: String,
+) -> Res<tools::vision::VisionAnswer> {
+    // `to_string()` and not a rewrite: the Screen Recording sentence has to
+    // reach the webview intact, because `permissionFromMessage` matches on it
+    // to open the grant walkthrough. Reword it here and the error becomes a
+    // dead end instead of a guided fix.
+    tools::vision::describe_region(&settings, &question)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn vision_describe_active_window(
+    settings: tauri::State<'_, SettingsManager>,
+    question: String,
+) -> Res<tools::vision::VisionAnswer> {
+    tools::vision::describe_active_window(&settings, &question)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+// ---------------------------------------------------------------------------
+// Documents: PDFs, articles, video
+// ---------------------------------------------------------------------------
+//
+// Every one of these ends in a model call, so every one is `async` and every
+// one reports "no backend configured" rather than failing quietly — these are
+// the features most likely to be the first thing a new user tries.
+
+#[tauri::command]
+pub async fn pdf_summary(
+    settings: tauri::State<'_, SettingsManager>,
+    path: String,
+) -> Res<String> {
+    tools::documents::pdf_summary(&settings, &path).await
+}
+
+#[tauri::command]
+pub async fn pdf_ask(
+    settings: tauri::State<'_, SettingsManager>,
+    path: String,
+    question: String,
+) -> Res<String> {
+    tools::documents::pdf_ask(&settings, &path, &question).await
+}
+
+#[tauri::command]
+pub async fn article_summary(
+    settings: tauri::State<'_, SettingsManager>,
+    url: String,
+) -> Res<String> {
+    tools::documents::article_summary(&settings, &url).await
+}
+
+#[tauri::command]
+pub async fn youtube_summary(
+    settings: tauri::State<'_, SettingsManager>,
+    url: String,
+) -> Res<String> {
+    tools::documents::youtube_summary(&settings, &url).await
+}
+
+// ---------------------------------------------------------------------------
+// The second tool bench
+// ---------------------------------------------------------------------------
+//
+// `run_extra_tool` mirrors `run_tool` exactly rather than extending `ToolId`.
+// Adding forty-odd variants to one enum was already at the point where the
+// enum was the hardest thing in the file to read, and these are a separate
+// bench of tools rather than more of the same.
+
+#[tauri::command]
+pub fn run_extra_tool(id: tools::devextra::ExtraToolId, input: String) -> tools::dev::ToolResult {
+    tools::devextra::run(id, &input)
+}
+
+#[tauri::command]
+pub async fn run_curl(command: String) -> tools::devextra::HttpPlaygroundResult {
+    tools::devextra::execute(&command).await
+}
+
+/// Read-only: reports the repo's state and drafts a message. Never stages,
+/// never commits — the point is to hand you a message, not to act for you.
+#[tauri::command]
+pub async fn git_commit_assist(
+    settings: tauri::State<'_, SettingsManager>,
+    repo_path: String,
+) -> Res<tools::devextra::GitCommitAssist> {
+    Ok(tools::devextra::git_commit_assist(&settings, &repo_path).await)
+}
+
+#[tauri::command]
+pub fn inspect_dependencies(manifest_path: String) -> Res<tools::devextra::DependencyReport> {
+    tools::devextra::inspect_dependencies(&manifest_path)
+}
+
+// ---------------------------------------------------------------------------
+// Calendar and reminders
+// ---------------------------------------------------------------------------
+//
+// All four block on `osascript`, so all four go through `spawn_blocking` — on
+// macOS the calling thread is the one drawing every window, and an Apple Event
+// to an app showing a modal dialog does not return.
+
+/// Create an Apple Calendar event from natural language ("next Tuesday at 1pm").
+#[tauri::command]
+pub async fn create_calendar_event(
+    title: String,
+    when: String,
+    duration_minutes: Option<i64>,
+    location: Option<String>,
+    notes: Option<String>,
+) -> Res<tools::calendar::CreatedEvent> {
+    tauri::async_runtime::spawn_blocking(move || {
+        tools::calendar::create_event(
+            &title,
+            &when,
+            duration_minutes,
+            location.as_deref(),
+            notes.as_deref(),
+        )
+    })
+    .await
+    .map_err(|e| format!("Could not reach Calendar: {e}"))?
+}
+
+#[tauri::command]
+pub async fn calendar_events_today() -> Res<Vec<tools::calendar::CalendarEvent>> {
+    tauri::async_runtime::spawn_blocking(tools::calendar::events_today)
+        .await
+        .map_err(|e| format!("Could not reach Calendar: {e}"))?
+}
+
+/// `start` and `end` are `%Y-%m-%dT%H:%M`, so the webview never has to agree
+/// with Rust about what a locale-formatted date means.
+#[tauri::command]
+pub async fn calendar_events_between(
+    start: String,
+    end: String,
+) -> Res<Vec<tools::calendar::CalendarEvent>> {
+    let parse = |raw: &str| {
+        chrono::NaiveDateTime::parse_from_str(raw, "%Y-%m-%dT%H:%M")
+            .map_err(|_| format!("“{raw}” is not a date Caduceus can read."))
+    };
+    let start = parse(&start)?;
+    let end = parse(&end)?;
+    tauri::async_runtime::spawn_blocking(move || tools::calendar::events_between(start, end))
+        .await
+        .map_err(|e| format!("Could not reach Calendar: {e}"))?
+}
+
+#[tauri::command]
+pub async fn create_reminder(text: String, due: Option<String>) -> Res<tools::calendar::CreatedReminder> {
+    tauri::async_runtime::spawn_blocking(move || {
+        tools::calendar::create_reminder(&text, due.as_deref())
+    })
+    .await
+    .map_err(|e| format!("Could not reach Reminders: {e}"))?
+}
+
+/// "Highlight & Act": run one transformation over a piece of text.
+///
+/// The webview names an *action*, never a prompt. Every prompt lives in
+/// `tools::textai` where it is unit-tested, and where a compromised webview
+/// cannot rewrite it into an arbitrary question asked with the user's own API
+/// key. That is the whole reason this takes an enum rather than a string.
+#[tauri::command]
+pub async fn text_ai_run(
+    settings: tauri::State<'_, SettingsManager>,
+    action: tools::textai::TextAiAction,
+    text: String,
+    target_language: Option<String>,
+) -> Res<String> {
+    tools::textai::run(&settings, action, &text, target_language.as_deref())
+        .await
+        .map_err(|e| e.to_string())
+}
+
 /// Encode text as an SVG QR code.
+/// Update in place by running the website's installer in Terminal.
+///
+/// Returns as soon as Terminal has been handed the script — the update itself
+/// quits this process, so there is nothing here to wait for.
+#[tauri::command]
+pub fn run_installer_update() -> Res<()> {
+    crate::update::run_installer()
+}
+
+/// The command the updater will run, so the UI can show it before it does.
+#[tauri::command]
+pub fn install_command() -> String {
+    crate::update::INSTALL_COMMAND.to_string()
+}
+
 #[tauri::command]
 pub fn generate_qr(text: String, ecc: Option<String>) -> Res<String> {
     tools::qr::svg(&text, ecc.as_deref().unwrap_or("medium"))
@@ -2250,6 +2699,111 @@ pub fn awake_status(
     awake.status()
 }
 
+// ---------------------------------------------------------------------------
+// Time management (world clock, converter, timers, stopwatch, pomodoro)
+// ---------------------------------------------------------------------------
+// See `tools::timekeeping` for why every one of these lives in Rust rather
+// than in the React tree — the short version is that the Command Center
+// window is hidden more often than shown, and a timer that only counts down
+// while its webview happens to be visible is not a timer worth shipping.
+
+/// Every catalogued zone with its current offset — the world clock's rows and
+/// the data behind its searchable picker.
+#[tauri::command]
+pub fn time_list_zones() -> Vec<tools::timekeeping::ZoneClock> {
+    tools::timekeeping::world_clock(chrono::Utc::now())
+}
+
+/// Read a time in one zone and show it in a set of others.
+#[tauri::command]
+pub fn time_convert(
+    request: tools::timekeeping::ConvertRequest,
+    targets: Vec<String>,
+) -> Res<Vec<tools::timekeeping::ConvertedTime>> {
+    tools::timekeeping::convert(&request, &targets)
+}
+
+#[tauri::command]
+pub fn time_start_timer(
+    runtime: tauri::State<'_, tools::timekeeping::TimekeepingRuntime>,
+    name: String,
+    seconds: u64,
+) -> Res<tools::timekeeping::TimerSnapshot> {
+    runtime.start_timer(name, seconds)
+}
+
+#[tauri::command]
+pub fn time_list_timers(
+    runtime: tauri::State<'_, tools::timekeeping::TimekeepingRuntime>,
+) -> Vec<tools::timekeeping::TimerSnapshot> {
+    runtime.list_timers()
+}
+
+#[tauri::command]
+pub fn time_dismiss_timer(
+    runtime: tauri::State<'_, tools::timekeeping::TimekeepingRuntime>,
+    id: u64,
+) {
+    runtime.dismiss_timer(id);
+}
+
+#[tauri::command]
+pub fn time_stopwatch_start(
+    runtime: tauri::State<'_, tools::timekeeping::TimekeepingRuntime>,
+) -> tools::timekeeping::StopwatchStatus {
+    runtime.stopwatch_start()
+}
+
+#[tauri::command]
+pub fn time_stopwatch_stop(
+    runtime: tauri::State<'_, tools::timekeeping::TimekeepingRuntime>,
+) -> tools::timekeeping::StopwatchStatus {
+    runtime.stopwatch_stop()
+}
+
+#[tauri::command]
+pub fn time_stopwatch_lap(
+    runtime: tauri::State<'_, tools::timekeeping::TimekeepingRuntime>,
+) -> tools::timekeeping::StopwatchStatus {
+    runtime.stopwatch_lap()
+}
+
+#[tauri::command]
+pub fn time_stopwatch_reset(
+    runtime: tauri::State<'_, tools::timekeeping::TimekeepingRuntime>,
+) -> tools::timekeeping::StopwatchStatus {
+    runtime.stopwatch_reset()
+}
+
+#[tauri::command]
+pub fn time_stopwatch_status(
+    runtime: tauri::State<'_, tools::timekeeping::TimekeepingRuntime>,
+) -> tools::timekeeping::StopwatchStatus {
+    runtime.stopwatch_status()
+}
+
+#[tauri::command]
+pub fn time_pomodoro_start(
+    runtime: tauri::State<'_, tools::timekeeping::TimekeepingRuntime>,
+    config: tools::timekeeping::PomodoroConfig,
+) -> Res<tools::timekeeping::PomodoroStatus> {
+    runtime.pomodoro_start(config)
+}
+
+#[tauri::command]
+pub fn time_pomodoro_stop(
+    runtime: tauri::State<'_, tools::timekeeping::TimekeepingRuntime>,
+) -> tools::timekeeping::PomodoroStatus {
+    runtime.pomodoro_stop()
+}
+
+#[tauri::command]
+pub fn time_pomodoro_status(
+    runtime: tauri::State<'_, tools::timekeeping::TimekeepingRuntime>,
+) -> tools::timekeeping::PomodoroStatus {
+    runtime.pomodoro_status()
+}
+
 /// Open the Manage window, optionally on a named page.
 #[tauri::command]
 pub fn open_manage_window<R: Runtime>(app: AppHandle<R>, page: Option<String>) -> Res<()> {
@@ -2264,4 +2818,42 @@ pub fn open_manage_window<R: Runtime>(app: AppHandle<R>, page: Option<String>) -
 #[tauri::command]
 pub fn set_palette_floating<R: Runtime>(app: AppHandle<R>, floating: bool) -> Res<()> {
     window::set_palette_floating(&app, floating)
+}
+
+// ---------------------------------------------------------------------------
+// Regex tester
+// ---------------------------------------------------------------------------
+
+/// Run a pattern against sample text and report every match with its capture
+/// groups. `flags` is any combination of `i`, `m`, `s`, `x` — unrecognised
+/// letters are ignored rather than rejected.
+#[tauri::command]
+pub fn regex_test(
+    pattern: String,
+    flags: String,
+    text: String,
+) -> Res<Vec<tools::regex_tool::RegexMatch>> {
+    tools::regex_tool::test(&pattern, &flags, &text)
+}
+
+/// A plain-English, token-by-token explanation of a pattern.
+#[tauri::command]
+pub fn regex_explain(pattern: String) -> Res<Vec<tools::regex_tool::ExplainToken>> {
+    tools::regex_tool::explain(&pattern)
+}
+
+// ---------------------------------------------------------------------------
+// Cron parser
+// ---------------------------------------------------------------------------
+
+/// Parse a 5-field cron expression, describe it in English, and list its next
+/// occurrences in this Mac's local time zone — cron expressions carry no time
+/// zone of their own, so "local" is the only reading that means anything here.
+#[tauri::command]
+pub fn parse_cron(expression: String, count: Option<usize>) -> Res<tools::cron::CronAnalysis> {
+    tools::cron::analyze(
+        &expression,
+        chrono::Local::now().naive_local(),
+        count.unwrap_or(10).clamp(1, 50),
+    )
 }

@@ -1,0 +1,442 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Caduceus savings calculator — what it actually replaces</title>
+<meta name="description" content="An honest calculator for what Caduceus replaces: Raycast Pro, an AI dictation app, a meeting-notes tool, a clipboard manager and a window manager. Tick what you'd actually cancel and see the real yearly total against Caduceus at $0.">
+<link rel="canonical" href="https://caduceus.vivaanshahani.com/savings">
+<meta name="theme-color" content="#12131d">
+<meta name="author" content="Vivaan Shahani">
+<meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1">
+
+<meta property="og:site_name" content="Caduceus">
+<meta property="og:locale" content="en_GB">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://caduceus.vivaanshahani.com/savings">
+<meta property="og:title" content="Caduceus savings calculator — what it actually replaces">
+<meta property="og:description" content="An honest calculator for what Caduceus replaces: Raycast Pro, an AI dictation app, a meeting-notes tool, a clipboard manager and a window manager. Tick what you'd actually cancel and see the real yearly total against Caduceus at $0.">
+<meta property="og:image" content="https://caduceus.vivaanshahani.com/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="The Caduceus mark beside the words “Caduceus — a fast, local-first command centre for your Mac”">
+
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Caduceus savings calculator — what it actually replaces">
+<meta name="twitter:description" content="An honest calculator for what Caduceus replaces: Raycast Pro, an AI dictation app, a meeting-notes tool, a clipboard manager and a window manager. Tick what you'd actually cancel and see the real yearly total against Caduceus at $0.">
+<meta name="twitter:image" content="https://caduceus.vivaanshahani.com/og-image.png">
+<meta name="twitter:image:alt" content="The Caduceus mark beside the words “Caduceus — a fast, local-first command centre for your Mac”">
+
+<link rel="icon" href="caduceus-mark.png">
+<script>
+(function () {
+  var k = "caduceus-site-theme";
+  try {
+    var t = localStorage.getItem(k);
+    if (t !== "light" && t !== "dark") {
+      t = "dark";
+    }
+    document.documentElement.setAttribute("data-theme", t);
+  } catch {
+    document.documentElement.setAttribute("data-theme", "dark");
+  }
+})();
+</script>
+<link rel="stylesheet" href="theme.css">
+<style>
+  /* Code blocks scroll inside themselves rather than setting the page
+     width — the overflow that pushed the front page past a phone viewport. */
+  pre { max-width: 100%; overflow-x: auto; }
+
+  :root {
+    --radius: 14px;
+    --page: 780px;
+  }
+  *, *::before, *::after { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--base);
+    color: var(--ink);
+    font: 16px/1.65 -apple-system, BlinkMacSystemFont, "Inter", system-ui, sans-serif;
+  }
+  a { color: var(--accent); }
+  .wrap { max-width: var(--page); margin: 0 auto; padding: 0 24px; }
+  .site-nav {
+    display: flex;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 20px;
+    padding: 28px 0 8px;
+    font-size: 0.9rem;
+  }
+  .site-nav a {
+    color: var(--ink-mute);
+    text-decoration: none;
+    border-bottom: 1px solid transparent;
+  }
+  .site-nav a:hover, .site-nav a[aria-current="page"] {
+    color: var(--ink);
+    border-bottom-color: var(--accent);
+  }
+  header { text-align: center; padding: 24px 0 32px; }
+  h1 { margin: 0 0 8px; font-size: 2rem; letter-spacing: -0.02em; }
+  .sub { margin: 8px auto 0; max-width: 50ch; color: var(--ink-mute); }
+  section { padding: 28px 0; border-top: 1px solid var(--line); }
+  h2 { margin: 0 0 6px; font-size: 1.1rem; }
+
+  /* --- the calculator ------------------------------------------------- */
+
+  fieldset {
+    border: 0;
+    margin: 0;
+    padding: 0;
+  }
+  legend { padding: 0; }
+
+  .tool-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 14px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 16px 18px;
+    margin-bottom: 12px;
+  }
+  .tool-row input[type="checkbox"] {
+    flex: none;
+    width: 20px;
+    height: 20px;
+    margin: 2px 0 0;
+    accent-color: var(--accent);
+  }
+  .tool-row .body { flex: 1; min-width: 0; }
+  .tool-row .top-line {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .tool-row label { font-weight: 600; font-size: 0.98rem; color: var(--ink); cursor: pointer; }
+  .tool-row .replaces { font-size: 0.8rem; color: var(--ink-faint); margin: 2px 0 0; }
+  .tool-row .price {
+    flex: none;
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+    color: var(--ink-soft);
+    white-space: nowrap;
+  }
+  .tool-row .price small { font-weight: 400; color: var(--ink-faint); }
+  .tool-row .covers { margin: 8px 0 0; font-size: 0.87rem; color: var(--ink-mute); line-height: 1.5; }
+  .tool-row .partial {
+    margin: 6px 0 0;
+    font-size: 0.78rem;
+    color: var(--ink-faint);
+    line-height: 1.5;
+    padding-left: 10px;
+    border-left: 2px solid var(--line);
+  }
+  .tool-row.is-off { opacity: 0.55; }
+
+  .totals {
+    margin-top: 20px;
+    background: var(--chrome-bg);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    box-shadow: var(--chrome-shadow);
+    padding: 18px 20px;
+  }
+  .totals-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px 20px;
+  }
+  .totals .figure { text-align: left; }
+  .totals .figure .n {
+    font-size: 1.6rem;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.01em;
+  }
+  .totals .figure.caduceus .n { color: var(--teal); }
+  .totals .figure .l {
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--ink-faint);
+    margin-top: 2px;
+  }
+  .totals .fine {
+    margin: 12px 0 0;
+    font-size: 0.78rem;
+    color: var(--ink-faint);
+    border-top: 1px solid var(--line);
+    padding-top: 10px;
+  }
+
+  .not-included {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 16px 18px;
+    font-size: 0.87rem;
+    color: var(--ink-mute);
+    line-height: 1.6;
+  }
+  .not-included h2 { font-size: 0.95rem; margin-bottom: 8px; }
+
+  details.sources { font-size: 0.82rem; color: var(--ink-faint); }
+  details.sources summary { cursor: pointer; color: var(--ink-mute); }
+  details.sources ul { padding-left: 1.1rem; }
+  details.sources li { margin: 4px 0; }
+
+  footer {
+    border-top: 1px solid var(--line);
+    padding: 32px 0 48px;
+    text-align: center;
+    font-size: 0.85rem;
+    color: var(--ink-faint);
+  }
+  footer a { color: var(--ink-mute); text-decoration: none; }
+
+  @media (max-width: 480px) {
+    .totals-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<button type="button" class="theme-toggle" id="theme-toggle" aria-label="Switch to light mode">
+  <span class="theme-seg theme-seg-sun" aria-hidden="true">☀</span>
+  <span class="theme-seg theme-seg-moon" aria-hidden="true">☾</span>
+</button>
+
+<div class="site-chrome-right">
+  <a class="portfolio-back" href="https://vivaanshahani.com/" rel="noopener">
+    <span class="arrow" aria-hidden="true">←</span>
+    vivaanshahani.com
+  </a>
+  <a
+    class="github-link"
+    href="https://github.com/GeoWizard4645/caduceus"
+    rel="noopener noreferrer"
+    aria-label="Caduceus on GitHub"
+    title="View source on GitHub"
+  >
+    <svg aria-hidden="true" viewBox="0 0 24 24" fill="currentColor">
+      <path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/>
+    </svg>
+  </a>
+</div>
+
+<div class="wrap">
+  <nav class="site-nav" aria-label="Site">
+    <a href="https://caduceus.vivaanshahani.com/">Overview</a>
+    <a href="https://caduceus.vivaanshahani.com/features">All features</a>
+    <a href="https://caduceus.vivaanshahani.com/savings" aria-current="page">Savings</a>
+    <a href="https://caduceus.vivaanshahani.com/docs">Docs</a>
+    <a href="https://caduceus.vivaanshahani.com/configure-ai">Configure AI</a>
+  </nav>
+
+  <header>
+    <h1>What this replaces</h1>
+    <p class="sub">
+      Five things people actually pay for that Caduceus genuinely covers the core of. Untick anything
+      you wouldn't really have bought — the total only counts what's ticked.
+      <a href="https://caduceus.vivaanshahani.com/features">See the full feature list →</a>
+    </p>
+  </header>
+
+  <section id="calculator" aria-labelledby="calc-heading">
+    <h2 id="calc-heading" class="sr-only" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);">Tools to compare</h2>
+
+    <form id="calc-form">
+      <fieldset>
+        <legend class="sr-only" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);">Tick what you'd actually cancel</legend>
+
+        <div class="tool-row">
+          <input type="checkbox" id="t-raycast" data-price="10" data-period="month" checked>
+          <div class="body">
+            <div class="top-line">
+              <label for="t-raycast">A command palette / launcher</label>
+              <span class="price">$10<small>/mo</small></span>
+            </div>
+            <p class="replaces">Usually: Raycast Pro</p>
+            <p class="covers">The palette itself, the app launcher, the calculator, your own shortcuts, and window snapping — all built in and free here.</p>
+            <p class="partial">Partial: Raycast's AI Commands are its own paid tier; here AI chat is whatever backend you point it at (including fully local), not a bundled model.</p>
+          </div>
+        </div>
+
+        <div class="tool-row">
+          <input type="checkbox" id="t-voice" data-price="8" data-period="month" checked>
+          <div class="body">
+            <div class="top-line">
+              <label for="t-voice">AI dictation</label>
+              <span class="price">$8<small>/mo</small></span>
+            </div>
+            <p class="replaces">Usually: Superwhisper or Wispr Flow</p>
+            <p class="covers">Push-to-talk dictation with live text as you talk, through Apple's on-device speech recognition. No cloud unless you add one.</p>
+            <p class="partial">Partial: those apps run your words through an LLM afterwards to strip filler words and auto-format. Here the transcript is raw; cleaning it up is a separate rewrite command, not automatic.</p>
+          </div>
+        </div>
+
+        <div class="tool-row">
+          <input type="checkbox" id="t-meeting" data-price="10" data-period="month" checked>
+          <div class="body">
+            <div class="top-line">
+              <label for="t-meeting">Meeting notes &amp; transcription</label>
+              <span class="price">$10<small>/mo</small></span>
+            </div>
+            <p class="replaces">Usually: Granola or Otter</p>
+            <p class="covers">Records both sides of a call — the room through system audio, you through the mic — transcribes on-device, and keeps your notes beside it.</p>
+            <p class="partial">Partial: no automatic AI summary or action items. You get the transcript and whatever you typed; summarising it is one more (manual) step, not something that happens for you.</p>
+          </div>
+        </div>
+
+        <div class="tool-row">
+          <input type="checkbox" id="t-clipboard" data-price="3" data-period="month" checked>
+          <div class="body">
+            <div class="top-line">
+              <label for="t-clipboard">A clipboard manager</label>
+              <span class="price">$3<small>/mo</small></span>
+            </div>
+            <p class="replaces">Usually: an app like Paste</p>
+            <p class="covers">Searchable history of text, images and file paths, pinning, per-app exclusions, and optional encryption at rest — all local.</p>
+            <p class="partial">Partial: this Mac only. Apps like Paste sync history to your iPhone and iPad too; Caduceus doesn't leave the machine at all, on purpose.</p>
+          </div>
+        </div>
+
+        <div class="tool-row">
+          <input type="checkbox" id="t-window" data-price="10" data-period="once" checked>
+          <div class="body">
+            <div class="top-line">
+              <label for="t-window">A window manager</label>
+              <span class="price">$10<small> once</small></span>
+            </div>
+            <p class="replaces">Usually: Rectangle Pro or Moom</p>
+            <p class="covers">Halves, thirds, quarters, sixths, custom nudges, move-to-next-display — over 50 layouts, typed or searched from the same bar as everything else.</p>
+            <p class="partial">Partial: no mouse-drag snap zones. Every placement here is a command, not a drag to a screen edge.</p>
+          </div>
+        </div>
+      </fieldset>
+    </form>
+
+    <div class="totals" aria-live="polite">
+      <div class="totals-grid">
+        <div class="figure">
+          <div class="n" id="total-monthly">$31/mo</div>
+          <div class="l">what you'd pay elsewhere</div>
+        </div>
+        <div class="figure caduceus">
+          <div class="n">$0</div>
+          <div class="l">Caduceus, forever</div>
+        </div>
+        <div class="figure">
+          <div class="n" id="total-year1">$382</div>
+          <div class="l">year one (incl. one-time tools)</div>
+        </div>
+        <div class="figure">
+          <div class="n" id="total-yearly">$372/yr</div>
+          <div class="l">every year after</div>
+        </div>
+      </div>
+      <p class="fine" id="totals-fine">
+        Based on 5 of 5 ticked. Subscriptions are billed monthly at list price — most of these are cheaper
+        if you pay annually, which would lower this number, not raise it.
+      </p>
+    </div>
+  </section>
+
+  <section id="not-included" aria-labelledby="not-included-heading">
+    <div class="not-included">
+      <h2 id="not-included-heading">What's deliberately not on this list</h2>
+      <p>
+        A PDF reader with AI question-answering isn't here. The groundwork for it exists in the codebase,
+        but nothing in the app currently lets you open it — there's no button, command, or menu item that
+        reaches it. Counting it toward the total would be counting something you can't actually use yet, so
+        it's left off until it ships. Caduceus does read and summarise a <strong>web page</strong>
+        (see <a href="https://caduceus.vivaanshahani.com/features">All features</a>), which is why it isn't on
+        this list as a PDF-reader replacement either.
+      </p>
+    </div>
+  </section>
+
+  <section id="sources" aria-labelledby="sources-heading">
+    <h2 id="sources-heading" class="sr-only" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);">Where the prices came from</h2>
+    <details class="sources">
+      <summary>Where these prices came from</summary>
+      <p>Checked directly against each product's own pricing page. Monthly, list price, no annual discount applied — the honest, most expensive reading:</p>
+      <ul>
+        <li>Raycast Pro — $10/mo billed monthly ($8/mo billed annually).</li>
+        <li>Superwhisper Pro — $8.49/mo billed monthly, rounded down to $8 here. Wispr Flow Pro runs $12–15/mo, i.e. this line is the cheaper of the two examples it names.</li>
+        <li>Otter.ai Pro — $16.99/mo billed monthly ($8.33/mo annually). Granola Business is $14/mo. $10 sits below both list prices, in line with what most people actually land on paying annually.</li>
+        <li>Paste (clipboard manager) — $3.99/mo billed monthly, or $29.99/yr (≈$2.50/mo). $3/mo is the rounded middle.</li>
+        <li>Rectangle Pro — $9.99 one-time. Moom is $15 one-time (with a year of updates). $10 represents the cheaper of the two, and it's a one-time cost either way, not a subscription.</li>
+      </ul>
+      <p>If any of these move, the honest fix is to update the number here, not to keep an old one that flatters the total.</p>
+    </details>
+  </section>
+
+  <footer>
+    <p>
+      <a href="https://caduceus.vivaanshahani.com/">← Overview</a> ·
+      <a href="https://caduceus.vivaanshahani.com/features">All features</a> ·
+      <a href="https://caduceus.vivaanshahani.com/docs">Docs</a> ·
+      <a href="https://github.com/GeoWizard4645/caduceus">Source on GitHub</a> ·
+      <a href="mailto:caduceus@vivaanshahani.com">caduceus@vivaanshahani.com</a>
+    </p>
+  </footer>
+</div>
+
+<script>
+(function () {
+  var form = document.getElementById("calc-form");
+  if (!form) return;
+  var boxes = Array.prototype.slice.call(form.querySelectorAll('input[type="checkbox"]'));
+  var elMonthly = document.getElementById("total-monthly");
+  var elYearly = document.getElementById("total-yearly");
+  var elYear1 = document.getElementById("total-year1");
+  var elFine = document.getElementById("totals-fine");
+
+  function recompute() {
+    var monthly = 0, once = 0, checkedCount = 0;
+    boxes.forEach(function (box) {
+      var row = box.closest(".tool-row");
+      if (row) row.classList.toggle("is-off", !box.checked);
+      if (!box.checked) return;
+      checkedCount++;
+      var price = parseFloat(box.getAttribute("data-price")) || 0;
+      if (box.getAttribute("data-period") === "once") {
+        once += price;
+      } else {
+        monthly += price;
+      }
+    });
+    var yearly = monthly * 12;
+    var year1 = yearly + once;
+
+    if (elMonthly) elMonthly.textContent = "$" + monthly.toFixed(0) + "/mo";
+    if (elYearly) elYearly.textContent = "$" + yearly.toFixed(0) + "/yr";
+    if (elYear1) elYear1.textContent = "$" + year1.toFixed(0);
+    if (elFine) {
+      elFine.textContent = "Based on " + checkedCount + " of " + boxes.length + " ticked. Subscriptions are billed monthly " +
+        "at list price — most of these are cheaper if you pay annually, which would lower this number, not raise it.";
+    }
+  }
+
+  boxes.forEach(function (box) {
+    box.addEventListener("change", recompute);
+  });
+
+  // The HTML already renders the correct totals for the "everything ticked"
+  // default state, so a no-JS visitor sees an accurate number regardless.
+  // This just makes it live.
+  recompute();
+})();
+</script>
+<script src="theme.js"></script>
+</body>
+</html>

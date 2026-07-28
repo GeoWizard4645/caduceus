@@ -11,8 +11,8 @@
 # The configured-package flow adds optional pieces on top:
 #
 #   ... | bash -s -- --with=caduceus,hermes,ollama \
-#                    --pull=qwen3.5:4b,qwen2.5vl:7b \
-#                    --ai=qwen3.5:4b --hermes-model=qwen2.5vl:7b
+#                    --pull=qwen3.5:1.7b,qwen2.5vl:7b \
+#                    --ai=qwen3.5:1.7b --hermes-model=qwen2.5vl:7b
 #
 #   --with=a,b,c          components: deps, caduceus, hermes, ollama
 #                         "deps" = Xcode Command Line Tools + python3, and is
@@ -402,6 +402,7 @@ replace_installed_app() {
 
   if [ -d "$target" ]; then
     local old_version
+    is_update=1
     old_version=$(defaults read "$target/Contents/Info" CFBundleShortVersionString 2>/dev/null || echo "unknown")
     say "Updating ${APP_NAME} (was ${old_version}) — your settings, shortcuts, clipboard history and AI setup are kept."
     # Only the .app bundle is replaced. Everything the user has configured lives
@@ -631,6 +632,16 @@ PY
 prime_macos_permissions() {
   local app="${INSTALL_DIR}/${APP_NAME}.app"
   [ -d "$app" ] || return 0
+
+  # Not on an update. Registration is a one-time thing, and Caduceus is already
+  # in the list by the time anybody is updating — so priming again would throw
+  # System Settings in the face of someone who only wanted the new version. If
+  # the grant did lapse, the app asks for it in place the next time a feature
+  # needs it, which is the same path every other permission takes.
+  if [ "${is_update:-0}" = "1" ]; then
+    say "Already registered for Screen Recording — leaving System Settings alone."
+    return 0
+  fi
   say "Screen Recording — macOS must approve this in System Settings (cannot be enabled from the terminal alone)."
   say "Caduceus will ask to register; turn it on in the list when Settings opens."
 

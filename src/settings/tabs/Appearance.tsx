@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 
 import * as api from "@/shared/api";
+import { readPersisted } from "@/shared/persist";
 import { StaffMark } from "@/shared/StaffMark";
 import { hexToRgbChannels } from "@/shared/theme";
 import type { Theme } from "@/shared/types";
@@ -25,12 +26,180 @@ const ACCENTS = [
   { name: "Slate", hex: "#8a92a8" },
 ];
 
+// ---------------------------------------------------------------------------
+// Theme presets
+//
+// Each preset is just a coordinated set of values for fields the appearance
+// system already has (`accent`, `reduceTransparency`, `windowRadius`,
+// `staffIdleAnimation`) — see `src/shared/theme.ts`'s `applyAppearance`. This
+// is deliberate: a preset is a shortcut for the swatches and knobs already
+// below it on this page, not a second theming mechanism. Picking one is
+// exactly as reversible as changing any one of those fields by hand, and
+// nobody who never opens this section is affected — the fields keep whatever
+// they already had.
+// ---------------------------------------------------------------------------
+
+interface ThemePreset {
+  name: string;
+  description: string;
+  accent: string;
+  reduceTransparency: boolean;
+  windowRadius: number;
+  staffIdleAnimation: boolean;
+}
+
+const THEME_PRESETS: ThemePreset[] = [
+  {
+    name: "Cyberpunk",
+    description: "Hot magenta, square corners, restless idle animation.",
+    accent: "#ff2fd6",
+    reduceTransparency: false,
+    windowRadius: 4,
+    staffIdleAnimation: true,
+  },
+  {
+    name: "Nord",
+    description: "Cool frost blue, flat surfaces, a still staff.",
+    accent: "#88c0d0",
+    reduceTransparency: true,
+    windowRadius: 10,
+    staffIdleAnimation: false,
+  },
+  {
+    name: "Dracula",
+    description: "Dracula's signature purple, soft glass, gentle motion.",
+    accent: "#bd93f9",
+    reduceTransparency: false,
+    windowRadius: 12,
+    staffIdleAnimation: true,
+  },
+  {
+    name: "Apple Minimalist",
+    description: "System blue, flat surfaces, generous rounding, no motion.",
+    accent: "#0a84ff",
+    reduceTransparency: true,
+    windowRadius: 20,
+    staffIdleAnimation: false,
+  },
+];
+
+function presetIsActive(preset: ThemePreset, appearance: { accent: string; reduceTransparency: boolean; windowRadius?: number; staffIdleAnimation: boolean }): boolean {
+  return (
+    appearance.accent.toLowerCase() === preset.accent &&
+    appearance.reduceTransparency === preset.reduceTransparency &&
+    (appearance.windowRadius ?? 14) === preset.windowRadius &&
+    appearance.staffIdleAnimation === preset.staffIdleAnimation
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Sound effects
+//
+// Deliberately *not* part of `AppearanceSettings` (the persisted, Rust-backed
+// settings tree defined in `src/shared/types.ts` and
+// `src-tauri/src/settings/model.rs`) — this file does not own either of those
+// schemas. The preference lives in `localStorage` instead, read/written only
+// through the two helpers below, so wiring an actual palette-action call site
+// up to it later is a one-line `if (isSoundEffectsEnabled()) playActionSound(...)`
+// wherever that action fires, without this file needing to change.
+//
+// Tones are synthesised with the Web Audio API rather than shipping .wav/.mp3
+// assets: Caduceus's whole pitch includes being a ~10MB app, and a handful of
+// short audio files would eat into that for something this disposable. Four
+// numbers (frequency, gain envelope, duration) reproduce a click/confirm tone
+// close enough for a UI accent, and it costs zero bytes on disk.
+// ---------------------------------------------------------------------------
+
+const SOUND_EFFECTS_KEY = "caduceus:sound-effects-enabled";
+
+/** Off unless the user has explicitly turned it on — see the section header. */
+export function isSoundEffectsEnabled(): boolean {
+  return readPersisted(SOUND_EFFECTS_KEY, "0") === "1";
+}
+
+function setSoundEffectsEnabled(enabled: boolean): void {
+  try {
+    localStorage.setItem(SOUND_EFFECTS_KEY, enabled ? "1" : "0");
+  } catch {
+    // Best-effort: worst case the toggle does not survive a restart, which is
+    // a much smaller failure than losing a setting that changes what the app
+    // *does*. Nothing audible plays either way if this silently fails.
+  }
+}
+
+// One shared context rather than one-per-sound: browsers cap how many can
+// exist, and reusing it means the very first click after enabling the
+// toggle is not the one paying for construction latency.
+let sharedAudioContext: AudioContext | null = null;
+
+function getAudioContext(): AudioContext | null {
+  if (typeof window === "undefined") return null;
+  const Ctor = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+  if (!Ctor) return null;
+  if (!sharedAudioContext || sharedAudioContext.state === "closed") {
+    sharedAudioContext = new Ctor();
+  }
+  return sharedAudioContext;
+}
+
+/**
+ * Play a short, synthesised UI tone if sound effects are enabled.
+ *
+ * `"click"` is a low, quick tick for a palette action firing; `"confirm"` is a
+ * slightly longer tone that rises in pitch, for something completing. Neither
+ * throws — a browser that blocks audio until a user gesture, or has no Web
+ * Audio support at all, just means silence rather than a broken settings page.
+ */
+export function playActionSound(kind: "click" | "confirm" = "click"): void {
+  if (!isSoundEffectsEnabled()) return;
+  const ctx = getAudioContext();
+  if (!ctx) return;
+
+  try {
+    if (ctx.state === "suspended") void ctx.resume();
+
+    const now = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+
+    osc.type = "sine";
+    const baseFreq = kind === "confirm" ? 720 : 540;
+    osc.frequency.setValueAtTime(baseFreq, now);
+    if (kind === "confirm") {
+      // A small upward glide is what reads as "confirm" rather than "click" —
+      // the same envelope with a flat pitch just sounds like a second click.
+      osc.frequency.exponentialRampToValueAtTime(baseFreq * 1.5, now + 0.09);
+    }
+
+    const duration = kind === "confirm" ? 0.18 : 0.09;
+    // Fast attack, exponential decay: a percussive envelope reads as a UI
+    // tick. `exponentialRampToValueAtTime` cannot ramp to exactly 0, hence the
+    // 0.0001 floor rather than a true silence target.
+    gain.gain.setValueAtTime(0.0001, now);
+    gain.gain.exponentialRampToValueAtTime(0.15, now + 0.008);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(now);
+    osc.stop(now + duration + 0.02);
+  } catch {
+    // Sound is decoration, never a dependency — any Web Audio failure here
+    // must be invisible to the rest of the app.
+  }
+}
+
 export function AppearanceTab({ draft }: { draft: Draft }) {
   // Resolved through Rust and served over the asset protocol, so the preview
   // shows the real file rather than a guess at where it went.
   const [backdropPreview, setBackdropPreview] = useState<string | null>(null);
   const [backdropError, setBackdropError] = useState<string | null>(null);
   const [staffMarkError, setStaffMarkError] = useState<string | null>(null);
+
+  // Not `draft.settings` — see the "Sound effects" section below for why this
+  // lives in localStorage instead. Read once at mount; `onChange` below keeps
+  // this state and the persisted value in lockstep from then on.
+  const [soundEffects, setSoundEffects] = useState<boolean>(() => isSoundEffectsEnabled());
 
   const backdropToken = draft.settings?.appearance.commandCenterBackground ?? "";
   useEffect(() => {
@@ -86,6 +255,48 @@ export function AppearanceTab({ draft }: { draft: Draft }) {
             checked={appearance.reduceTransparency}
             onChange={(checked) => draft.update((d) => (d.appearance.reduceTransparency = checked))}
           />
+        </div>
+      </Section>
+
+      <Section
+        title="Presets"
+        description="One click sets the accent and a few matching knobs below — nothing you can't already do by hand, in one step. Pick your own accent afterward and it's just an accent again."
+      >
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+          {THEME_PRESETS.map((preset) => {
+            const active = presetIsActive(preset, appearance);
+            return (
+              <button
+                key={preset.name}
+                type="button"
+                onClick={() => {
+                  draft.update((d) => {
+                    d.appearance.accent = preset.accent;
+                    d.appearance.reduceTransparency = preset.reduceTransparency;
+                    d.appearance.windowRadius = preset.windowRadius;
+                    d.appearance.staffIdleAnimation = preset.staffIdleAnimation;
+                  });
+                  playActionSound("confirm");
+                }}
+                className={cx(
+                  "flex items-center gap-3 rounded-lg border px-3 py-2.5 text-left transition-colors duration-150",
+                  active
+                    ? "border-ink bg-base/80 shadow-glow"
+                    : "border-line hover:border-line-strong/60 hover:bg-base/40",
+                )}
+              >
+                <span
+                  className="h-6 w-6 shrink-0 rounded-full border border-line-strong/40"
+                  style={{ backgroundColor: preset.accent }}
+                  aria-hidden
+                />
+                <span className="min-w-0">
+                  <span className="block text-sm font-medium text-ink">{preset.name}</span>
+                  <span className="block truncate text-2xs text-ink-faint">{preset.description}</span>
+                </span>
+              </button>
+            );
+          })}
         </div>
       </Section>
 
@@ -365,6 +576,38 @@ export function AppearanceTab({ draft }: { draft: Draft }) {
             />
           </Field>
         </div>
+      </Section>
+
+      <Section
+        title="Sound effects"
+        description="A short tone on palette actions. Off by default — nothing changes until you turn this on."
+      >
+        <Toggle
+          label="Play a sound on palette actions"
+          hint="A quick click when an action runs, and a rising confirm tone when something completes. Synthesised on the fly — no audio files are shipped with Caduceus."
+          checked={soundEffects}
+          onChange={(checked) => {
+            setSoundEffects(checked);
+            setSoundEffectsEnabled(checked);
+            if (checked) playActionSound("confirm");
+          }}
+        />
+
+        {soundEffects ? (
+          <div className="mt-4 flex flex-wrap gap-2 border-t border-line pt-4">
+            <Button size="sm" onClick={() => playActionSound("click")}>
+              Preview click
+            </Button>
+            <Button size="sm" onClick={() => playActionSound("confirm")}>
+              Preview confirm
+            </Button>
+          </div>
+        ) : null}
+
+        <p className="mt-4 text-2xs leading-relaxed text-ink-faint">
+          This is a settings-only preview today — hooking it up to the actual palette and staff
+          action handlers is a follow-up outside this page.
+        </p>
       </Section>
     </>
   );

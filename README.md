@@ -29,7 +29,7 @@
 manager, built with Tauri and Rust.** It is a free alternative to Raycast,
 Alfred and Spotlight that runs entirely on your machine: no account, no
 subscription, no telemetry, and no network connection required for anything
-except the parts you explicitly point at a model. One ~10 MB universal binary,
+except the parts you explicitly point at a model. The market and sports widgets are the one exception, and only once you add one: they fetch public quotes and scores from CoinGecko, Yahoo Finance and ESPN. No account, no key, and nothing about you goes with the request — but those hosts do see your IP, so a widget you have not added fetches nothing at all. One ~10 MB universal binary,
 Apple Silicon and Intel, macOS 11 and later.
 
 If you have been looking for a Raycast alternative that is actually open source,

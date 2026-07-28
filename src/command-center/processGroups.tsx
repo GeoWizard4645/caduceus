@@ -18,6 +18,39 @@ export function filterProcessGroups(groups: ProcessGroupRow[], query: string): P
   );
 }
 
+const collator = new Intl.Collator(undefined, { sensitivity: "base" });
+
+export function compareGroupNames(a: string, b: string): number {
+  return collator.compare(a, b);
+}
+
+/** Alphabetical order for display; does not reorder on later polls. */
+export function stableAlphabeticalGroups(
+  groups: ProcessGroupRow[],
+  orderRef: { current: string[] | null },
+): ProcessGroupRow[] {
+  const byName = new Map(groups.map((g) => [g.name, g]));
+
+  if (orderRef.current === null) {
+    orderRef.current = [...groups]
+      .sort((a, b) => compareGroupNames(a.name, b.name))
+      .map((g) => g.name);
+  } else {
+    const present = new Set(groups.map((g) => g.name));
+    orderRef.current = orderRef.current.filter((name) => present.has(name));
+    for (const group of groups) {
+      if (orderRef.current.includes(group.name)) continue;
+      const insertAt = orderRef.current.findIndex((name) => compareGroupNames(name, group.name) > 0);
+      if (insertAt === -1) orderRef.current.push(group.name);
+      else orderRef.current.splice(insertAt, 0, group.name);
+    }
+  }
+
+  return orderRef.current
+    .map((name) => byName.get(name))
+    .filter((g): g is ProcessGroupRow => g != null);
+}
+
 export function isCaduceusGroup(group: ProcessGroupRow): boolean {
   return group.name.toLowerCase().includes("caduceus");
 }

@@ -827,6 +827,17 @@
   .bundle-panel .cmd { margin: 0; box-shadow: none; }
   .bundle-panel .cmd code { white-space: pre-wrap; word-break: break-all; font-size: 0.8rem; }
 
+  /* Every code block scrolls inside itself.
+     A `<pre>` with no wrapping rule is as wide as its longest line, and on a
+     phone that one line sets the width of the whole document — which is what
+     was pushing this page 150px past the viewport at 375px and dragging the
+     fixed header links off-screen with it. The header links looked like the
+     cause; they were a symptom. */
+  pre {
+    max-width: 100%;
+    overflow-x: auto;
+  }
+
   .manual pre {
     background: var(--surface);
     border: 1px solid var(--line);
@@ -1166,6 +1177,7 @@
     <nav class="site-nav" aria-label="Site">
       <a href="https://caduceus.vivaanshahani.com/" aria-current="page">Overview</a>
       <a href="https://caduceus.vivaanshahani.com/features">All features</a>
+      <a href="https://caduceus.vivaanshahani.com/savings">Savings</a>
       <a href="https://caduceus.vivaanshahani.com/docs">Docs</a>
       <a href="https://caduceus.vivaanshahani.com/configure-ai">Configure AI</a>
     </nav>
@@ -1176,6 +1188,9 @@
       Private, secure, and as local as you want it to be — fully open source,
       fully customizable, with no monetization, no data collection, no telemetry,
       and no tracking.
+    </p>
+    <p class="hero-trust">
+      The market and sports widgets are the one exception, and only once you add one: they fetch public quotes and scores from CoinGecko, Yahoo Finance and ESPN. No account, no key, and nothing about you goes with the request — but those hosts do see your IP, so a widget you have not added fetches nothing at all.
     </p>
 
     <div class="badges">
@@ -1818,7 +1833,7 @@ export default async function (input, ctx) {
     caduceus: { sizeMB: 10, size: "~10 MB", time: "~10 s" },
     hermes: { sizeMB: 150, size: "~150 MB", time: "~2–5 min" },
     ollama: { sizeMB: 80, size: "~80 MB", time: "~1 min" },
-    "qwen3.5:4b": { sizeMB: 3400, size: "~3.4 GB", time: "~5–20 min" },
+    "qwen3.5:1.7b": { sizeMB: 1400, size: "~1.4 GB", time: "~3–10 min" },
     "qwen2.5vl:7b": { sizeMB: 6000, size: "~6 GB", time: "~10–35 min" },
     "gemma3:4b": { sizeMB: 3300, size: "~3.3 GB", time: "~5–20 min" },
   };
@@ -1862,7 +1877,10 @@ export default async function (input, ctx) {
       docUrl: "https://ollama.com/",
       on: true,
     },
-    { id: "qwen3.5:4b", kind: "model", role: "ai", name: "qwen3.5:4b", detail: "Caduceus / via localhost API", on: true },
+    // 1.7b rather than 4b: this is the model behind the everyday `/` prompt —
+    // formatting, rewrites, short questions — where answering fast matters more
+    // than answering deeply. The bigger one is a choice, not the default.
+    { id: "qwen3.5:1.7b", kind: "model", role: "ai", name: "qwen3.5:1.7b", detail: "Caduceus / via localhost API", on: true },
     {
       id: "qwen2.5vl:7b",
       kind: "model",

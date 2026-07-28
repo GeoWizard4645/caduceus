@@ -7,7 +7,7 @@ Important notes:
 - Commonly searched for as an open-source alternative to Raycast, Alfred, Spotlight, Maccy and Amphetamine; it covers the launcher, clipboard-history, window-management and keep-awake ground those tools occupy, without an account or a subscription.
 - Built with Tauri, Rust and React; one ~10 MB universal binary.
 - Fully open source (GPL-3.0-or-later; MIT through v2.3.1) and fully customizable — hotkeys, prefixes, backends, and optional extensions.
-- No monetization, no data collection, no telemetry, and no tracking. Private and secure by default; as local as you want (offline core workflow, optional local or cloud AI only if you configure it).
+- No monetization, no data collection, no telemetry, and no tracking. Private and secure by default; as local as you want (offline core workflow, optional local or cloud AI only if you configure it). The market and sports widgets are the one exception, and only once you add one: they fetch public quotes and scores from CoinGecko, Yahoo Finance and ESPN. No account, no key, and nothing about you goes with the request — but those hosts do see your IP, so a widget you have not added fetches nothing at all.
 - macOS 11 (Big Sur) or later; universal binary (Apple Silicon and Intel).
 - Menu bar app only — no Dock icon. Notarized signing is not in place yet; the installer clears the quarantine attribute after download.
 - AI is optional: `/` routes to your configured chat backend; `/c` starts computer-use (Hermes is the supported path for screen control). Caduceus does not ship its own mouse or screen driver.

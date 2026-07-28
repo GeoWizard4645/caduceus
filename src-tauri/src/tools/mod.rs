@@ -10,18 +10,38 @@ pub mod apple;
 pub mod awake;
 pub mod citation;
 pub mod cleaner;
+pub mod cron;
 pub mod dev;
 pub mod devenv;
 pub mod files;
 pub mod media;
 pub mod native;
+pub mod markets;
+pub mod markets_widget;
 pub mod net;
 pub mod qr;
+pub mod semantic;
+pub mod knowledge;
+pub mod routing;
+pub mod browsertabs;
+pub mod browser_cmds;
+pub mod security;
+pub mod security_cmds;
+pub mod expander;
+pub mod images;
+pub mod vision;
+pub mod devextra;
+pub mod calendar;
+pub mod documents;
+pub mod textai;
+pub mod sports;
 pub mod rates;
+pub mod regex_tool;
 pub mod shapes;
 pub mod sorter;
 pub mod system;
 pub mod text;
+pub mod timekeeping;
 
 use std::path::PathBuf;
 use std::process::Command;
@@ -55,10 +75,53 @@ pub fn output_with_timeout(
         .spawn()
         .map_err(|e| format!("Could not start it: {e}"))?;
 
+    // Both pipes are drained on their own threads *while* the deadline is
+    // polled, and this is not optional.
+    //
+    // This loop used to call `try_wait()` and nothing else. A pipe holds about
+    // 64 KB on macOS; once a child fills stdout, it blocks on the next write
+    // and never exits, so `try_wait` never reports it finished and the loop
+    // spun until the deadline — then blamed the *user's app* for hanging, with
+    // a "did not answer" message, for a command that was working perfectly and
+    // simply had a lot to say.
+    //
+    // Nothing about that is visible from reading the call sites, which is why
+    // it survived: it only bites on large output. `docker logs`, `git diff` on
+    // a real change, `lsof` on a busy machine and a long PDF's text all clear
+    // 64 KB easily, and every one of them goes through here.
+    //
+    // Threads rather than `wait_with_output()` after the loop, because that
+    // reads to EOF with no deadline at all — the very hang this function
+    // exists to prevent. This is what `wait_with_output` does internally,
+    // with a clock attached.
+    let mut stdout_pipe = child.stdout.take();
+    let mut stderr_pipe = child.stderr.take();
+    let drain = |pipe: Option<std::process::ChildStdout>| {
+        std::thread::spawn(move || {
+            use std::io::Read;
+            let mut buffer = Vec::new();
+            if let Some(mut pipe) = pipe {
+                let _ = pipe.read_to_end(&mut buffer);
+            }
+            buffer
+        })
+    };
+    let stdout_reader = drain(stdout_pipe.take());
+    let stderr_reader = {
+        std::thread::spawn(move || {
+            use std::io::Read;
+            let mut buffer = Vec::new();
+            if let Some(pipe) = stderr_pipe.as_mut() {
+                let _ = pipe.read_to_end(&mut buffer);
+            }
+            buffer
+        })
+    };
+
     let deadline = std::time::Instant::now() + timeout;
-    loop {
+    let status = loop {
         match child.try_wait() {
-            Ok(Some(_)) => break,
+            Ok(Some(status)) => break status,
             Ok(None) => {}
             Err(e) => return Err(format!("Could not wait for it: {e}")),
         }
@@ -68,9 +131,14 @@ pub fn output_with_timeout(
             return Err(wedged.to_string());
         }
         std::thread::sleep(Duration::from_millis(20));
-    }
+    };
 
-    child.wait_with_output().map_err(|e| format!("Could not read the result: {e}"))
+    // Killing the child closes the pipes, so these joins cannot outlive the
+    // deadline above even when the command was killed mid-sentence.
+    let stdout = stdout_reader.join().unwrap_or_default();
+    let stderr = stderr_reader.join().unwrap_or_default();
+
+    Ok(std::process::Output { status, stdout, stderr })
 }
 
 /// The result of a one-shot utility, shaped for a palette toast.
@@ -381,6 +449,65 @@ pub fn convert_image(path: &str, width: Option<u32>, format: Option<&str>) -> To
             format!("Wrote {}", dest.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default()),
         ),
         Err(e) => ToolOutcome::err(format!("sips said: {e}")),
+    }
+}
+
+#[cfg(test)]
+mod output_timeout_tests {
+    use super::*;
+    use std::process::Command;
+
+    /// The regression this function was silently failing at.
+    ///
+    /// A pipe holds ~64 KB. Before the readers were drained concurrently, a
+    /// command that wrote more than that blocked forever and this returned the
+    /// "wedged" message — for a command that had already done its job.
+    #[test]
+    fn output_larger_than_a_pipe_buffer_is_not_mistaken_for_a_hang() {
+        let mut command = Command::new("sh");
+        // ~2 MB, comfortably past any pipe buffer.
+        command.arg("-c").arg("yes abcdefghijklmnopqrstuvwxyz | head -n 80000");
+
+        let output = output_with_timeout(&mut command, Duration::from_secs(20), "wedged")
+            .expect("a chatty command is not a hung one");
+
+        assert!(output.status.success());
+        assert!(
+            output.stdout.len() > 128 * 1024,
+            "expected well over a pipe buffer, got {} bytes",
+            output.stdout.len()
+        );
+    }
+
+    /// stderr must be drained too, or a command that is loud on the error
+    /// stream deadlocks exactly the same way.
+    #[test]
+    fn large_stderr_also_survives() {
+        let mut command = Command::new("sh");
+        command.arg("-c").arg("yes error-line | head -n 40000 1>&2");
+
+        let output = output_with_timeout(&mut command, Duration::from_secs(20), "wedged")
+            .expect("a command that is loud on stderr is not a hung one");
+        assert!(output.stderr.len() > 128 * 1024);
+    }
+
+    /// And a genuinely hung command must still be caught.
+    #[test]
+    fn a_command_that_never_returns_still_times_out() {
+        let mut command = Command::new("sleep");
+        command.arg("30");
+
+        let err = output_with_timeout(&mut command, Duration::from_millis(150), "wedged")
+            .unwrap_err();
+        assert_eq!(err, "wedged");
+    }
+
+    #[test]
+    fn the_exit_status_survives_the_rewrite() {
+        let mut command = Command::new("sh");
+        command.arg("-c").arg("exit 3");
+        let output = output_with_timeout(&mut command, Duration::from_secs(5), "wedged").unwrap();
+        assert_eq!(output.status.code(), Some(3));
     }
 }
 

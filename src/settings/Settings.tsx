@@ -24,8 +24,11 @@ import { FeaturesCatalogTab } from "./tabs/FeaturesCatalog";
 import { GeneralTab } from "./tabs/General";
 import { HelpTab } from "./tabs/Help";
 import { LearnTab, type TutorialId } from "./tabs/Learn";
+import { McpTab } from "./tabs/Mcp";
+import { RoutingTab } from "./tabs/Routing";
 import { ShortcutsTab } from "./tabs/Shortcuts";
 import { VoiceTab } from "./tabs/Voice";
+import { WorkflowsTab } from "./tabs/Workflows";
 import { useDraft } from "./useDraft";
 
 const TABS = [
@@ -34,9 +37,12 @@ const TABS = [
   { id: "command-center", label: "Command Center", icon: "⌕" },
   { id: "voice", label: "Voice", icon: "◍" },
   { id: "ai", label: "AI", icon: "✳" },
+  { id: "routing", label: "Routing", icon: "⇄" },
   { id: "clipboard", label: "Clipboard", icon: "❐" },
   { id: "appearance", label: "Appearance", icon: "◑" },
   { id: "extensions", label: "Extensions", icon: "⊞" },
+  { id: "mcp", label: "MCP", icon: "⛓" },
+  { id: "workflows", label: "Workflows", icon: "⇩" },
   { id: "features", label: "Features", icon: "☰" },
   { id: "learn", label: "Learn", icon: "◆" },
   { id: "help", label: "Help", icon: "?" },
@@ -176,9 +182,12 @@ export function Settings({ initialSection }: { initialSection?: string } = {}) {
           {tab === "command-center" && <CommandCenterTab {...shared} />}
           {tab === "voice" && <VoiceTab {...shared} />}
           {tab === "ai" && <AiTab {...shared} onReloadInfo={info.reload} />}
+          {tab === "routing" && <RoutingTab draft={draft} />}
           {tab === "clipboard" && <ClipboardTab {...shared} onReloadInfo={info.reload} />}
           {tab === "appearance" && <AppearanceTab draft={draft} />}
           {tab === "extensions" && <ExtensionsTab />}
+          {tab === "mcp" && <McpTab />}
+          {tab === "workflows" && <WorkflowsTab />}
           {tab === "features" && <FeaturesCatalogTab />}
           {tab === "learn" && (
             <LearnTab draft={draft} focus={learnFocus} onNavigate={goToTab} />

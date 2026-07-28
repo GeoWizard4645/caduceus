@@ -29,6 +29,7 @@ import type {
   ChatReply,
   Extension,
   ExtensionFetchRequest,
+  ExtraToolId,
   ExtensionFetchResponse,
   InstallReport,
   UninstallRequest,
@@ -50,8 +51,10 @@ import type {
   MediaAction,
   PermissionReport,
   PortUser,
+  ShortcutKind,
   SshHost,
   SystemAction,
+  TextAiAction,
   ToolId,
   ToolOutcome,
   ToolResult,
@@ -71,6 +74,17 @@ export const resetSettings = () => invoke<Settings>("reset_settings");
 export const getRuntimeInfo = () => invoke<RuntimeInfo>("get_runtime_info");
 
 export const checkForUpdate = () => invoke<UpdateCheck>("check_for_update");
+
+/**
+ * Update in place by running the website's installer in Terminal.
+ *
+ * Resolves once Terminal has the script — the update quits this process, so
+ * there is nothing to await beyond the hand-off.
+ */
+export const runInstallerUpdate = () => invoke<void>("run_installer_update");
+
+/** The exact command {@link runInstallerUpdate} will run, to show beforehand. */
+export const installCommand = () => invoke<string>("install_command");
 
 export const validateHotkey = (accelerator: string) =>
   invoke<string>("validate_hotkey", { accelerator });
@@ -115,6 +129,95 @@ export type SystemSettingsPane =
 
 export const openSystemSettings = (pane: SystemSettingsPane) =>
   invoke<ExecOutcome>("open_system_settings", { pane });
+
+// --- workflow imports --------------------------------------------------------
+//
+// Typed wrappers around the `caduceus://import/…` deep-link pipeline in
+// `src-tauri/src/workflows.rs`. Read that file's module doc before touching
+// anything below — it lays out the threat model these types exist to surface,
+// not hide: a `run_command`/`run_applescript` action's `target` is the literal
+// shell/AppleScript text, handed back unmodified specifically so a human can
+// read it before deciding, and nothing about staging an import ever runs it.
+// Only `workflowsCommitImport` writes anything, and only for a `token` the
+// backend itself minted — the frontend never constructs one.
+
+/** How much scrutiny an action needs before import — mirrors `ImportRisk` in workflows.rs. */
+export type ImportRisk = "low" | "medium" | "high";
+
+/**
+ * One shortcut a staged workflow would add, exactly as the backend parsed and
+ * validated it. `target` is the whole point for `run_command`/
+ * `run_applescript` — show it verbatim, in full, never truncated or
+ * "cleaned up" — see the module doc in `workflows.rs`.
+ */
+export interface PendingAction {
+  label: string;
+  description: string;
+  kind: ShortcutKind;
+  target: string;
+  args: string[];
+  keywords: string[];
+  icon: string;
+  risk: ImportRisk;
+  /** The shortcut id this action would be written under if imported. */
+  previewId: string;
+}
+
+/**
+ * A workflow that has been parsed and validated but not yet applied. Exists
+ * only in the backend's in-memory inbox — nothing about receiving one touches
+ * disk, and an import nobody reviews simply falls off the queue or vanishes at
+ * restart.
+ */
+export interface PendingImport {
+  /** Opaque and backend-generated; only ever echoed back, never built here. */
+  token: string;
+  slug: string;
+  label: string;
+  description: string;
+  actions: PendingAction[];
+  maxRisk: ImportRisk;
+  /** ISO-8601, from `chrono::Utc::now()` at the moment the link was staged. */
+  receivedAt: string;
+}
+
+/** What committing an import actually added, for a confirmation message. */
+export interface CommitOutcome {
+  addedShortcutIds: string[];
+}
+
+/**
+ * Emitted (no payload — listeners re-fetch with {@link workflowsListPending})
+ * whenever a new import is staged, so a review UI can react without polling.
+ * Mirrors `WORKFLOW_PENDING_EVENT` in workflows.rs; not in `EVENTS` because
+ * this file does not own `shared/types.ts`.
+ */
+export const WORKFLOW_PENDING_EVENT = "caduceus://workflow-import-pending";
+
+/**
+ * Parse-and-stage a `caduceus://import/…` link directly, for a "paste a link"
+ * box rather than an OS-level open. Applies the exact same validation as
+ * clicking the link would — see `parse_deep_link` in workflows.rs.
+ */
+export const workflowsStageFromUrl = (url: string) =>
+  invoke<PendingImport>("workflows_stage_from_url", { url });
+
+/** Everything currently awaiting review. */
+export const workflowsListPending = () => invoke<PendingImport[]>("workflows_list_pending");
+
+/** Discard a pending import unreviewed. Resolves `false` if it was already gone. */
+export const workflowsDismissPending = (token: string) =>
+  invoke<boolean>("workflows_dismiss_pending", { token });
+
+/**
+ * Apply a staged import: append its actions as new shortcuts. `acceptHighRisk`
+ * must be `true` if the import contains a `run_command`/`run_applescript`
+ * action — the backend refuses otherwise (and re-queues the import rather than
+ * dropping it), so this call cannot silently import a shell action even if a
+ * caller forgets to ask.
+ */
+export const workflowsCommitImport = (token: string, acceptHighRisk: boolean) =>
+  invoke<CommitOutcome>("workflows_commit_import", { token, acceptHighRisk });
 
 // --- command center --------------------------------------------------------
 
@@ -268,8 +371,8 @@ export const detectLocalAi = () => invoke<LocalAiScan>("detect_local_ai");
 
 // --- system monitor --------------------------------------------------------
 
-export const systemSnapshot = (limit = 40, sortByMemory = false) =>
-  invoke<SystemSnapshot>("system_snapshot", { limit, sortByMemory });
+export const systemSnapshot = (limit = 40, sortByMemory = false, sortByName = false) =>
+  invoke<SystemSnapshot>("system_snapshot", { limit, sortByMemory, sortByName });
 
 /** SIGTERM by default; `force` escalates to SIGKILL. */
 export const systemKill = (pid: number, force = false) =>
@@ -456,6 +559,123 @@ export const extensionAiAsk = (id: string, prompt: string) =>
 
 export const extensionShortcutsRun = (id: string, shortcutId: string, query?: string) =>
   invoke<ExecOutcome>("extension_shortcuts_run", { id, shortcutId, query });
+
+// --- MCP servers ---------------------------------------------------------------
+//
+// Backs Settings → MCP. See `src-tauri/src/mcp.rs`'s module header for the full
+// security model — the short version: an MCP server is an arbitrary program the
+// user has pointed Caduceus at, nothing here ever launches one the user did not
+// explicitly configure, and a server's own tool descriptions / instructions are
+// untrusted text to display, never text Caduceus vouches for. These types are
+// declared here rather than in `types.ts` because this file is the only thing
+// that owns the MCP surface on the frontend.
+
+/** Mirrors `mcp::ServerStatus` — a server's live connection state. */
+export type McpServerStatus =
+  | { state: "connecting" }
+  | { state: "ready" }
+  | { state: "unhealthy"; reason: string }
+  | { state: "disconnected" };
+
+/** Mirrors `mcp::ServerIdentity` — whatever the server said about itself during
+ *  `initialize`. `serverName`/`instructions` are the server's own words. */
+export interface McpServerIdentity {
+  protocolVersion: string;
+  serverName: string;
+  serverVersion: string;
+  instructions: string | null;
+}
+
+/** Mirrors `mcp::McpServerInfo`: a configured server's command plus its live
+ *  status. Note this does NOT include the server's `env` — the backend never
+ *  hands configured environment values back to the frontend, so an "edit"
+ *  form cannot prefill them; re-enter any that should survive an update. */
+export interface McpServerInfo {
+  name: string;
+  command: string;
+  args: string[];
+  enabled: boolean;
+  status: McpServerStatus;
+  toolCount: number;
+  identity: McpServerIdentity | null;
+  /** Trailing stderr lines, kept only as inert diagnostic text. */
+  recentLog: string[];
+}
+
+/** Mirrors `mcp::McpTool`. `title`/`description` are written by the server
+ *  that exposes the tool — render them as quoted, attributed, untrusted text,
+ *  never as if Caduceus authored or reviewed them. */
+export interface McpTool {
+  id: string;
+  server: string;
+  name: string;
+  title: string | null;
+  description: string;
+  inputSchema: unknown;
+}
+
+/** Mirrors `mcp::McpToolCallOutcome`. `content`/`text` are the server's raw
+ *  reply — untrusted data, not instructions; see the module header's point
+ *  (c) in `mcp.rs`. */
+export interface McpToolCallOutcome {
+  server: string;
+  tool: string;
+  isError: boolean;
+  content: unknown[];
+  text: string;
+}
+
+/** Every configured server, connected or not. */
+export const mcpListServers = () => invoke<McpServerInfo[]>("mcp_list_servers");
+
+/** One server's current status — cheaper than `mcpListServers` for polling a
+ *  single "connecting…" row. */
+export const mcpServerStatus = (name: string) => invoke<McpServerInfo>("mcp_server_status", { name });
+
+/**
+ * Persist a new server and connect it immediately. Submitting this form *is*
+ * the explicit consent to run `command args...` as a child process — there is
+ * no separate "install" step and no preview-only dry run; the connection
+ * attempt this call makes is the first real handshake with that program.
+ */
+export const mcpAddServer = (name: string, command: string, args: string[], env: Record<string, string>) =>
+  invoke<McpServerInfo>("mcp_add_server", { name, command, args, env });
+
+/**
+ * Replace a server's command/args/env/enabled flag outright (not a merge —
+ * omitted `env` entries are gone). Always disconnects the previous process
+ * first and reconnects only if `enabled` is true.
+ */
+export const mcpUpdateServer = (
+  name: string,
+  command: string,
+  args: string[],
+  env: Record<string, string>,
+  enabled: boolean,
+) => invoke<McpServerInfo>("mcp_update_server", { name, command, args, env, enabled });
+
+/** Stop the server if running and forget its config entirely. */
+export const mcpRemoveServer = (name: string) => invoke<void>("mcp_remove_server", { name });
+
+/** Explicitly (re)run the handshake — the "test connection" / "retry" action.
+ *  Works regardless of the persisted `enabled` flag and does not change it. */
+export const mcpConnectServer = (name: string) => invoke<McpServerInfo>("mcp_connect_server", { name });
+
+/** Stop a server's process without deleting its config. */
+export const mcpDisconnectServer = (name: string) => invoke<McpServerInfo>("mcp_disconnect_server", { name });
+
+/** Every tool from every currently-Ready server, namespaced as `{server}__{tool}`. */
+export const mcpListTools = () => invoke<McpTool[]>("mcp_list_tools");
+
+/**
+ * Call one namespaced tool with a fully-formed arguments object. Per
+ * `mcp.rs`'s module header, this does not gate the call behind its own
+ * confirmation — any caller building a "run this tool" UI is responsible for
+ * showing the tool and these exact arguments to the user first, the same
+ * discipline the agent loop applies to computer-use actions.
+ */
+export const mcpCallTool = (toolId: string, args?: unknown) =>
+  invoke<McpToolCallOutcome>("mcp_call_tool", { toolId, arguments: args });
 
 // --- window management -------------------------------------------------------
 // Needs the Accessibility permission. `windowPermission` never prompts, so the
@@ -784,6 +1004,203 @@ export const stayAwake = (on: boolean) => invoke<ToolOutcome>("stay_awake", { on
 
 export const stayAwakeState = () => invoke<boolean>("stay_awake_state");
 
+/**
+ * Run a "Highlight & Act" transformation over some text.
+ *
+ * Takes a named action, not a prompt: the wording lives in Rust so it can be
+ * tested, and so this surface cannot be turned into "ask the user's model
+ * anything" by whatever ends up running in the webview.
+ */
+export const textAiRun = (action: TextAiAction, text: string, targetLanguage?: string) =>
+  invoke<string>("text_ai_run", { action, text, targetLanguage: targetLanguage ?? null });
+
+// --- screen perception -------------------------------------------------------
+// OCR happens on-device; only the extracted text reaches a model. The failure
+// message is deliberately passed through unchanged so `permissionFromMessage`
+// can still route a missing Screen Recording grant to its walkthrough.
+
+export interface VisionAnswer {
+  answer: string;
+  /** What Apple Vision read off the screen, so the answer can be checked. */
+  text: string;
+}
+
+export const visionDescribeRegion = (question: string) =>
+  invoke<VisionAnswer>("vision_describe_region", { question });
+
+export const visionDescribeActiveWindow = (question: string) =>
+  invoke<VisionAnswer>("vision_describe_active_window", { question });
+
+// --- calendar and reminders --------------------------------------------------
+// Dates are parsed in Rust, offline, so these work with no model and no network.
+
+export interface CreatedEvent {
+  title: string;
+  /** What was actually scheduled, echoed back so the confirmation cannot lie. */
+  when: string;
+}
+
+export interface CalendarEvent {
+  title: string;
+  start: string;
+  end: string;
+  location: string | null;
+}
+
+export const createCalendarEvent = (
+  title: string,
+  when: string,
+  durationMinutes?: number,
+  location?: string,
+  notes?: string,
+) =>
+  invoke<CreatedEvent>("create_calendar_event", {
+    title,
+    when,
+    durationMinutes: durationMinutes ?? null,
+    location: location ?? null,
+    notes: notes ?? null,
+  });
+
+export const calendarEventsToday = () =>
+  invoke<CalendarEvent[]>("calendar_events_today");
+
+export const calendarEventsBetween = (start: string, end: string) =>
+  invoke<CalendarEvent[]>("calendar_events_between", { start, end });
+
+export const createReminder = (text: string, due?: string) =>
+  invoke<{ text: string; due: string | null }>("create_reminder", { text, due: due ?? null });
+
+// --- documents ---------------------------------------------------------------
+// Each of these ends in a model call, so each reports "no backend configured"
+// rather than failing quietly.
+
+export const pdfSummary = (path: string) => invoke<string>("pdf_summary", { path });
+export const pdfAsk = (path: string, question: string) =>
+  invoke<string>("pdf_ask", { path, question });
+export const articleSummary = (url: string) => invoke<string>("article_summary", { url });
+export const youtubeSummary = (url: string) => invoke<string>("youtube_summary", { url });
+
+// --- images --------------------------------------------------------------------
+// Every one of these writes a *new* file beside the source and never touches
+// the original — see the module doc on `tools::images` (Rust) for why.
+
+/** A resize target: one of the social presets, or an exact pixel size. */
+export type ImagePreset =
+  | { kind: "square" }
+  | { kind: "landscape" }
+  | { kind: "portrait" }
+  | { kind: "custom"; width: number; height: number };
+
+export const compressImage = (
+  path: string,
+  format?: string,
+  quality?: number,
+  maxDimension?: number,
+) =>
+  invoke<ToolOutcome>("compress_image", {
+    path,
+    format: format ?? null,
+    quality: quality ?? null,
+    maxDimension: maxDimension ?? null,
+  });
+
+export const resizeImageToPreset = (path: string, preset: ImagePreset) =>
+  invoke<ToolOutcome>("resize_image_to_preset", { path, preset });
+
+/**
+ * Strips GPS, camera and timestamp metadata by decoding to raw pixels and
+ * re-encoding — `sips` alone cannot be trusted to actually remove it (see
+ * `tools::images::strip_metadata`'s doc comment for what was tried first).
+ */
+export const stripImageMetadata = (path: string) =>
+  invoke<ToolOutcome>("strip_image_metadata", { path });
+
+export interface DuplicateGroup {
+  files: string[];
+}
+
+/** Scans one folder (not its subfolders) for images that look the same. */
+export const findDuplicateImages = (dir: string, maxDistance?: number) =>
+  invoke<DuplicateGroup[]>("find_duplicate_images", { dir, maxDistance: maxDistance ?? null });
+
+/**
+ * Always resolves `false` today. A real check rather than a hardcoded UI
+ * constant so the day a Vision-based remover ships, the button lights up
+ * with no frontend change. See `tools::images::background_removal_available`.
+ */
+export const backgroundRemovalAvailable = () =>
+  invoke<boolean>("background_removal_available");
+
+// --- semantic search -------------------------------------------------------
+// `tools::semantic::SemanticIndex` (BM25 + optional local-Ollama embeddings)
+// is built and tested, but nothing in `commands.rs`/`lib.rs` exposes it over
+// IPC yet — these wrappers name the commands that need to exist. Until they
+// are registered, every call here rejects with Tauri's own "command not
+// found", which `SearchPage` catches and explains rather than papering over.
+
+export interface SemanticIndexSnapshot {
+  documentCount: number;
+  /** The folders a sync would walk, so the page can say what "index" means. */
+  roots: string[];
+}
+
+export interface SemanticIndexStats {
+  scanned: number;
+  indexed: number;
+  updated: number;
+  removed: number;
+  skippedTooLarge: number;
+  skippedIndexFull: number;
+  errors: number;
+  embedded: number;
+  /** True if this call stopped at a per-run bound rather than finishing —
+   * the caller should call `semanticIndexSync` again to continue. */
+  truncated: boolean;
+  durationMs: number;
+}
+
+export type SemanticMatchKind = "lexical" | "semantic" | "hybrid";
+
+export interface SemanticSearchHit {
+  path: string;
+  title: string;
+  snippet: string;
+  score: number;
+  matchedVia: SemanticMatchKind;
+}
+
+/** Cheap: document count and configured roots, no directory walk. */
+export const semanticIndexStats = () => invoke<SemanticIndexSnapshot>("semantic_index_stats");
+
+/**
+ * Run one bounded chunk of indexing and return its stats. `sync` in the Rust
+ * module is deliberately incremental and per-run bounded, so a first index of
+ * a large folder needs this called repeatedly (while `truncated` is true)
+ * rather than once — see `IndexConfig`'s bounds in `tools::semantic`.
+ */
+export const semanticIndexSync = () => invoke<SemanticIndexStats>("semantic_index_sync");
+
+/** Flips the `CancelFlag` the in-progress (or next) sync call checks. */
+export const semanticIndexCancel = () => invoke<void>("semantic_index_cancel");
+
+export const semanticSearch = (query: string, limit = 40) =>
+  invoke<SemanticSearchHit[]>("semantic_search", { query, limit });
+
+// --- the second tool bench ---------------------------------------------------
+
+export const runExtraTool = (id: ExtraToolId, input = "") =>
+  invoke<ToolResult>("run_extra_tool", { id, input });
+
+export const runCurl = (command: string) => invoke<unknown>("run_curl", { command });
+
+/** Reads the repo and drafts a message. Never stages, never commits. */
+export const gitCommitAssist = (repoPath: string) =>
+  invoke<unknown>("git_commit_assist", { repoPath });
+
+export const inspectDependencies = (manifestPath: string) =>
+  invoke<unknown>("inspect_dependencies", { manifestPath });
+
 /** Encode text as an SVG QR code. Generated locally; nothing is uploaded. */
 export const generateQr = (text: string, ecc = "medium") =>
   invoke<string>("generate_qr", { text, ecc });
@@ -850,3 +1267,263 @@ export const openManageWindow = (page?: string) =>
  */
 export const setPaletteFloating = (floating: boolean) =>
   invoke<void>("set_palette_floating", { floating });
+
+// --- time management ---------------------------------------------------------
+// World clock, a timezone converter, countdown timers, a stopwatch and a
+// pomodoro cycle. All of it — including the pomodoro's phase clock and every
+// timer's deadline — is state Rust owns, not React: see the header comment on
+// `tools::timekeeping` on the Rust side for why a timer that only ran while
+// its tab was visible would not be worth shipping.
+
+/** Mirrors `tools::timekeeping::ZoneClock`. */
+export interface ZoneClock {
+  id: string;
+  label: string;
+  offsetMinutes: number;
+  utcOffsetLabel: string;
+  /** `YYYY-MM-DDTHH:MM:SS`, this zone's wall-clock time as of the call. */
+  localIso: string;
+  isDst: boolean;
+}
+
+/** Every catalogued zone with its current offset — the world clock's rows and its picker's options. */
+export const timeListZones = () => invoke<ZoneClock[]>("time_list_zones");
+
+/** Mirrors `tools::timekeeping::ConvertRequest`. */
+export interface TimeConvertRequest {
+  zoneId: string;
+  /** `YYYY-MM-DDTHH:MM`, the shape `<input type="datetime-local">` gives. */
+  localDatetime: string;
+}
+
+/** Mirrors `tools::timekeeping::ConvertedTime`. */
+export interface ConvertedTime {
+  id: string;
+  label: string;
+  localIso: string;
+  utcOffsetLabel: string;
+  /** Days from the source zone's date to this zone's date for the same instant. */
+  dayOffset: number;
+}
+
+/** Read a time in one zone and show it in a set of others — "5pm EST in Tokyo". */
+export const timeConvert = (request: TimeConvertRequest, targets: string[]) =>
+  invoke<ConvertedTime[]>("time_convert", { request, targets });
+
+/** Mirrors `tools::timekeeping::TimerSnapshot`. */
+export interface TimerSnapshot {
+  id: number;
+  name: string;
+  totalSecs: number;
+  remainingSecs: number;
+  completed: boolean;
+}
+
+export const timeStartTimer = (name: string, seconds: number) =>
+  invoke<TimerSnapshot>("time_start_timer", { name, seconds });
+
+export const timeListTimers = () => invoke<TimerSnapshot[]>("time_list_timers");
+
+export const timeDismissTimer = (id: number) => invoke<void>("time_dismiss_timer", { id });
+
+/** Mirrors `tools::timekeeping::StopwatchStatus`. */
+export interface StopwatchStatus {
+  running: boolean;
+  elapsedMs: number;
+  /** Cumulative elapsed time at each lap; split times are the differences between entries. */
+  lapsMs: number[];
+}
+
+export const timeStopwatchStart = () => invoke<StopwatchStatus>("time_stopwatch_start");
+export const timeStopwatchStop = () => invoke<StopwatchStatus>("time_stopwatch_stop");
+export const timeStopwatchLap = () => invoke<StopwatchStatus>("time_stopwatch_lap");
+export const timeStopwatchReset = () => invoke<StopwatchStatus>("time_stopwatch_reset");
+export const timeStopwatchStatus = () => invoke<StopwatchStatus>("time_stopwatch_status");
+
+export type PomodoroPhase = "work" | "shortBreak" | "longBreak";
+
+/** Mirrors `tools::timekeeping::PomodoroConfig`. */
+export interface PomodoroConfig {
+  workMinutes: number;
+  shortBreakMinutes: number;
+  longBreakMinutes: number;
+  /** A long break follows every Nth work session instead of a short one; `0` means never. */
+  cyclesBeforeLongBreak: number;
+  /** Total work sessions for the run; `0` means until stopped by hand. */
+  totalCycles: number;
+}
+
+/** Mirrors `tools::timekeeping::PomodoroStatus`. */
+export interface PomodoroStatus {
+  running: boolean;
+  phase: PomodoroPhase | null;
+  cycle: number;
+  totalCycles: number;
+  remainingSecs: number;
+  totalSecs: number;
+}
+
+export const timePomodoroStart = (config: PomodoroConfig) =>
+  invoke<PomodoroStatus>("time_pomodoro_start", { config });
+
+export const timePomodoroStop = () => invoke<PomodoroStatus>("time_pomodoro_stop");
+
+export const timePomodoroStatus = () => invoke<PomodoroStatus>("time_pomodoro_status");
+
+// --- regex tester --------------------------------------------------------------
+// Runs entirely on the Rust side via the `regex` crate — nothing here is sent
+// anywhere, which matters for a tool people paste API tokens and log lines into.
+
+/** One capture group within a match. `text` is `null` when the group did not
+ * participate in this particular match — an alternative inside it was not the
+ * one taken, which is a normal outcome and not the same thing as "". */
+export interface CaptureGroup {
+  index: number;
+  name: string | null;
+  text: string | null;
+  start: number | null;
+  end: number | null;
+}
+
+export interface RegexMatch {
+  text: string;
+  start: number;
+  end: number;
+  groups: CaptureGroup[];
+}
+
+export interface ExplainToken {
+  token: string;
+  description: string;
+}
+
+/** Run a pattern against sample text. `flags` is any of `i`, `m`, `s`, `x`. */
+export const regexTest = (pattern: string, flags: string, text: string) =>
+  invoke<RegexMatch[]>("regex_test", { pattern, flags, text });
+
+/** A plain-English, token-by-token explanation of a pattern. */
+export const regexExplain = (pattern: string) =>
+  invoke<ExplainToken[]>("regex_explain", { pattern });
+
+// --- cron parser -----------------------------------------------------------------
+
+export interface CronAnalysis {
+  description: string;
+  /** ISO 8601, in this Mac's local time zone — cron itself has no time zone
+   * of its own, so that is the only reading "next run" can mean here. */
+  nextRuns: string[];
+}
+
+/** Parse a 5-field cron expression and list its next occurrences. */
+export const parseCron = (expression: string, count = 10) =>
+  invoke<CronAnalysis>("parse_cron", { expression, count });
+
+// --- text expander, markdown paste, emoji search, proofreader --------------
+//
+// Mirrors `src-tauri/src/tools/expander.rs`. That module's commands are all
+// written and tested (55 tests) but were never added to `generate_handler!`,
+// so every wrapper below calls a command name that is real and stable —
+// nothing here is speculative the way `routingPreview` further down is.
+
+/** A saved shortcut and the body it expands to. Placeholders inside `body`
+ * (`{date}`, `{time}`, `{date+7d}`, `{clipboard}`, `{cursor}`) are substituted
+ * at expansion time, not save time — see `SnippetsPage` for the full list. */
+export interface Snippet {
+  id: string;
+  shortcut: string;
+  body: string;
+}
+
+/** Where the caret should land after typing, if the snippet used `{cursor}`. */
+export interface ExpansionOutcome {
+  text: string;
+  cursorOffset: number | null;
+}
+
+export const expanderListSnippets = () => invoke<Snippet[]>("expander_list_snippets");
+
+/** Create a snippet (`id: null`) or update one in place (`id` of an existing one). */
+export const expanderSaveSnippet = (id: string | null, shortcut: string, body: string) =>
+  invoke<Snippet>("expander_save_snippet", { id, shortcut, body });
+
+export const expanderDeleteSnippet = (id: string) =>
+  invoke<void>("expander_delete_snippet", { id });
+
+/** Expand arbitrary body text against the live clock and clipboard, without
+ * it being a saved snippet — what a live preview calls on every keystroke. */
+export const expanderPreview = (body: string) =>
+  invoke<ExpansionOutcome>("expander_preview", { body });
+
+/** Look up a snippet by shortcut and type its expansion into whatever app
+ * currently has focus (macOS only — see the Rust module for why). */
+export const expanderExpandAndInsert = (shortcut: string) =>
+  invoke<ExpansionOutcome>("expander_expand_and_insert", { shortcut });
+
+/** Render Markdown to the same HTML that would be copied as rich text, for a
+ * live preview pane. */
+export const expanderMarkdownPreview = (markdown: string) =>
+  invoke<string>("expander_markdown_preview", { markdown });
+
+/** Convert Markdown to HTML and place it on the clipboard as styled text
+ * (`public.html`, with a plain-text fallback), ready to paste into Mail,
+ * Notes or Word. */
+export const expanderCopyMarkdownAsRichText = (markdown: string) =>
+  invoke<ToolOutcome>("expander_copy_markdown_as_rich_text", { markdown });
+
+export interface EmojiHit {
+  emoji: string;
+  /** Which keyword actually matched — shown so a result is not a mystery. */
+  keyword: string;
+  score: number;
+}
+
+/** Concept search over a curated keyword table ("celebrate" -> 🎉🥳🥂), not a
+ * Unicode name lookup. */
+export const expanderSearchEmoji = (query: string, limit = 24) =>
+  invoke<EmojiHit[]>("expander_search_emoji", { query, limit });
+
+export interface ProofreadIssue {
+  original: string;
+  suggestion: string;
+  reason: string;
+}
+
+export interface ProofreadResult {
+  corrected: string;
+  issues: ProofreadIssue[];
+}
+
+/** Proofread for the class of mistake a spellchecker cannot see (homophones,
+ * subject-verb agreement, a wrong date, a dropped "not") through whichever
+ * backend is configured for primary chat. Can take a few seconds — it is a
+ * real model call, unlike everything else in this section. */
+export const expanderProofread = (text: string) =>
+  invoke<ProofreadResult>("expander_proofread", { text });
+
+// --- smart model routing -----------------------------------------------------
+//
+// Mirrors `src-tauri/src/tools/routing.rs`: a pure, deterministic classifier
+// (24 tests) that decides whether a prompt is "micro" (fast local model) or
+// "complex" (the configured primary backend), plus a policy that honours an
+// on/off switch and a user pin. Unlike the expander above, **none of this is
+// wired into a Tauri command yet** — `routing.rs` exposes `classify`/`route`
+// as plain Rust functions, not `#[tauri::command]`s, and `AgentSettings` does
+// not yet carry the two fields the policy needs (`autoRoutingEnabled`,
+// `routingOverrideBackendId`). This wrapper is written against the command
+// this feature will need — `routing_preview`, taking a prompt and returning
+// the decision the classifier would make right now — so that the moment a
+// backend command by that name exists, the Routing settings tab starts
+// working with no frontend change. Until then, calling it rejects with a
+// "command not found" style error, which the tab catches and explains rather
+// than treating as a crash. See that tab for the exact fields/command this
+// needs on the Rust side.
+export interface RoutingDecision {
+  backendId: string;
+  class: "micro" | "complex";
+  /** One sentence, safe to show directly in the UI — the whole point of
+   * exposing this at all is that invisible routing is untrustworthy routing. */
+  reason: string;
+}
+
+export const routingPreview = (prompt: string) =>
+  invoke<RoutingDecision>("routing_preview", { prompt });

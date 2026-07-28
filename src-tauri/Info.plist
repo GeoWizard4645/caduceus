@@ -23,6 +23,26 @@
 	<key>NSScreenCaptureUsageDescription</key>
 	<string>Caduceus captures the screen when you take a screenshot or start a screen recording.</string>
 
+	<!-- The `caduceus://` scheme, used only by one-click workflow links.
+	     Registering a scheme means any web page can hand this app a URL, so
+	     nothing about opening one executes: `workflows::handle_deep_link`
+	     parses and stages it, and the import is not written until the user has
+	     seen exactly what it would add and pressed a button. See the threat
+	     model at the top of `src-tauri/src/workflows.rs`. -->
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.caduceus.desktop.workflow</string>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>caduceus</string>
+			</array>
+		</dict>
+	</array>
+
 	<!-- Shown when a shortcut of kind `run_applescript` is executed. -->
 	<key>NSAppleEventsUsageDescription</key>
 	<string>Caduceus runs the AppleScript shortcuts you have configured yourself.</string>

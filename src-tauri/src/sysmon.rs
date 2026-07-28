@@ -123,12 +123,14 @@ impl SysMonitor {
         }
     }
 
-    /// Refresh and return a snapshot, keeping the `limit` heaviest processes.
+    /// Refresh and return a snapshot.
     ///
-    /// Sorted by CPU then memory: the reason anyone opens this is "something is
-    /// eating my machine", and that something is at the top of exactly one of
-    /// those two orderings.
-    pub fn snapshot(&self, limit: usize, sort_by_memory: bool) -> SystemSnapshot {
+    /// By default groups are sorted by CPU (or memory when `sort_by_memory`) and
+    /// truncated to `limit` — for the system monitor's "what is hot" view.
+    /// When `sort_by_name` is true, groups and their children are sorted
+    /// alphabetically instead, which keeps the Processes tool list stable while
+    /// stats refresh.
+    pub fn snapshot(&self, limit: usize, sort_by_memory: bool, sort_by_name: bool) -> SystemSnapshot {
         let mut inner = self.inner.lock();
         let Inner {
             system,
@@ -182,18 +184,29 @@ impl SysMonitor {
 
         let mut process_groups: Vec<ProcessGroupRow> = groups_map.into_values().collect();
         for group in &mut process_groups {
-            group.processes.sort_by(|a, b| {
-                b.cpu
-                    .partial_cmp(&a.cpu)
-                    .unwrap_or(std::cmp::Ordering::Equal)
-                    .then_with(|| b.memory_bytes.cmp(&a.memory_bytes))
-            });
+            if sort_by_name {
+                group.processes.sort_by(|a, b| {
+                    a.name
+                        .to_lowercase()
+                        .cmp(&b.name.to_lowercase())
+                        .then_with(|| a.pid.cmp(&b.pid))
+                });
+            } else {
+                group.processes.sort_by(|a, b| {
+                    b.cpu
+                        .partial_cmp(&a.cpu)
+                        .unwrap_or(std::cmp::Ordering::Equal)
+                        .then_with(|| b.memory_bytes.cmp(&a.memory_bytes))
+                });
+            }
             if group.root_pid.is_none() {
                 group.root_pid = group.processes.first().map(|p| p.pid);
             }
         }
 
-        if sort_by_memory {
+        if sort_by_name {
+            process_groups.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+        } else if sort_by_memory {
             process_groups.sort_by(|a, b| b.memory_bytes.cmp(&a.memory_bytes));
         } else {
             process_groups.sort_by(|a, b| {
@@ -212,7 +225,14 @@ impl SysMonitor {
 
         // Legacy flat sort (unused for display once grouped, kept for callers that
         // still read `processes` directly).
-        if sort_by_memory {
+        if sort_by_name {
+            processes.sort_by(|a, b| {
+                a.name
+                    .to_lowercase()
+                    .cmp(&b.name.to_lowercase())
+                    .then_with(|| a.pid.cmp(&b.pid))
+            });
+        } else if sort_by_memory {
             processes.sort_by(|a, b| b.memory_bytes.cmp(&a.memory_bytes));
         } else {
             processes.sort_by(|a, b| {
@@ -377,9 +397,9 @@ mod tests {
         let monitor = SysMonitor::new();
         // Two passes: CPU usage is a delta and the first refresh has nothing to
         // compare against.
-        let _ = monitor.snapshot(10, false);
+        let _ = monitor.snapshot(10, false, false);
         std::thread::sleep(std::time::Duration::from_millis(MIN_POLL_MS));
-        let snap = monitor.snapshot(10, false);
+        let snap = monitor.snapshot(10, false, false);
 
         assert!(snap.core_count > 0, "a machine with no cores is not running this test");
         assert!(snap.memory_total_bytes > 0);
@@ -396,9 +416,9 @@ mod tests {
     #[test]
     fn processes_come_back_heaviest_first() {
         let monitor = SysMonitor::new();
-        let _ = monitor.snapshot(40, false);
+        let _ = monitor.snapshot(40, false, false);
         std::thread::sleep(std::time::Duration::from_millis(MIN_POLL_MS));
-        let snap = monitor.snapshot(40, false);
+        let snap = monitor.snapshot(40, false, false);
 
         for pair in snap.process_groups.windows(2) {
             assert!(
@@ -413,7 +433,7 @@ mod tests {
     #[test]
     fn sorting_by_memory_is_monotonic() {
         let monitor = SysMonitor::new();
-        let snap = monitor.snapshot(40, true);
+        let snap = monitor.snapshot(40, true, false);
         for pair in snap.process_groups.windows(2) {
             assert!(pair[0].memory_bytes >= pair[1].memory_bytes);
         }
@@ -422,7 +442,7 @@ mod tests {
     #[test]
     fn caduceus_refuses_to_kill_itself() {
         let monitor = SysMonitor::new();
-        let _ = monitor.snapshot(200, false);
+        let _ = monitor.snapshot(200, false, false);
         let err = monitor
             .kill(std::process::id(), false)
             .expect_err("killing our own pid must be refused");
@@ -432,7 +452,7 @@ mod tests {
     #[test]
     fn killing_a_dead_pid_reports_rather_than_panics() {
         let monitor = SysMonitor::new();
-        let _ = monitor.snapshot(10, false);
+        let _ = monitor.snapshot(10, false, false);
         // Above the default pid_max on macOS and Linux, so it cannot exist.
         assert!(monitor.kill(4_000_000, false).is_err());
     }

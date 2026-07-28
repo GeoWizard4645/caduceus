@@ -83,13 +83,13 @@ export const CADUCEUS_PIXELS: readonly (readonly [number, number, PixelKind])[] 
 ];
 
 /**
- * Fill for each part. Wings and one snake follow the theme; the staff keeps a
- * fixed warm gold, which reads as metal against every accent colour.
+ * Fill for each part. Wings stay fixed white (same as the app icons); the staff
+ * keeps a warm gold; one snake follows the user's accent.
  */
 export const PIXEL_FILL: Record<PixelKind, string> = {
   knob: "#ffe9a8",
   staff: "#e8c468",
-  wing: "rgb(var(--c-ink))",
+  wing: "#ffffff",
   snakeA: "rgb(var(--c-accent))",
   snakeB: "#4fe3d0",
 };

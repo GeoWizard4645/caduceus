@@ -18,7 +18,7 @@
  *   of having submitted it.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import * as api from "@/shared/api";
 import { useDebounced, useSettings, useTauriEvent, useToasts, useUpdateCheck } from "@/shared/hooks";
@@ -39,6 +39,7 @@ import type {
 } from "@/shared/types";
 import { EVENTS } from "@/shared/types";
 import { PERMISSIONS, permissionFromMessage } from "@/shared/permissions";
+import { hotkeyLabel } from "@/shared/hotkeyLabel";
 import { Kbd, Spinner, cx } from "@/shared/ui";
 import { ShortcutIcon } from "@/shared/ShortcutIcon";
 import { loadUsage, recordUsage } from "@/shared/usage";
@@ -244,8 +245,17 @@ export function HomeTab({
 
       const query = nextParsed?.remainder ?? debouncedInput.trim();
 
+      // Only `clipboardProvider` ever reads this — and, per its own comment in
+      // providers.ts, only once the input has actually named the clipboard
+      // prefix (`parsed.rule.action === "clipboard_search"`); every other
+      // query throws the rows away untouched. This used to run unconditionally,
+      // which meant an ordinary keystroke — the overwhelmingly common case —
+      // paid for a full clipboard-history query, awaited serially *before*
+      // `collectResults` even started, purely to discard the answer. That is a
+      // real, disk-backed IPC round trip on every settled query, not the few
+      // microseconds of in-process JS the rest of this pass costs.
       let rows: ClipboardEntry[] = [];
-      if (settings.clipboard.enabled) {
+      if (settings.clipboard.enabled && nextParsed?.rule?.action === "clipboard_search") {
         try {
           rows = await api.clipboardList(query, settings.commandCenter.maxResultsPerSource);
         } catch {
@@ -322,37 +332,49 @@ export function HomeTab({
     [input, notify, onOpenTab],
   );
 
-  const runItem = async (item: ResultItem, asPage = false) => {
-    // Anything that ends the session or deletes something asks once. In a fuzzy
-    // list "Shut down" sits a keystroke away from "Sleep", and an undo for that
-    // does not exist. Opening a page is never destructive, so it skips this.
-    if (!asPage && item.confirm && pendingConfirm?.id !== item.id) {
-      setPendingConfirm({ id: item.id, message: item.confirm });
-      return;
-    }
-    setPendingConfirm(null);
-
-    // Counted here rather than inside each command, so applications, shortcuts
-    // and commands are all ranked by the same rule.
-    if (item.usageKey) recordUsage(item.usageKey);
-    lastRun.current = item.usageKey?.startsWith("command:")
-      ? item.usageKey.slice("command:".length)
-      : undefined;
-
-    setBusy(true);
-    try {
-      const action = asPage && item.openPage ? item.openPage : item.run;
-      const keepOpen = (await action()) === false;
-      if (!keepOpen) {
-        setInput("");
-        await api.hideCommandCenter();
+  // useCallback, not a plain function: this is handed to every visible
+  // `ResultRow` as its `onRun` prop, and `ResultRow` is memoised so a keystroke
+  // that does not change *this* row's own props can skip re-rendering it
+  // entirely. A fresh closure here every render would defeat that — React.memo
+  // compares props by reference, and a new function reference is a prop
+  // change — so the one thing standing between "identical props" and "props
+  // changed" would be this function's identity, on every single row, on every
+  // keystroke.
+  const runItem = useCallback(
+    async (item: ResultItem, asPage = false) => {
+      // Anything that ends the session or deletes something asks once. In a
+      // fuzzy list "Shut down" sits a keystroke away from "Sleep", and an undo
+      // for that does not exist. Opening a page is never destructive, so it
+      // skips this.
+      if (!asPage && item.confirm && pendingConfirm?.id !== item.id) {
+        setPendingConfirm({ id: item.id, message: item.confirm });
+        return;
       }
-    } catch (error) {
-      notify(api.errorMessage(error), "error");
-    } finally {
-      setBusy(false);
-    }
-  };
+      setPendingConfirm(null);
+
+      // Counted here rather than inside each command, so applications,
+      // shortcuts and commands are all ranked by the same rule.
+      if (item.usageKey) recordUsage(item.usageKey);
+      lastRun.current = item.usageKey?.startsWith("command:")
+        ? item.usageKey.slice("command:".length)
+        : undefined;
+
+      setBusy(true);
+      try {
+        const action = asPage && item.openPage ? item.openPage : item.run;
+        const keepOpen = (await action()) === false;
+        if (!keepOpen) {
+          setInput("");
+          await api.hideCommandCenter();
+        }
+      } catch (error) {
+        notify(api.errorMessage(error), "error");
+      } finally {
+        setBusy(false);
+      }
+    },
+    [pendingConfirm, notify],
+  );
 
   // --- keyboard -----------------------------------------------------------
   //
@@ -496,6 +518,21 @@ export function HomeTab({
       ?.scrollIntoView({ block: "nearest" });
   }, [selected]);
 
+  // Grouped once per `results` change rather than on every render of this
+  // component (which happens on every keystroke, since `input` lives here) —
+  // and the row index alongside it, so the list below never falls back to
+  // `results.indexOf(item)`. That lookup is only O(n) per row, but the row
+  // count is not small: a single letter is a subsequence of nearly every
+  // command's title or keywords, so a query like "s" matches ~200 of the ~200
+  // built-in commands, and indexOf-per-row turns "render the list" into an
+  // O(n²) pass over it on every keystroke for no reason — the index is known
+  // the moment `results` is built.
+  const { grouped, indexById } = useMemo(() => {
+    const byId = new Map<string, number>();
+    results.forEach((item, index) => byId.set(item.id, index));
+    return { grouped: groupResults(results), indexById: byId };
+  }, [results]);
+
   if (!settings) return null;
 
   // Names the four things the box actually does, because none of them are
@@ -511,7 +548,14 @@ export function HomeTab({
     input.trimEnd() === aiPrefix &&
     !input.startsWith(chatOpenPrefix);
 
-  const grouped = groupResults(results);
+  // What `results` was actually ranked and highlighted against — not the live
+  // `input`. Typing runs 45ms ahead of the debounce that recomputes `results`,
+  // so for most of every keystroke `input` names a query the current rows were
+  // *not* matched against; passing it straight to `ResultRow` both highlights
+  // stale positions against the wrong text and — because it is a new string on
+  // every keystroke — defeats `ResultRow`'s memoisation for all ~200 rows on a
+  // query as short as "s", not just the one row that changed.
+  const displayQuery = parsed?.remainder ?? debouncedInput.trim();
 
   return (
     <div className="relative flex h-full w-full flex-col overflow-hidden">
@@ -534,6 +578,58 @@ export function HomeTab({
           autoComplete="off"
           className="no-drag min-w-0 flex-1 bg-transparent text-[17px] font-normal tracking-[-0.01em] text-ink placeholder:text-ink-faint focus:outline-none"
         />
+
+        {/* Dictation had to be started from a global hotkey nobody could be
+            expected to discover — this whole file listened for transcripts and
+            rendered them, but offered no way to ask for one. macOS puts a
+            microphone on the keyboard; the least a search field can do is put
+            one at the end of the row.
+
+            Click to toggle rather than hold: the hold gesture belongs to the
+            push-to-talk hotkey, and holding a mouse button down while watching
+            a palette fill in is an awkward thing to ask of anyone.
+
+            A failure is reported rather than swallowed. "Nothing happens" is
+            the single worst outcome here, and the reasons it can fail — voice
+            switched off in Settings, a missing microphone grant — are all
+            things a sentence can fix. */}
+        <button
+          type="button"
+          onClick={() => {
+            void (voice === "idle" ? api.voiceStart() : api.voiceFinish()).catch((error) =>
+              notify(api.errorMessage(error), "error"),
+            );
+          }}
+          aria-label={voice === "idle" ? "Start dictation" : "Stop dictation"}
+          aria-pressed={voice !== "idle"}
+          title={
+            voice === "idle"
+              ? `Dictate${
+                  settings?.voice.pushToTalkHotkey
+                    ? ` — or hold ${hotkeyLabel(settings.voice.pushToTalkHotkey)}`
+                    : ""
+                }`
+              : "Stop dictating"
+          }
+          className={cx(
+            "no-drag row h-7 w-7 shrink-0 items-center justify-center rounded-full border transition-colors",
+            voice === "recording"
+              ? "border-[#ff3b30]/40 bg-[#ff3b30]/12 text-[#ff5f57]"
+              : "border-line bg-raised text-ink-mute hover:border-accent/40 hover:text-ink",
+          )}
+        >
+          {/* A microphone, drawn rather than an emoji: an emoji here renders at
+              a different weight from every other glyph in this row. */}
+          <svg viewBox="0 0 16 16" className="h-3.5 w-3.5" fill="none" aria-hidden="true">
+            <rect x="6" y="2" width="4" height="7" rx="2" fill="currentColor" />
+            <path
+              d="M4 7.5a4 4 0 0 0 8 0M8 11.5V14"
+              stroke="currentColor"
+              strokeWidth="1.4"
+              strokeLinecap="round"
+            />
+          </svg>
+        </button>
 
         {/* Red, not accent: the accent colour means "ordinary Caduceus state"
             everywhere else in this window, and a live microphone should not be
@@ -626,18 +722,16 @@ export function HomeTab({
               <div key={group} className="mb-1">
                 <p className="eyebrow px-3 pb-1 pt-2">{group}</p>
                 {items.map((item) => {
-                  const index = results.indexOf(item);
+                  const index = indexById.get(item.id) ?? 0;
                   return (
                     <ResultRow
                       key={item.id}
                       item={item}
                       index={index}
                       active={index === selected}
-                      query={parsed?.remainder ?? input.trim()}
-                      onHover={() => setSelected(index)}
-                      onClick={(event) =>
-                        void runItem(item, event.shiftKey && Boolean(item.openPage))
-                      }
+                      query={displayQuery}
+                      onHover={setSelected}
+                      onRun={runItem}
                     />
                   );
                 })}
@@ -673,18 +767,20 @@ export function HomeTab({
                   Release notes
                 </button>
               )}
+              {/* Runs the website's one-liner in Terminal rather than opening
+                  a download. The installer replaces the app and reopens it, so
+                  the whole update is one press and a window you can watch. */}
               <button
                 type="button"
-                onClick={() =>
-                  void api.openExternalUrl(
-                    update.downloadUrl ??
-                      update.releaseUrl ??
-                      "https://github.com/GeoWizard4645/caduceus/releases/latest",
-                  )
-                }
+                onClick={() => {
+                  void api
+                    .runInstallerUpdate()
+                    .then(() => notify("Terminal is running the installer."))
+                    .catch((error) => notify(api.errorMessage(error), "error"));
+                }}
                 className="rounded-lg bg-accent px-3.5 py-1.5 text-[13px] font-semibold text-accent-ink shadow-glow transition-opacity hover:opacity-95"
               >
-                Get update ↗
+                Update now
               </button>
             </div>
           </div>
@@ -748,20 +844,33 @@ export function HomeTab({
 // Pieces
 // ---------------------------------------------------------------------------
 
-function ResultRow({
+/**
+ * Memoised: this is the thing that made typing feel slow.
+ *
+ * A one-letter query is a subsequence of nearly every command's title or
+ * keywords — see `fuzzy.ts` — so the list routinely holds close to the full
+ * ~200-command registry. Without `memo`, every one of those rows re-ran its
+ * `highlightSegments` pass and went through full reconciliation on *every*
+ * keystroke, because `HomeTab` re-renders on every keystroke (the `<input>`
+ * is controlled) while `results` itself only updates once per 45ms debounce.
+ * `memo` only pays off if the props below are actually stable across that
+ * gap — see `runItem`'s `useCallback` and `displayQuery` in `HomeTab` for the
+ * other half of this fix.
+ */
+const ResultRow = memo(function ResultRow({
   item,
   index,
   active,
   query,
   onHover,
-  onClick,
+  onRun,
 }: {
   item: ResultItem;
   index: number;
   active: boolean;
   query: string;
-  onHover: () => void;
-  onClick: (event: React.MouseEvent) => void;
+  onHover: (index: number) => void;
+  onRun: (item: ResultItem, asPage: boolean) => void;
 }) {
   const segments = item.positions?.length
     ? highlightSegments(item.title, item.positions)
@@ -770,8 +879,8 @@ function ResultRow({
   return (
     <div
       data-index={index}
-      onMouseMove={onHover}
-      onClick={onClick}
+      onMouseMove={() => onHover(index)}
+      onClick={(event) => void onRun(item, event.shiftKey && Boolean(item.openPage))}
       className={cx(
         "flex cursor-default items-center gap-3 rounded-lg px-3 py-2 transition-colors duration-100",
         active ? "bg-accent/12" : "hover:bg-raised/60",
@@ -805,7 +914,7 @@ function ResultRow({
       )}
     </div>
   );
-}
+});
 
 /**
  * Text a command produced, shown in the palette rather than in a toast.

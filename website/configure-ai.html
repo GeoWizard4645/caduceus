@@ -42,6 +42,10 @@
 </script>
 <link rel="stylesheet" href="theme.css">
 <style>
+  /* Code blocks scroll inside themselves rather than setting the page
+     width — the overflow that pushed the front page past a phone viewport. */
+  pre { max-width: 100%; overflow-x: auto; }
+
   :root { --radius: 14px; --page: 720px; }
   *, *::before, *::after { box-sizing: border-box; }
   body {

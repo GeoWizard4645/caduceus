@@ -9,6 +9,8 @@
  * See `docs/PLUGIN_GUIDE.md` for a worked example.
  */
 
+import { invoke } from "@tauri-apps/api/core";
+
 import * as api from "./api";
 import {
   COMMANDS,
@@ -835,7 +837,46 @@ export const commandProvider: ResultProvider = {
         openPage: () => openCommandPage(command, input, actions),
         run: () => runCommand(command, input, actions),
       };
-      return [row];
+
+      // With an argument — `sha256 hello` — the trigger row is the whole
+      // answer. You have named a command and given it something to work on,
+      // and fuzzy-matching the argument as well would bury it in noise.
+      if (input) return [row];
+
+      // On its own, the trigger word is a *search*, and this used to return
+      // only the triggered row. That silently hid every other command with the
+      // same name in it: typing "color" matched `tool.color_convert`'s trigger
+      // and so the Colors page — a better answer — never appeared at all,
+      // while "colour" worked because nothing claims it as a trigger.
+      //
+      // The trigger row still outranks everything, because naming a command
+      // exactly is unambiguous. It just no longer deletes the alternatives.
+      const rest = COMMANDS.filter((entry) => entry.id !== command.id)
+        .map((entry) => {
+          const score = fuzzyScore(query, [entry.title, entry.detail, ...entry.keywords]);
+          return score === null ? null : { entry, score };
+        })
+        .filter((hit): hit is { entry: CommandDef; score: number } => hit !== null)
+        .map(({ entry, score }) => ({
+          id: `command:${entry.id}`,
+          usageKey: `command:${entry.id}`,
+          title: entry.title,
+          subtitle: entry.detail,
+          icon: entry.icon,
+          group: "Commands",
+          // Capped below the trigger row's 950 so the exact match stays first.
+          score: Math.min(
+            score - 10 + usageBoost(`command:${entry.id}`) + personalizationBoost(settings, entry.id),
+            900,
+          ),
+          positions: fuzzyMatch(query, entry.title)?.positions,
+          accessory: accessoryFor(entry),
+          confirm: entry.argument ? undefined : entry.confirm,
+          openPage: () => openCommandPage(entry, "", actions),
+          run: () => runCommand(entry, "", actions),
+        }));
+
+      return [row, ...rest];
     }
 
     // Nothing typed: show the whole catalogue, ranked. Commands that are only
@@ -1290,6 +1331,480 @@ export const extensionProvider: ResultProvider = {
   },
 };
 
+// ---------------------------------------------------------------------------
+// Search-shaped system providers: browser tabs, bookmarks, semantic file
+// search, contacts, menu bar items
+// ---------------------------------------------------------------------------
+//
+// Five capabilities that were built, tested and registered over IPC
+// (`browser_search_tabs`/`browser_switch_tab`/`browser_search_bookmarks` in
+// `tools/browser_cmds.rs`; `semantic_search` in `commands.rs`; `contacts_search`/
+// `contacts_copy`/`menu_bar_items`/`menu_bar_invoke`, also `commands.rs`) but had
+// no caller anywhere in the frontend — so none of them were reachable. All five
+// are the same *shape* of thing: you search for a tab, a bookmark, a file, a
+// person or a menu command the same way you search for an app, and the palette
+// is where that happens. None of them get their own page.
+//
+// The shared risk across all five, and the reason this section exists rather
+// than five one-line `invoke` calls, is that every provider's `search` runs on
+// **every keystroke** (see `HomeTab.tsx`'s 45ms debounce — short enough that
+// ordinary typing clears it on nearly every letter). `clipboardProvider`'s own
+// comment above tells the story of what happens when that is forgotten: a
+// Keychain + SQLite round trip fired on every keystroke, its answer thrown
+// away unread, because nothing gated it behind the one case where it mattered.
+// Three of these five are worse than that clipboard case, not equivalent to
+// it — they shell out to `osascript`, and a real `osascript -e` round trip on
+// this machine measures 150–420ms even for a trivial one-line script (timed
+// with `time osascript -e 'tell application "System Events" to get name of
+// every process'`), climbing well past 300ms for even a *shallow*, non-
+// recursive menu-bar read. `frontmost_menu_items` walks every submenu
+// recursively. None of that can be allowed to sit behind a plain fuzzy match.
+//
+// So each provider below picks its gate to fit what it costs:
+//
+//   - Browser tabs, contacts and menu bar items shell out to `osascript` and
+//     are gated behind an explicit leading trigger word (`leadingWord`,
+//     mirroring `liveKind` above) — typing "s" does not run any of them,
+//     because "s" is not "tab", "contact" or "menu". Only spelling out the
+//     word opts in, the same contract `liveListProvider`'s ports/repos/ssh/
+//     docker/audio/files/big already use for exactly this reason.
+//   - Tabs and menu items *additionally* cache their unfiltered IPC result
+//     for a few seconds and fuzzy-filter the cache in JS on every keystroke
+//     after that, rather than re-shelling `osascript` per letter. Typing
+//     "tab docs" after the trigger fires one AppleScript enumeration for
+//     "tab ", then four essentially-free in-process filters for "d", "o",
+//     "c", "s" — measured at ~0.04ms/call over 200 cached tabs and
+//     ~0.09ms/call over 400 cached menu items (see the scratchpad harness
+//     referenced in this task's report). Contacts cannot be cached this way
+//     — Contacts.app's own AppleScript search refuses an empty "list
+//     everyone" query — so it stays a live call per keystroke, but only
+//     while the explicit trigger keeps it opted in.
+//   - Bookmarks read a plist/JSON/SQLite file rather than shelling out, but
+//     doing that per keystroke is the identical "SQLite round trip on every
+//     keystroke" shape the clipboard bug already named, so it gets the same
+//     fetch-once-cache-and-filter treatment as tabs, without needing a
+//     trigger word: reading files is cheap enough that a bare 3-character
+//     gate is "sensible" on its own. Measured at ~0.44ms/call over 2000
+//     cached bookmarks.
+//   - Semantic search hits a real BM25 + embedding index and its ranking
+//     itself changes as you keep typing, so there is nothing to cache; a
+//     3-character floor is the only gate it needs, matching
+//     `fileSearchProvider`'s two-character floor over plain Spotlight.
+//
+// All five fail silently: a browser that is not running, a missing
+// Automation/Accessibility grant, an unbuilt semantic index, or Contacts.app
+// never having been opened are ordinary, expected outcomes — never an error
+// that should reach the user or take another provider down with it.
+
+/** Mirrors `browsertabs::TabHit` (Rust) — see the file header on scope. */
+interface BrowserTabHit {
+  browser: string;
+  windowId: number;
+  tabIndex: number;
+  title: string;
+  url: string;
+}
+
+/** Mirrors `browsertabs::BookmarkHit` (Rust). */
+interface BookmarkHit {
+  source: string;
+  title: string;
+  url: string;
+  folder: string | null;
+}
+
+/** Mirrors `knowledge::LabeledValue` / `knowledge::ContactHit` (Rust). */
+interface LabeledValue {
+  label: string;
+  value: string;
+}
+interface ContactHit {
+  name: string;
+  phones: LabeledValue[];
+  emails: LabeledValue[];
+}
+
+/** Mirrors `knowledge::MenuItem` (Rust) — renamed to avoid any suggestion this
+ * is a DOM menu item. */
+interface MenuBarEntry {
+  path: string[];
+}
+
+/** The shape `rowOutcome` (defined above, in the live-lists section) expects
+ * back from a Rust call — `ToolOutcome`'s fields, written out locally since
+ * `ToolOutcome` itself is not imported into this file. */
+type ToolOutcomeLike = { ok: boolean; message: string; copied: string | null };
+
+/**
+ * Split `raw` into its first whitespace-delimited word and everything after.
+ *
+ * Identical in spirit to `liveKind`'s own head/rest split above — kept as a
+ * separate helper because these five providers are registered independently
+ * rather than dispatched through `liveListProvider`'s single switch, so they
+ * need the split without the rest of that function's trigger table.
+ */
+function leadingWord(raw: string): { head: string; rest: string } {
+  const trimmed = raw.trim();
+  const space = trimmed.search(/\s/);
+  const head = (space === -1 ? trimmed : trimmed.slice(0, space)).toLowerCase();
+  const rest = space === -1 ? "" : trimmed.slice(space + 1).trim();
+  return { head, rest };
+}
+
+// --- Browser tabs ------------------------------------------------------------
+
+const TAB_TRIGGERS = ["tab", "tabs"];
+const TABS_CACHE_MS = 4_000;
+let tabsCache: { at: number; data: BrowserTabHit[] } | null = null;
+
+/**
+ * Every open tab, fetched with an empty query (`browser_search_tabs`'s own
+ * doc comment: an empty query "lists everything open") and reused for a
+ * short window.
+ *
+ * `search_tabs` on the Rust side always enumerates every scriptable browser
+ * over `osascript` regardless of what query it is given — the query only
+ * trims the result afterwards, in Rust, not before. So calling it once per
+ * keystroke costs exactly as much as calling it once per *word*: there is no
+ * cheaper "narrow" call to make. Caching the one AppleScript walk and
+ * fuzzy-filtering the cached list in JS is the whole saving.
+ */
+async function allBrowserTabs(): Promise<BrowserTabHit[]> {
+  const now = Date.now();
+  if (tabsCache && now - tabsCache.at < TABS_CACHE_MS) return tabsCache.data;
+  const data = await invoke<BrowserTabHit[]>("browser_search_tabs", { query: "" }).catch(
+    () => [] as BrowserTabHit[],
+  );
+  tabsCache = { at: now, data };
+  return data;
+}
+
+export const browserTabsProvider: ResultProvider = {
+  id: "browser-tabs",
+  title: "Browser tabs",
+  async search({ raw, parsed, settings, actions }) {
+    if (parsed?.rule) return [];
+    const { head, rest } = leadingWord(raw);
+    if (!TAB_TRIGGERS.includes(head)) return [];
+
+    const tabs = await allBrowserTabs();
+    if (tabs.length === 0) return [];
+
+    const limit = settings.commandCenter.maxResultsPerSource;
+    const scored: { tab: BrowserTabHit; match: ReturnType<typeof fuzzyMatch> }[] = rest
+      ? tabs
+          .map((tab) => ({ tab, match: fuzzyMatch(rest, tab.title) ?? fuzzyMatch(rest, tab.url) }))
+          .filter((x): x is { tab: BrowserTabHit; match: NonNullable<ReturnType<typeof fuzzyMatch>> } =>
+            x.match !== null,
+          )
+          .sort((a, b) => b.match.score - a.match.score)
+      : tabs.map((tab) => ({ tab, match: null }));
+
+    return scored.slice(0, limit).map(({ tab, match }, index) => ({
+      id: `tab:${tab.browser}:${tab.windowId}:${tab.tabIndex}`,
+      title: tab.title || tab.url,
+      subtitle: `${tab.browser} · ${tab.url.replace(/^https?:\/\//, "")}`,
+      icon: "◫",
+      group: "Browser tabs",
+      score: 700 - index,
+      positions: match?.positions,
+      accessory: "↵ switch",
+      run: () =>
+        rowOutcome(actions, () =>
+          invoke<ToolOutcomeLike>("browser_switch_tab", {
+            browser: tab.browser,
+            windowId: tab.windowId,
+            tabIndex: tab.tabIndex,
+          }),
+        ),
+    }));
+  },
+};
+
+// --- Bookmarks -----------------------------------------------------------------
+
+const BOOKMARKS_CACHE_MS = 30_000;
+let bookmarksCache: { at: number; data: BookmarkHit[] } | null = null;
+
+/**
+ * Every bookmark across Safari, the Chromium family and Firefox, fetched
+ * once and reused for the length of a short session.
+ *
+ * A longer TTL than tabs (30s vs 4s): a bookmark list barely changes minute
+ * to minute the way open tabs do, and re-reading Safari's binary plist plus
+ * every installed Chromium profile's `Bookmarks` JSON plus Firefox's SQLite
+ * file on every keystroke is the exact "SQLite round trip on every
+ * keystroke" shape the clipboard bug is named after in this section's header.
+ */
+async function allBookmarks(): Promise<BookmarkHit[]> {
+  const now = Date.now();
+  if (bookmarksCache && now - bookmarksCache.at < BOOKMARKS_CACHE_MS) return bookmarksCache.data;
+  const data = await invoke<BookmarkHit[]>("browser_search_bookmarks", { query: "", limit: 2000 }).catch(
+    () => [] as BookmarkHit[],
+  );
+  bookmarksCache = { at: now, data };
+  return data;
+}
+
+export const bookmarksProvider: ResultProvider = {
+  id: "bookmarks",
+  title: "Bookmarks",
+  async search({ query, parsed, settings, actions }) {
+    if (parsed?.rule) return [];
+    const trimmed = query.trim();
+    // No trigger word here, unlike tabs/contacts/menu: reading cached files
+    // is cheap enough that a plain length floor is "sensible" gating on its
+    // own, the same call `fileSearchProvider` makes for Spotlight.
+    if (trimmed.length < 3) return [];
+
+    const bookmarks = await allBookmarks();
+    if (bookmarks.length === 0) return [];
+
+    // A supporting result, not the reason the palette is open — capped well
+    // under the source limit for the same reason `fileSearchProvider` caps
+    // itself at 5.
+    const limit = Math.min(5, settings.commandCenter.maxResultsPerSource);
+
+    return bookmarks
+      .map((bookmark) => {
+        const titleMatch = fuzzyMatch(trimmed, bookmark.title);
+        const match = titleMatch ?? fuzzyMatch(trimmed, bookmark.url);
+        return match ? { bookmark, match, positions: titleMatch?.positions } : null;
+      })
+      .filter(
+        (
+          x,
+        ): x is {
+          bookmark: BookmarkHit;
+          match: NonNullable<ReturnType<typeof fuzzyMatch>>;
+          positions: number[] | undefined;
+        } => x !== null,
+      )
+      .sort((a, b) => b.match.score - a.match.score)
+      .slice(0, limit)
+      .map(({ bookmark, match, positions }) => ({
+        id: `bookmark:${bookmark.source}:${bookmark.url}`,
+        title: bookmark.title || bookmark.url,
+        subtitle: [bookmark.source, bookmark.folder].filter(Boolean).join(" · "),
+        icon: "☆",
+        group: "Bookmarks",
+        score: match.score,
+        positions,
+        accessory: "↵ open",
+        run: async () => {
+          try {
+            const outcome = await api.openExternalUrl(bookmark.url);
+            if (!outcome.ok) actions.notify(outcome.message, "error");
+          } catch (error) {
+            actions.notify(api.errorMessage(error), "error");
+          }
+        },
+      }));
+  },
+};
+
+// --- Semantic file search --------------------------------------------------------
+
+/**
+ * Local BM25 + (optionally) embedding search over whatever has been indexed
+ * — see `api.ts`'s note on `semanticSearch`, written back when
+ * `semantic_search` was built and tested but not yet registered over IPC.
+ *
+ * Unlike `fileSearchProvider` (Spotlight, effectively instant and gated at
+ * two characters) this is real work server-side and its *ranking* changes as
+ * you keep typing — there is nothing stable to cache between keystrokes the
+ * way tabs/bookmarks/menu items have, so the only gate is the length floor.
+ */
+export const semanticSearchProvider: ResultProvider = {
+  id: "semantic",
+  title: "Semantic search",
+  async search({ query, parsed, settings, actions }) {
+    if (parsed?.rule) return [];
+    const trimmed = query.trim();
+    if (trimmed.length < 3) return [];
+
+    const limit = Math.min(5, settings.commandCenter.maxResultsPerSource);
+
+    let hits: api.SemanticSearchHit[];
+    try {
+      hits = await api.semanticSearch(trimmed, limit);
+    } catch {
+      // No backend configured, an unbuilt index, or Ollama unreachable are
+      // all "nothing to show" — never a broken palette.
+      return [];
+    }
+
+    return hits.map((hit, index) => ({
+      id: `semantic:${hit.path}`,
+      title: hit.title || hit.path.split("/").pop() || hit.path,
+      subtitle: hit.snippet || hit.path.replace(/^\/Users\/[^/]+/, "~"),
+      // A small visual tell for *why* this matched: embeddings found it with
+      // no shared words at all, term overlap found it with no meaning check,
+      // or both agreed.
+      icon: hit.matchedVia === "semantic" ? "✦" : hit.matchedVia === "hybrid" ? "✧" : "▤",
+      group: "Semantic search",
+      // Below a typed filename match (`fileSearchProvider`'s FILE_LEAD band)
+      // and below commands: the backend's own ranking decides order within
+      // this list, not a fuzzy score against the query, since a semantic hit
+      // may share no text with what was typed at all.
+      score: 480 - index * 15,
+      accessory: "↵ reveal",
+      run: () => rowOutcome(actions, () => api.revealPath(hit.path)),
+    }));
+  },
+};
+
+// --- Contacts --------------------------------------------------------------------
+
+const CONTACT_TRIGGERS = ["contact", "contacts"];
+
+export const contactsProvider: ResultProvider = {
+  id: "contacts",
+  title: "Contacts",
+  async search({ raw, parsed, settings, actions }) {
+    if (parsed?.rule) return [];
+    const { head, rest } = leadingWord(raw);
+    if (!CONTACT_TRIGGERS.includes(head)) return [];
+
+    const name = rest.trim();
+    // The Rust side refuses an empty query outright ("Type a name to search
+    // for."), and there is no "list everyone" mode to cache the way
+    // bookmarks or tabs have — every hit is a fresh `whose name contains
+    // "…"` AppleScript round trip. Two characters rather than three: this
+    // only runs at all once the explicit "contact " trigger has already been
+    // typed, so the corpus a short query is matched against is one name
+    // field via Contacts' own filter, not this file's whole disk.
+    if (name.length < 2) return [];
+
+    let hits: ContactHit[];
+    try {
+      hits = await invoke<ContactHit[]>("contacts_search", { query: name });
+    } catch {
+      // Contacts isn't running, Automation permission is missing, or the
+      // AppleScript failed outright — all "no rows", never a broken palette.
+      return [];
+    }
+
+    const limit = settings.commandCenter.maxResultsPerSource;
+    const rows: ResultItem[] = [];
+
+    outer: for (const contact of hits) {
+      const values: { label: string; value: string; kind: "phone" | "email" }[] = [
+        ...contact.phones.map((p) => ({ label: p.label, value: p.value, kind: "phone" as const })),
+        ...contact.emails.map((e) => ({ label: e.label, value: e.value, kind: "email" as const })),
+      ];
+
+      if (values.length === 0) {
+        rows.push({
+          id: `contact:${contact.name}`,
+          title: contact.name,
+          subtitle: "No phone or email on file",
+          icon: "◌",
+          group: "Contacts",
+          score: 700 - rows.length,
+          run: () => false,
+        });
+        if (rows.length >= limit) break outer;
+        continue;
+      }
+
+      // One row per number/address rather than one per person: "choosing
+      // copies a phone or email" only makes sense once you have picked
+      // *which* one, and collapsing them into a single row would need a
+      // second menu this palette has no mechanism for.
+      for (const entry of values) {
+        rows.push({
+          id: `contact:${contact.name}:${entry.kind}:${entry.value}`,
+          title: contact.name,
+          subtitle: `${entry.label || (entry.kind === "phone" ? "Phone" : "Email")} · ${entry.value}`,
+          icon: entry.kind === "phone" ? "☎" : "✉",
+          group: "Contacts",
+          score: 700 - rows.length,
+          accessory: "↵ copy",
+          run: () =>
+            rowOutcome(actions, () => invoke<ToolOutcomeLike>("contacts_copy", { value: entry.value })),
+        });
+        if (rows.length >= limit) break outer;
+      }
+    }
+
+    return rows;
+  },
+};
+
+// --- Menu bar items ----------------------------------------------------------------
+
+const MENU_TRIGGERS = ["menu", "menubar"];
+const MENU_CACHE_MS = 6_000;
+let menuCache: { at: number; data: MenuBarEntry[] } | null = null;
+
+/**
+ * The frontmost app's whole menu bar — every menu and submenu, recursively —
+ * fetched once and reused briefly.
+ *
+ * This is the single slowest call reachable from the palette: `osascript`
+ * walking a full, potentially deeply-nested menu tree, measured even for a
+ * *shallow*, non-recursive top-level read at ~340ms on this machine (`time
+ * osascript -e '…menu bar items of menu bar 1…'`). It is also the one this
+ * task's brief calls out by name: "must require an explicit opt-in trigger
+ * word, never fire speculatively." `MENU_TRIGGERS` is that word; the cache
+ * on top of it is what keeps continuing to type after it from re-walking the
+ * whole tree on every letter.
+ */
+async function frontmostMenuItems(): Promise<MenuBarEntry[]> {
+  const now = Date.now();
+  if (menuCache && now - menuCache.at < MENU_CACHE_MS) return menuCache.data;
+  const data = await invoke<MenuBarEntry[]>("menu_bar_items").catch(() => [] as MenuBarEntry[]);
+  // Cached even when empty (no frontmost app, no Automation/Accessibility
+  // grant, or the script failed) so a permission dialog the user is
+  // ignoring is not re-triggered on every subsequent keystroke either.
+  menuCache = { at: now, data };
+  return data;
+}
+
+export const menuBarProvider: ResultProvider = {
+  id: "menu-bar",
+  title: "Menu bar",
+  async search({ raw, parsed, settings, actions }) {
+    if (parsed?.rule) return [];
+    const { head, rest } = leadingWord(raw);
+    if (!MENU_TRIGGERS.includes(head)) return [];
+
+    const items = await frontmostMenuItems();
+    if (items.length === 0) return [];
+
+    const limit = settings.commandCenter.maxResultsPerSource;
+    const scored: { item: MenuBarEntry; match: ReturnType<typeof fuzzyMatch> }[] = rest
+      ? items
+          .map((item) => ({ item, match: fuzzyMatch(rest, item.path.join(" ")) }))
+          .filter(
+            (x): x is { item: MenuBarEntry; match: NonNullable<ReturnType<typeof fuzzyMatch>> } =>
+              x.match !== null,
+          )
+          .sort((a, b) => b.match.score - a.match.score)
+      : items.map((item) => ({ item, match: null }));
+
+    return scored.slice(0, limit).map(({ item, match }, index) => ({
+      id: `menu:${item.path.join(" ")}`,
+      title: item.path[item.path.length - 1] ?? "",
+      subtitle: item.path.slice(0, -1).join(" ▸ ") || "Menu bar",
+      icon: "⌘",
+      group: "Menu bar",
+      score: 700 - index,
+      positions: match?.positions,
+      accessory: "↵ run",
+      run: async () => {
+        try {
+          await invoke<void>("menu_bar_invoke", { path: item.path });
+        } catch (error) {
+          actions.notify(api.errorMessage(error), "error");
+          return false;
+        }
+      },
+    }));
+  },
+};
+
 export const defaultProviders: ResultProvider[] = [
   calculatorProvider,
   favoritesProvider,
@@ -1302,6 +1817,11 @@ export const defaultProviders: ResultProvider[] = [
   fileSearchProvider,
   captureProvider,
   extensionProvider,
+  browserTabsProvider,
+  bookmarksProvider,
+  semanticSearchProvider,
+  contactsProvider,
+  menuBarProvider,
   searchFallbackProvider,
   clipboardProvider,
   prefixHintProvider,

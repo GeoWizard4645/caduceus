@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Caduceus features — every macOS command and tool</title>
-<meta name="description" content="Every Caduceus capability, grouped and explained: window management, developer tools, clipboard history, voice, screen OCR, system control and more. All free, all offline.">
+<title>Caduceus features — everything it does, grouped by task</title>
+<meta name="description" content="Every Caduceus capability, grouped the way you'd actually look for it: writing, voice, clipboard, screen, search, windows, documents, time, developer tools and privacy. All free, all offline unless it says otherwise.">
 <link rel="canonical" href="https://caduceus.vivaanshahani.com/features">
 <meta name="theme-color" content="#12131d">
 <meta name="author" content="Vivaan Shahani">
@@ -14,16 +14,16 @@
 <meta property="og:locale" content="en_GB">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://caduceus.vivaanshahani.com/features">
-<meta property="og:title" content="Caduceus features — every macOS command and tool">
-<meta property="og:description" content="Every Caduceus capability, grouped and explained: window management, developer tools, clipboard history, voice, screen OCR, system control and more. All free, all offline.">
+<meta property="og:title" content="Caduceus features — everything it does, grouped by task">
+<meta property="og:description" content="Every Caduceus capability, grouped the way you'd actually look for it: writing, voice, clipboard, screen, search, windows, documents, time, developer tools and privacy. All free, all offline unless it says otherwise.">
 <meta property="og:image" content="https://caduceus.vivaanshahani.com/og-image.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="The Caduceus mark beside the words “Caduceus — a fast, local-first command centre for your Mac”">
 
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="Caduceus features — every macOS command and tool">
-<meta name="twitter:description" content="Every Caduceus capability, grouped and explained: window management, developer tools, clipboard history, voice, screen OCR, system control and more. All free, all offline.">
+<meta name="twitter:title" content="Caduceus features — everything it does, grouped by task">
+<meta name="twitter:description" content="Every Caduceus capability, grouped the way you'd actually look for it: writing, voice, clipboard, screen, search, windows, documents, time, developer tools and privacy. All free, all offline unless it says otherwise.">
 <meta name="twitter:image" content="https://caduceus.vivaanshahani.com/og-image.png">
 <meta name="twitter:image:alt" content="The Caduceus mark beside the words “Caduceus — a fast, local-first command centre for your Mac”">
 
@@ -44,6 +44,10 @@
 </script>
 <link rel="stylesheet" href="theme.css">
 <style>
+  /* Code blocks scroll inside themselves rather than setting the page
+     width — the overflow that pushed the front page past a phone viewport. */
+  pre { max-width: 100%; overflow-x: auto; }
+
   :root {
     --radius: 14px;
     --page: 940px;
@@ -60,6 +64,7 @@
   .site-nav {
     display: flex;
     justify-content: center;
+    flex-wrap: wrap;
     gap: 20px;
     padding: 28px 0 8px;
     font-size: 0.9rem;
@@ -75,9 +80,39 @@
   }
   header { text-align: center; padding: 24px 0 40px; }
   h1 { margin: 0 0 8px; font-size: 2rem; letter-spacing: -0.02em; }
-  .sub { margin: 0 auto; max-width: 42ch; color: var(--ink-mute); }
-  section { padding: 40px 0; border-top: 1px solid var(--line); }
+  .sub { margin: 0 auto; max-width: 46ch; color: var(--ink-mute); }
+  section { padding: 32px 0; border-top: 1px solid var(--line); }
   h2 { margin: 0 0 20px; font-size: 1.25rem; }
+
+  .savings-cta {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 16px 20px;
+    margin: 0 0 28px;
+  }
+  .savings-cta p { margin: 0; font-size: 0.9rem; color: var(--ink-mute); }
+  .savings-cta a {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.88rem;
+    font-weight: 600;
+    text-decoration: none;
+    color: var(--ink);
+    background: var(--raised);
+    border: 1px solid var(--line);
+    padding: 8px 14px;
+    border-radius: 999px;
+  }
+  .savings-cta a:hover { border-color: var(--accent); color: var(--accent); }
+
   /* One collapsible section per group. <details> gives keyboard support,
      find-in-page expansion and deep links for free — no script involved. */
   .group {
@@ -136,25 +171,25 @@
     color: var(--ink-faint);
     font-variant-numeric: tabular-nums;
   }
-  .tag {
-    display: inline-block;
-    font-size: 0.62rem;
-    font-weight: 600;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    padding: 2px 6px;
-    border-radius: 4px;
-    margin-left: 8px;
-    vertical-align: middle;
-    background: rgb(var(--accent-rgb, 99 102 241) / 0.15);
-    color: var(--accent);
-  }
   .items { list-style: none; margin: 0; padding: 0 20px 8px; border-top: 1px solid var(--line); }
   .items > li { padding: 12px 0; border-bottom: 1px solid var(--line); }
   .items > li:last-child { border-bottom: 0; }
-  .items h3 { margin: 0; font-size: 0.92rem; font-weight: 600; color: var(--ink-soft); }
+  .items h3 { margin: 0; font-size: 0.92rem; font-weight: 600; color: var(--ink-soft); display: inline; }
+  .items .run-tag {
+    display: inline-block;
+    font-size: 0.6rem;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    padding: 1px 6px;
+    border-radius: 4px;
+    margin-left: 6px;
+    vertical-align: middle;
+    background: rgb(124 124 255 / 0.14);
+    color: var(--accent);
+  }
   .items p { margin: 4px 0 0; font-size: 0.88rem; line-height: 1.55; color: var(--ink-mute); }
-  section { padding: 32px 0; }
+
   #catalog-loading { text-align: center; color: var(--ink-faint); padding: 48px 0; }
   .filter-row {
     display: flex;
@@ -171,6 +206,23 @@
     background: var(--base);
     color: var(--ink);
     font: inherit;
+  }
+  .legend {
+    font-size: 0.8rem;
+    color: var(--ink-faint);
+    margin: 0 0 20px;
+  }
+  .legend .run-tag {
+    display: inline-block;
+    font-size: 0.6rem;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    padding: 1px 6px;
+    border-radius: 4px;
+    background: rgb(124 124 255 / 0.14);
+    color: var(--accent);
+    vertical-align: 1px;
   }
   footer {
     border-top: 1px solid var(--line);
@@ -211,13 +263,14 @@
   <nav class="site-nav" aria-label="Site">
     <a href="https://caduceus.vivaanshahani.com/">Overview</a>
     <a href="https://caduceus.vivaanshahani.com/features" aria-current="page">All features</a>
+    <a href="https://caduceus.vivaanshahani.com/savings">Savings</a>
     <a href="https://caduceus.vivaanshahani.com/docs">Docs</a>
     <a href="https://caduceus.vivaanshahani.com/configure-ai">Configure AI</a>
   </nav>
 
   <header>
     <h1>Everything Caduceus does</h1>
-    <p class="sub">Every capability, grouped and explained. All of it works offline, with no account and no API key, unless a description says otherwise.</p>
+    <p class="sub">Grouped the way you'd actually go looking for it — writing, voice, clipboard, screen, search, windows, documents, time, developer tools, privacy, and the rest — not the way the source tree happens to be organised.</p>
     <p class="sub" style="margin-top:-18px">
       Fully open source and customizable — no monetization, no data collection, no telemetry, no tracking.
       <a href="https://caduceus.vivaanshahani.com/#why">Why Caduceus →</a>
@@ -225,9 +278,17 @@
     <p class="sub" id="catalog-stats" style="margin-top:12px;font-size:0.85rem"></p>
   </header>
 
+  <div class="savings-cta">
+    <p>Already paying for Raycast, a dictation app, or a meeting-notes tool? See what Caduceus actually replaces, and what it honestly doesn't.</p>
+    <a href="https://caduceus.vivaanshahani.com/savings">Run the savings calculator →</a>
+  </div>
+
   <div class="filter-row wrap">
     <input type="search" id="feature-filter" placeholder="Filter features…" aria-label="Filter features">
   </div>
+  <p class="legend" id="catalog-legend" hidden>
+    <span class="run-tag">Command</span> — something you can type or search for in the palette right now. Everything else here is a setting, a permission, or how a piece of the app behaves.
+  </p>
 
   <div id="catalog-loading">Loading feature list…</div>
   <div id="catalog-root" hidden></div>
@@ -235,6 +296,7 @@
   <footer>
     <p>
       <a href="https://caduceus.vivaanshahani.com/">← Overview</a> ·
+      <a href="https://caduceus.vivaanshahani.com/savings">Savings calculator</a> ·
       <a href="https://caduceus.vivaanshahani.com/docs">Docs</a> ·
       <a href="https://github.com/GeoWizard4645/caduceus">Source on GitHub</a> ·
       <a href="mailto:caduceus@vivaanshahani.com">caduceus@vivaanshahani.com</a>
@@ -248,7 +310,7 @@
   var root = document.getElementById("catalog-root");
   var loading = document.getElementById("catalog-loading");
   var stats = document.getElementById("catalog-stats");
-  var catalog = null;
+  var legend = document.getElementById("catalog-legend");
 
   function escapeHtml(text) {
     return String(text).replace(/[&<>"]/g, function (c) {
@@ -260,31 +322,182 @@
     return !q || String(text).toLowerCase().indexOf(q) !== -1;
   }
 
-  /* Capabilities first, then the runnable commands, then what is deliberately
-     absent — the order the questions actually arrive in. */
-  function allGroups() {
-    var capabilities = catalog.groups || [];
-    var commands = (catalog.commandGroups || []).map(function (group) {
-      var copy = {};
-      for (var key in group) copy[key] = group[key];
-      copy.runnable = true;
-      return copy;
-    });
-    return capabilities
-      .filter(function (g) { return g.id !== "first-party-extensions"; })
-      .concat(commands)
-      .concat(capabilities.filter(function (g) { return g.id === "first-party-extensions"; }));
+  /* --------------------------------------------------------------------
+   * Re-grouping the catalogue by task instead of by source file.
+   *
+   * features-catalog.json ships two kinds of data: `groups` (hand-written
+   * facts about how the app behaves — settings, permissions, architecture)
+   * and `commandGroups` (mechanically regenerated from src/shared/commands.ts
+   * by `npm run catalog`, so it is always exactly what the palette can run).
+   *
+   * The IDs on both sides reflect how the code is organised, which is not
+   * how a person looks for something — nobody thinks "I need the `devenv`
+   * group." CATEGORY_OF_GROUP moves a whole source group into a
+   * user-facing bucket; ITEM_OVERRIDE moves individual items out of the
+   * three grab-bag groups (`utilities`, `command-center`, `files`,
+   * `app-shell`) that mix several kinds of thing together. Anything not
+   * mentioned here — including anything added to the registry later and
+   * picked up by a future `npm run catalog` — falls into "Other" rather
+   * than being silently dropped, so a rename never makes a real feature
+   * disappear from the page.
+   *
+   * The `tools` capability group is deliberately left out entirely: it is
+   * a hand-maintained list that predates several of the actual commands it
+   * describes, and two of its entries (image resize/convert, add-to-Notes
+   * as a standalone command) do not correspond to anything callable today.
+   * Everything real in it is already covered, more precisely, by the
+   * generated command groups below.
+   * ------------------------------------------------------------------ */
+
+  var CATEGORIES = [
+    { id: "search", title: "Search & launch", blurb: "The front door: open an app, do the maths, or fall through to a web search — all from the same bar." },
+    { id: "writing", title: "Writing", blurb: "Reshape whatever you type or paste — case, line order, cleanup — and, once you've pointed Caduceus at an AI backend, rewrite, summarise and draft in place." },
+    { id: "voice", title: "Voice & dictation", blurb: "Push-to-talk and live dictation through Apple's on-device speech recognition. No cloud unless you add one yourself." },
+    { id: "clipboard", title: "Clipboard", blurb: "Local history in SQLite, optionally encrypted at rest, with nothing leaving the machine." },
+    { id: "screen", title: "Screen", blurb: "Screenshots, screen recording, and reading text off whatever is on screen — recognised on-device, never uploaded as an image." },
+    { id: "windows", title: "Windows", blurb: "Snap, resize and move the frontmost window of any application. Needs the Accessibility permission, granted once." },
+    { id: "documents", title: "Documents & the web", blurb: "Get the text out of a web page or a meeting, and cite what you read. There is no PDF reader yet — that one isn't wired up to anything you can run." },
+    { id: "time", title: "Time & calendar", blurb: "World clocks, timers, a pomodoro cycle, and putting things on — or reading what's on — Apple Calendar." },
+    { id: "developer", title: "Developer tools", blurb: "Encoders, hashes, identifiers, formatters and inspectors, plus what's running on this machine: ports, repos, SSH hosts, containers. All local — a JWT should never be pasted into a website to be read." },
+    { id: "files", title: "Files & Finder", blurb: "Actions on the current Finder selection. Deletion always means the Trash, never an unrecoverable remove." },
+    { id: "system", title: "System & power", blurb: "macOS settings, the session, power, and a live read on what this Mac is doing right now — CPU, memory, disk, network, and the processes using them." },
+    { id: "sound", title: "Sound & media", blurb: "Volume, input and output devices, and whatever is playing in Music, Spotify, or your call." },
+    { id: "automation", title: "Shortcuts & automation", blurb: "Your own entries in the palette: URLs, applications, shell commands, AppleScript, and Apple Shortcuts you already built. Prefixes are data, not code — every one can be renamed or deleted." },
+    { id: "ai", title: "AI & agents (optional)", blurb: "Off until you configure it. Local models are first-class; cloud keys live in the Keychain, never in a settings file." },
+    { id: "privacy", title: "Privacy & permissions", blurb: "What Caduceus asks macOS for, why, and what it deliberately does not ask for at all." },
+    { id: "app", title: "Customize the app", blurb: "The floating staff, the Command Center itself, appearance, hotkeys, and how extensions plug in." },
+    { id: "everyday", title: "Everyday utilities", blurb: "The small things that are faster to type than to go and find." },
+    { id: "other", title: "Other", blurb: "Anything new in the registry this page hasn't been taught to sort yet — shown here rather than dropped." },
+  ];
+
+  var CATEGORY_OF_GROUP = {
+    // capability groups (hand-written)
+    voice: "voice",
+    clipboard: "clipboard",
+    capture: "screen",
+    privacy: "privacy",
+    shortcuts: "automation",
+    prefixes: "automation",
+    ai: "ai",
+    "app-shell": "app",
+    staff: "app",
+    "command-center": "app",
+    appearance: "app",
+    extensions: "app",
+    system: "system", // capability group "System monitor"
+    // command groups (generated from commands.ts)
+    windows: "windows",
+    text: "writing",
+    developer: "developer",
+    devenv: "developer",
+    files: "files",
+    network: "system",
+    sound: "sound",
+    screen: "screen",
+    // "system" (commandGroup) and "system" (capability group) share an id
+    // and are merged deliberately — both belong under System & power.
+  };
+
+  // Items pulled out of grab-bag groups by exact name. Anything in one of
+  // these groups NOT listed here stays in the group's default bucket.
+  var ITEM_OVERRIDE = {
+    "command-center": {
+      "App launcher": "search",
+      "Calculator": "search",
+      "Web search fallback": "search",
+    },
+    "app-shell": {
+      "Open from Spotlight / Applications": "search",
+    },
+    files: {
+      "Find a file": "search",
+      "Largest files": "search",
+    },
+    utilities: {
+      "Sticky notes": "everyday",
+      "Ask about part of my screen": "screen",
+      "Ask about this window": "screen",
+      "Summarise a web page": "documents",
+      "Add a calendar event": "time",
+      "What is on today": "time",
+      "Time management": "time",
+      "QR code": "everyday",
+      "Colors": "everyday",
+      "Convert units": "everyday",
+      "Meeting notes": "documents",
+      "Cite this page": "documents",
+      "Eject all disks": "everyday",
+      "Keep this Mac awake  ·  awake …": "time",
+      "Allow this Mac to sleep": "time",
+      "Define a word  ·  define …": "everyday",
+      "About this Mac": "everyday",
+      "Check Caduceus's permissions": "privacy",
+      "Clipboard history": "clipboard",
+      "System monitor": "system",
+      "Open the Manage window  ·  manage …": "system",
+      "Chrome: new tab": "automation",
+      "Chrome: new window": "automation",
+      "Chrome: new incognito window": "automation",
+      "Chrome: copy this page's address": "automation",
+      "Chrome: copy this page's title": "automation",
+      "Chrome: copy every open tab": "automation",
+      "Safari: copy this page's address": "automation",
+      "Run an Apple Shortcut  ·  shortcut …": "automation",
+      "List your Apple Shortcuts": "automation",
+    },
+  };
+
+  function categoryFor(sourceGroupId, itemName) {
+    var override = ITEM_OVERRIDE[sourceGroupId];
+    if (override && override[itemName]) return override[itemName];
+    return CATEGORY_OF_GROUP[sourceGroupId] || "other";
   }
 
+  function buildCategorized(catalog) {
+    var byId = {};
+    CATEGORIES.forEach(function (c) {
+      byId[c.id] = { id: c.id, title: c.title, blurb: c.blurb, items: [], seen: {} };
+    });
+
+    function absorb(sourceGroups, runnable) {
+      (sourceGroups || []).forEach(function (group) {
+        if (group.id === "tools" || group.id === "first-party-extensions") return;
+        group.items.forEach(function (item) {
+          var catId = categoryFor(group.id, item.name);
+          var bucket = byId[catId] || byId.other;
+          // The source JSON has a couple of exact-name duplicates (Trash
+          // entries listed once under "files" for the tidy-up action and
+          // once for the confirm-before-emptying one); keep the first.
+          if (bucket.seen[item.name]) return;
+          bucket.seen[item.name] = true;
+          bucket.items.push({ name: item.name, detail: item.detail, runnable: runnable });
+        });
+      });
+    }
+
+    absorb(catalog.groups, false);
+    absorb(catalog.commandGroups, true);
+
+    return CATEGORIES.map(function (c) { return byId[c.id]; }).filter(function (c) {
+      return c.items.length > 0;
+    });
+  }
+
+  function comingSoon(catalog) {
+    var group = (catalog.groups || []).filter(function (g) { return g.id === "first-party-extensions"; })[0];
+    return group || null;
+  }
+
+  var categorized = null;
+  var upcoming = null;
+
   function render() {
-    if (!catalog || !root) return;
+    if (!categorized || !root) return;
     var q = ((filterEl && filterEl.value) || "").trim().toLowerCase();
     var html = "";
     var shown = 0;
 
-    allGroups().forEach(function (group) {
-      /* A group whose own title matches keeps every item: searching "window"
-         should show the window section, not the two entries repeating the word. */
+    categorized.forEach(function (group) {
       var items = matches(q, group.title)
         ? group.items
         : group.items.filter(function (item) {
@@ -293,16 +506,11 @@
       if (!items.length) return;
       shown += items.length;
 
-      var upcoming = group.id === "first-party-extensions";
-      /* Filtering forces every matching group open: a hit inside a collapsed
-         section is the same as no hit at all. */
       html +=
-        '<details class="group" data-upcoming="' + upcoming + '"' + (q ? " open" : "") + ">" +
+        '<details class="group"' + (q ? " open" : "") + ">" +
         "<summary>" +
         '<span class="chev" aria-hidden="true">&rsaquo;</span>' +
         '<span class="head"><h2>' + escapeHtml(group.title) + "</h2>" +
-        (group.runnable ? '<span class="tag">Commands</span>' : "") +
-        (upcoming ? '<span class="tag-soon">Coming soon</span>' : "") +
         (group.blurb ? "<p>" + escapeHtml(group.blurb) + "</p>" : "") +
         "</span>" +
         '<span class="count">' + items.length + "</span>" +
@@ -311,11 +519,35 @@
       items.forEach(function (item) {
         html +=
           "<li><h3>" + escapeHtml(item.name) + "</h3>" +
+          (item.runnable ? '<span class="run-tag">Command</span>' : "") +
           (item.detail ? "<p>" + escapeHtml(item.detail) + "</p>" : "") +
           "</li>";
       });
       html += "</ul></details>";
     });
+
+    if (upcoming && matches(q, upcoming.title) || (upcoming && upcoming.items.some(function (i) { return matches(q, i.name) || matches(q, i.detail || ""); }))) {
+      var upItems = matches(q, upcoming.title)
+        ? upcoming.items
+        : upcoming.items.filter(function (i) { return matches(q, i.name) || matches(q, i.detail || ""); });
+      if (upItems.length) {
+        shown += upItems.length;
+        html +=
+          '<details class="group" data-upcoming="true"' + (q ? " open" : "") + ">" +
+          "<summary>" +
+          '<span class="chev" aria-hidden="true">&rsaquo;</span>' +
+          '<span class="head"><h2>' + escapeHtml(upcoming.title) + "</h2>" +
+          '<span class="tag-soon">Coming soon</span>' +
+          (upcoming.blurb ? "<p>" + escapeHtml(upcoming.blurb) + "</p>" : "") +
+          "</span>" +
+          '<span class="count">' + upItems.length + "</span>" +
+          "</summary><ul class=\"items\">";
+        upItems.forEach(function (item) {
+          html += "<li><h3>" + escapeHtml(item.name) + "</h3>" + (item.detail ? "<p>" + escapeHtml(item.detail) + "</p>" : "") + "</li>";
+        });
+        html += "</ul></details>";
+      }
+    }
 
     root.innerHTML =
       html || '<p style="text-align:center;color:var(--ink-faint);padding:48px 0">Nothing matches that.</p>';
@@ -325,15 +557,16 @@
   fetch("features-catalog.json")
     .then(function (r) { return r.json(); })
     .then(function (data) {
-      catalog = data;
-      var capabilities = (data.groups || []).filter(function (g) { return g.id !== "first-party-extensions"; });
-      var total = capabilities.reduce(function (n, g) { return n + g.items.length; }, 0);
+      categorized = buildCategorized(data);
+      upcoming = comingSoon(data);
+      var total = categorized.reduce(function (n, g) { return n + g.items.length; }, 0);
       var commands = (data.commandGroups || []).reduce(function (n, g) { return n + g.items.length; }, 0);
       if (stats) {
-        stats.textContent = total + commands + " capabilities · " + commands + " of them commands you can run";
+        stats.textContent = total + " capabilities across " + categorized.length + " areas · " + commands + " of them commands you can run today";
       }
       if (loading) loading.hidden = true;
       if (root) root.hidden = false;
+      if (legend) legend.hidden = false;
       render();
       if (filterEl) filterEl.addEventListener("input", render);
     })

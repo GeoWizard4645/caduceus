@@ -20,6 +20,7 @@
 //! last because they can fail without preventing the app from running.
 
 pub mod agent;
+pub mod appicons;
 pub mod apps;
 pub mod autostart;
 pub mod backdrop;
@@ -31,8 +32,11 @@ pub mod commands;
 pub mod extensions;
 pub mod fn_keys;
 pub mod hotkeys;
+pub mod mcp;
+pub mod meeting;
 pub mod notes;
 pub mod palette;
+pub mod popbar;
 pub mod settings;
 pub mod shortcuts;
 pub mod sysmon;
@@ -43,7 +47,9 @@ pub mod uninstall;
 pub mod update;
 pub mod usage;
 pub mod voice;
+pub mod widgets;
 pub mod window;
+pub mod workflows;
 
 use tauri::{Emitter, Manager, RunEvent, WindowEvent};
 
@@ -86,6 +92,17 @@ pub fn run() {
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
                 .with_handler(|app, shortcut, event| {
+                    // The PopBar gets first refusal.
+                    //
+                    // It registers a second, temporary hotkey for Escape while
+                    // its bar is open — a non-key panel never receives a
+                    // keydown, so that is the only way it can be dismissed from
+                    // the keyboard. Letting `hotkeys::handle` see that Escape
+                    // first would mean a key that means "close this" reaching
+                    // whatever else happens to be listening.
+                    if popbar::handle_shortcut(app, shortcut, event.state()) {
+                        return;
+                    }
                     hotkeys::handle(app, shortcut, event.state());
                 })
                 .build(),
@@ -97,6 +114,8 @@ pub fn run() {
             commands::reset_settings,
             commands::get_runtime_info,
             commands::check_for_update,
+            commands::run_installer_update,
+            commands::install_command,
             commands::validate_hotkey,
             // secrets
             commands::set_backend_api_key,
@@ -135,10 +154,114 @@ pub fn run() {
             commands::awake_start,
             commands::awake_stop,
             commands::awake_status,
+            commands::time_list_zones,
+            commands::time_convert,
+            commands::time_start_timer,
+            commands::time_list_timers,
+            commands::time_dismiss_timer,
+            commands::time_stopwatch_start,
+            commands::time_stopwatch_stop,
+            commands::time_stopwatch_lap,
+            commands::time_stopwatch_reset,
+            commands::time_stopwatch_status,
+            commands::time_pomodoro_start,
+            commands::time_pomodoro_stop,
+            commands::time_pomodoro_status,
             commands::open_manage_window,
             commands::set_palette_floating,
             commands::search_files,
             commands::define_word,
+            tools::markets_widget::widgets_fetch_crypto,
+            tools::markets_widget::widgets_fetch_stocks,
+            tools::markets_widget::widgets_fetch_kalshi,
+            tools::markets_widget::widgets_fetch_polymarket,
+            tools::markets_widget::widgets_fetch_scoreboard,
+            tools::markets_widget::widgets_fetch_f1,
+            meeting::meeting_open_popout,
+            meeting::meeting_transcribe_system_audio,
+            popbar::popbar_pending,
+            popbar::popbar_run,
+            popbar::popbar_dismiss,
+            widgets::widgets_create,
+            widgets::widgets_destroy,
+            widgets::widgets_list,
+            widgets::widgets_move,
+            widgets::widgets_resize,
+            widgets::widgets_save_layout,
+            widgets::widgets_set_capture_rect,
+            appicons::extract_app_icon_cmd,
+            tools::security_cmds::security_generate_passphrase,
+            tools::security_cmds::security_clipboard_auto_clear,
+            tools::security_cmds::security_cancel_auto_clear,
+            tools::security_cmds::security_mic_muted,
+            tools::security_cmds::security_set_mic_muted,
+            tools::security_cmds::security_activity_log,
+            tools::security_cmds::security_firewall_state,
+            tools::security_cmds::security_open_firewall_settings,
+            tools::security_cmds::security_touch_id_available,
+            tools::security_cmds::security_lock_file,
+            tools::security_cmds::security_unlock_file,
+            tools::browser_cmds::browser_search_tabs,
+            tools::browser_cmds::browser_switch_tab,
+            tools::browser_cmds::browser_search_bookmarks,
+            tools::browser_cmds::browser_recent_downloads,
+            tools::expander::expander_list_snippets,
+            tools::expander::expander_save_snippet,
+            tools::expander::expander_delete_snippet,
+            tools::expander::expander_preview,
+            tools::expander::expander_expand_and_insert,
+            tools::expander::expander_markdown_preview,
+            tools::expander::expander_copy_markdown_as_rich_text,
+            tools::expander::expander_search_emoji,
+            tools::expander::expander_proofread,
+            mcp::mcp_list_servers,
+            mcp::mcp_server_status,
+            mcp::mcp_add_server,
+            mcp::mcp_update_server,
+            mcp::mcp_remove_server,
+            mcp::mcp_connect_server,
+            mcp::mcp_disconnect_server,
+            mcp::mcp_list_tools,
+            mcp::mcp_call_tool,
+            workflows::workflows_stage_from_url,
+            workflows::workflows_list_pending,
+            workflows::workflows_dismiss_pending,
+            workflows::workflows_commit_import,
+            commands::routing_preview,
+            commands::semantic_index_stats,
+            commands::semantic_index_sync,
+            commands::semantic_index_cancel,
+            commands::semantic_search,
+            commands::window_preset_save,
+            commands::window_preset_restore,
+            commands::window_preset_list,
+            commands::window_preset_delete,
+            commands::menu_bar_items,
+            commands::menu_bar_invoke,
+            commands::contacts_search,
+            commands::contacts_copy,
+            commands::list_fonts,
+            commands::recent_files,
+            commands::compress_image,
+            commands::resize_image_to_preset,
+            commands::strip_image_metadata,
+            commands::find_duplicate_images,
+            commands::background_removal_available,
+            commands::vision_describe_region,
+            commands::vision_describe_active_window,
+            commands::pdf_summary,
+            commands::pdf_ask,
+            commands::article_summary,
+            commands::youtube_summary,
+            commands::run_extra_tool,
+            commands::run_curl,
+            commands::git_commit_assist,
+            commands::inspect_dependencies,
+            commands::text_ai_run,
+            commands::create_calendar_event,
+            commands::calendar_events_today,
+            commands::calendar_events_between,
+            commands::create_reminder,
             commands::generate_qr,
             commands::front_tab_url,
             commands::convert_image,
@@ -295,6 +418,11 @@ pub fn run() {
             commands::record_usage,
             commands::seed_usage,
             commands::clear_usage,
+            // regex tester
+            commands::regex_test,
+            commands::regex_explain,
+            // cron parser
+            commands::parse_cron,
             // misc
             commands::quit_app,
         ])
@@ -303,6 +431,16 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("failed to build Caduceus")
         .run(|app, event| {
+            // A `caduceus://` URL can arrive from any web page, so this only
+            // ever *stages* it. `handle_deep_link` parses, validates against a
+            // closed schema and puts the result in the inbox; committing is a
+            // separate, explicit act with the manifest on screen.
+            #[cfg(target_os = "macos")]
+            if let RunEvent::Opened { urls } = &event {
+                for url in urls {
+                    workflows::handle_deep_link(app, url.as_str());
+                }
+            }
             if let RunEvent::ExitRequested { api, .. } = event {
                 // Cancelled while a recording or a dictation session finishes.
                 // `begin_shutdown` calls `exit` itself once the teardown is
@@ -406,6 +544,7 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     // Loaded before the windows so the palette's first render already has it.
     app.manage(usage::UsageStore::open(data_dir.join(usage::USAGE_FILE)));
     app.manage(tools::awake::AwakeRuntime::new());
+    app.manage(tools::timekeeping::TimekeepingRuntime::new());
     app.manage(tools::rates::RateCache::new());
     app.manage(tools::sorter::Session::new());
     app.manage(window::PaletteFloating::default());
@@ -417,6 +556,10 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     app.manage(capture::CaptureRuntime::new());
     app.manage(capture::recorder::RecorderRuntime::new());
     app.manage(sysmon::SysMonitor::new());
+    // Staged workflow imports live here. Nothing in the inbox has been applied
+    // — it is a holding area precisely so a `caduceus://` link cannot change
+    // anything before a human has read what it would do.
+    app.manage(workflows::WorkflowInbox::new());
 
     // --- windows ----------------------------------------------------------
     if let Some(staff) = window::staff(&handle) {
@@ -427,6 +570,20 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
             window::configure_staff_floating(&staff);
         }
     }
+    // Widgets are reopened after the staff has been placed, not before: both
+    // ask macOS to make a floating panel, and doing the staff first means the
+    // window the user actually expects to see is on screen even if restoring a
+    // saved widget goes wrong.
+    //
+    // A failure here is deliberately swallowed. A widget that cannot be rebuilt
+    // — its saved geometry now off every attached display, say — is not a
+    // reason to take the rest of the app down with it.
+    popbar::register_hotkey(&handle);
+
+    if let Err(error) = widgets::restore_saved_widgets(&handle) {
+        log::warn!("could not restore saved widgets: {error}");
+    }
+
     if let Some(w) = handle.get_webview_window(window::COMMAND_CENTER_WINDOW) {
         window::apply_vibrancy(&w);
         // Set up the panel now rather than on the first hotkey press. It is the

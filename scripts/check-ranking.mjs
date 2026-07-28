@@ -155,6 +155,68 @@ try {
     `"rectangle" finds a window command (got "${rectangle?.title}")`,
     rectangle?.id.startsWith("window."),
   );
+
+  // --- a trigger word must not delete the alternatives -------------------
+  //
+  // Everything above scores the registry. It cannot see the *control flow* in
+  // `commandProvider`, and that is where this went wrong: a bare trigger word
+  // took an early return that yielded only the triggered command, so typing
+  // "color" hid the Colors page (`tool.color_convert` owns that trigger) while
+  // "colour" worked. Fifteen trigger words were hiding twenty-nine commands.
+  //
+  // So this bundles the provider itself and asks it, which is the only way to
+  // catch a regression in the branch rather than in the scoring.
+  const providerBundle = join(scratch, "providers.mjs");
+  await build({
+    entryPoints: [join(root, "src/shared/providers.ts")],
+    outfile: providerBundle,
+    bundle: true,
+    format: "esm",
+    platform: "node",
+    logLevel: "silent",
+    alias: { "@tauri-apps/api/core": stub, "@tauri-apps/plugin-dialog": stub },
+  });
+  const { commandProvider } = await import(pathToFileURL(providerBundle).href);
+
+  const settings = {
+    general: { personalization: { isDeveloper: false, primaryFocus: "launcher", favoriteCommandIds: [] } },
+  };
+  const actions = {
+    close() {}, setInput() {}, openTab() {}, notify() {}, showOutput() {},
+  };
+  const ask = async (query) =>
+    await commandProvider.search({
+      query, raw: query, parsed: null, settings, clipboard: [], actions,
+    });
+
+  for (const [query, expectedId] of [
+    ["color", "page.colors"],
+    ["hex", "page.colors"],
+    ["sort", "page.desktop-sort"],
+    ["base64", "tool.base64_decode"],
+    ["random", "tool.uuid"],
+  ]) {
+    const rows = await ask(query);
+    check(
+      `"${query}" still offers ${expectedId} alongside its trigger command`,
+      rows.some((row) => row.id === `command:${expectedId}`),
+    );
+  }
+
+  // The trigger match must still win, or naming a command exactly stops working.
+  const colorRows = await ask("color");
+  check(
+    `"color" still ranks its trigger command first (got "${colorRows[0]?.title}")`,
+    colorRows[0]?.id === "command:tool.color_convert",
+  );
+
+  // With an argument the trigger row is the whole answer — fuzzy-matching the
+  // argument as well would bury the thing you actually named.
+  const withInput = await ask("sha256 hello");
+  check(
+    "a trigger with an argument returns only that command",
+    withInput.length === 1 && withInput[0].id === "command:tool.sha256",
+  );
 } finally {
   await rm(scratch, { recursive: true, force: true });
 }

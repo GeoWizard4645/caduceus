@@ -470,6 +470,30 @@ pub fn supports_profiles(browser_id: &str) -> bool {
         .is_some_and(Candidate::chromium)
 }
 
+/// Find a Chromium candidate by the string an `OpenApp` shortcut's `target`
+/// carries — a bundle id on macOS, an executable name elsewhere — rather than
+/// by our own internal id. Case-insensitive because bundle ids are typed by
+/// hand into Settings and macOS itself treats them without regard to case.
+fn candidate_by_launch_target(target: &str) -> Option<&'static Candidate> {
+    let target = target.trim();
+    CANDIDATES
+        .iter()
+        .find(|c| c.chromium() && c.launch_target.eq_ignore_ascii_case(target))
+}
+
+/// The binary for a Chromium browser an `OpenApp` shortcut is launching, if
+/// that browser is installed and findable on disk.
+///
+/// `open_app` needs this for the exact reason `open_url` launches Chromium
+/// browsers by binary instead of through `open -b/-a … --args`: macOS only
+/// forwards `--args` when it starts the app fresh. If the browser is already
+/// running — the common case — `open` hands the request to that process and
+/// silently drops everything after `--args`, so a shortcut like "open Chrome
+/// in my Work profile" just reopens whatever profile happened to be active.
+pub fn chromium_binary_for_target(target: &str) -> Option<PathBuf> {
+    executable(candidate_by_launch_target(target)?)
+}
+
 /// The default Chromium launch target on this platform, for the seeded
 /// "Chrome" shortcut.
 pub fn default_chrome_launch_target() -> &'static str {
@@ -478,4 +502,53 @@ pub fn default_chrome_launch_target() -> &'static str {
         .find(|c| c.id == "chrome")
         .map(|c| c.launch_target)
         .unwrap_or("google-chrome")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // These pin down `candidate_by_launch_target` — the matching `open_app`
+    // relies on to know whether a shortcut's target needs the `--args`
+    // workaround — without touching disk, so they run the same whether or not
+    // the browser is actually installed on the machine running the tests.
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn matches_a_chromium_bundle_id() {
+        let c = candidate_by_launch_target("com.google.Chrome").unwrap();
+        assert_eq!(c.id, "chrome");
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn matching_is_case_insensitive() {
+        // Bundle ids are hand-typed into Settings; macOS itself does not care
+        // about case, so a shortcut should not silently miss the workaround
+        // over a capitalization mismatch.
+        let c = candidate_by_launch_target("COM.GOOGLE.CHROME").unwrap();
+        assert_eq!(c.id, "chrome");
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn tolerates_surrounding_whitespace() {
+        let c = candidate_by_launch_target("  com.google.Chrome  ").unwrap();
+        assert_eq!(c.id, "chrome");
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn non_chromium_browsers_are_excluded() {
+        // Safari has no `--profile-directory` equivalent, so routing it
+        // through a binary instead of `open -b` would buy nothing and only
+        // risks resolving a path `open` would have found some other way.
+        assert!(candidate_by_launch_target("com.apple.Safari").is_none());
+    }
+
+    #[test]
+    fn unknown_targets_do_not_match() {
+        assert!(candidate_by_launch_target("com.example.NotABrowser").is_none());
+        assert!(candidate_by_launch_target("").is_none());
+    }
 }
