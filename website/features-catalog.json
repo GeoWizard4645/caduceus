@@ -1485,6 +1485,10 @@
           "detail": "Compress and convert, resize to a preset, strip EXIF and GPS before sharing a photo, and find duplicates in a folder. Originals are never overwritten — every result is written beside the file it came from."
         },
         {
+          "name": "Add a widget",
+          "detail": "Pins a small always-on-top panel above every app and every Space — a clock, a crypto or stock ticker, a sports scoreboard, or a Kalshi/Polymarket board. Drag it anywhere; it remembers its spot across restarts."
+        },
+        {
           "name": "Privacy and security",
           "detail": "A passphrase generator, a clipboard that clears itself, a microphone mute, a log of which apps recently used the camera or microphone, and a file vault. The vault uses Argon2id — a forgotten passphrase means the file is gone, and it says so before you encrypt anything."
         },

@@ -251,7 +251,8 @@ export type ToolPageId =
   | "search"
   | "documents"
   | "security"
-  | "snippets";
+  | "snippets"
+  | "widgets";
 
 /**
  * The form a command's page should render.
@@ -2637,6 +2638,25 @@ const PAGE_COMMANDS: CommandDef[] = [
     reach: 72,
     run: ({ actions }) => {
       actions.openTab({ kind: "tool", commandId: "page.images", title: "Images" });
+      return false;
+    },
+  },
+  {
+    id: "page.widgets",
+    title: "Add a widget",
+    detail:
+      "Pins a small always-on-top panel above every app and every Space — a clock, a crypto or stock ticker, a sports scoreboard, or a Kalshi/Polymarket board. Drag it anywhere; it remembers its spot across restarts.",
+    group: "utilities",
+    icon: "⬚",
+    keywords: [
+      "widget", "widgets", "pin", "float", "floating", "desktop", "dashboard",
+      "ticker", "crypto", "stock", "stocks", "sports", "scoreboard", "kalshi",
+      "polymarket", "clock", "always on top", "overlay", "panel",
+    ],
+    page: "widgets",
+    reach: 58,
+    run: ({ actions }) => {
+      actions.openTab({ kind: "tool", commandId: "page.widgets", title: "Add a widget" });
       return false;
     },
   },
