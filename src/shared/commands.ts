@@ -251,7 +251,12 @@ export type ToolPageId =
   | "search"
   | "documents"
   | "security"
-  | "snippets";
+  | "snippets"
+  | "habits"
+  | "birthdays"
+  | "subscriptions"
+  | "totp"
+  | "wallpaper";
 
 /**
  * The form a command's page should render.
@@ -2586,6 +2591,240 @@ const PAGE_COMMANDS: CommandDef[] = [
       return false;
     },
   },
+
+  {
+    id: "csv-clean",
+    title: "Clean a CSV / table",
+    detail:
+      "Trims whitespace, normalises the delimiter, straightens ragged rows and removes exact-duplicate rows from pasted or uploaded table data. Runs entirely on this Mac.",
+    group: "utilities",
+    icon: "▦",
+    keywords: [
+      "csv", "table", "clean", "cleaner", "tsv", "spreadsheet", "delimiter",
+      "dedupe", "duplicate rows", "ragged", "trim", "data cleaning",
+    ],
+    form: {
+      fields: [
+        {
+          kind: "text",
+          id: "input",
+          label: "Paste CSV / table data",
+          multiline: true,
+          mono: true,
+          required: true,
+          file: true,
+          fileTypes: ["csv", "tsv", "txt"],
+        },
+        {
+          kind: "select",
+          id: "delimiter",
+          label: "Delimiter",
+          options: [
+            { value: "", label: "Auto-detect" },
+            { value: ",", label: "Comma" },
+            { value: ";", label: "Semicolon" },
+            { value: "\t", label: "Tab" },
+            { value: "|", label: "Pipe" },
+          ],
+          default: "",
+        },
+        { kind: "toggle", id: "trim", label: "Trim whitespace", default: "true" },
+        { kind: "toggle", id: "dedupe", label: "Remove duplicate rows", default: "true" },
+        { kind: "toggle", id: "hasHeader", label: "First row is a header", default: "true" },
+      ],
+    },
+    reach: 40,
+    run: async ({ values, actions }) => {
+      const input = values.input ?? "";
+      if (!input.trim()) {
+        actions.notify("Paste some table data first.", "error");
+        return false;
+      }
+      try {
+        const result = await api.csvClean(input, {
+          delimiter: values.delimiter || undefined,
+          trim: values.trim !== "false",
+          dedupe: values.dedupe !== "false",
+          hasHeader: values.hasHeader !== "false",
+        });
+        actions.showOutput({
+          title: "Cleaned CSV",
+          text: result.csv,
+          message: `${result.rows} rows × ${result.columns} columns — removed ${result.duplicatesRemoved} duplicate row${result.duplicatesRemoved === 1 ? "" : "s"}, fixed ${result.raggedRowsFixed} ragged row${result.raggedRowsFixed === 1 ? "" : "s"}. Delimiter used: ${result.detectedDelimiter === "\t" ? "tab" : result.detectedDelimiter}.`,
+        });
+        return false;
+      } catch (error) {
+        actions.notify(api.errorMessage(error), "error");
+        return false;
+      }
+    },
+  },
+  {
+    id: "redact-text",
+    title: "Redact personal info (PII)",
+    detail:
+      "Finds emails, phone numbers, Social Security numbers, credit card numbers and IP addresses in text and replaces each with a placeholder. Runs entirely on this Mac — nothing is sent anywhere.",
+    group: "text",
+    icon: "▣",
+    keywords: [
+      "redact", "redactor", "pii", "privacy", "email", "phone", "ssn",
+      "social security", "credit card", "ip address", "anonymize", "mask", "sanitize",
+    ],
+    form: {
+      fields: [
+        { kind: "text", id: "input", label: "Text to redact", multiline: true, required: true, file: true },
+        {
+          kind: "text",
+          id: "replacement",
+          label: "Replacement",
+          default: "[REDACTED]",
+          hint: "Use {KIND} to name which kind matched, e.g. [REDACTED:{KIND}].",
+        },
+        { kind: "toggle", id: "email", label: "Email addresses", default: "true" },
+        { kind: "toggle", id: "phone", label: "Phone numbers", default: "true" },
+        { kind: "toggle", id: "ssn", label: "Social Security numbers", default: "true" },
+        { kind: "toggle", id: "credit_card", label: "Credit card numbers", default: "true" },
+        { kind: "toggle", id: "ip_address", label: "IP addresses", default: "true" },
+      ],
+    },
+    reach: 42,
+    run: async ({ values, actions }) => {
+      const input = values.input ?? "";
+      if (!input.trim()) {
+        actions.notify("Paste some text first.", "error");
+        return false;
+      }
+      const allKinds: api.PiiKind[] = ["email", "phone", "ssn", "credit_card", "ip_address"];
+      const kinds = allKinds.filter((k) => values[k] !== "false");
+      try {
+        const result = await api.redactText(input, kinds, values.replacement || undefined);
+        actions.showOutput({
+          title: "Redacted text",
+          text: result.text,
+          message:
+            result.matches.length === 0
+              ? "Nothing matched — text is unchanged."
+              : `Redacted ${result.matches.length} match${result.matches.length === 1 ? "" : "es"}.`,
+        });
+        return false;
+      } catch (error) {
+        actions.notify(api.errorMessage(error), "error");
+        return false;
+      }
+    },
+  },
+  {
+    id: "page.habits",
+    title: "Habit tracker",
+    detail:
+      "Create habits, tap a day to mark it done, and watch the streak. Stored locally — nothing leaves this Mac.",
+    group: "utilities",
+    icon: "◉",
+    keywords: ["habit", "habits", "streak", "tracker", "daily", "routine", "goal"],
+    page: "habits",
+    reach: 55,
+    run: ({ actions }) => {
+      actions.openTab({ kind: "tool", commandId: "page.habits", title: "Habit Tracker" });
+      return false;
+    },
+  },
+  {
+    id: "page.birthdays",
+    title: "Birthdays",
+    detail:
+      "Add a person and their birthday; see who's coming up next, soonest first. Stored locally.",
+    group: "utilities",
+    icon: "\u{1f382}",
+    keywords: ["birthday", "birthdays", "anniversary", "upcoming", "reminder"],
+    page: "birthdays",
+    reach: 50,
+    run: ({ actions }) => {
+      actions.openTab({ kind: "tool", commandId: "page.birthdays", title: "Birthdays" });
+      return false;
+    },
+  },
+  {
+    id: "page.subscriptions",
+    title: "Subscription tracker",
+    detail:
+      "Track what you pay, how often, and when it renews next — with a running monthly and yearly total. Stored locally.",
+    group: "utilities",
+    icon: "▤",
+    keywords: ["subscription", "subscriptions", "billing", "renewal", "recurring", "budget", "cost"],
+    page: "subscriptions",
+    reach: 52,
+    run: ({ actions }) => {
+      actions.openTab({ kind: "tool", commandId: "page.subscriptions", title: "Subscriptions" });
+      return false;
+    },
+  },
+  {
+    id: "page.totp",
+    title: "2FA code picker",
+    detail:
+      "Store a TOTP secret and watch the current 6-digit code with a countdown. The secret lives only in the macOS keychain.",
+    group: "utilities",
+    icon: "\u{1f510}",
+    keywords: ["2fa", "totp", "authenticator", "mfa", "otp", "two factor", "security code"],
+    page: "totp",
+    reach: 48,
+    run: ({ actions }) => {
+      actions.openTab({ kind: "tool", commandId: "page.totp", title: "2FA Codes" });
+      return false;
+    },
+  },
+  {
+    id: "page.wallpaper",
+    title: "Set desktop wallpaper",
+    detail: "Choose an image and set it as your desktop picture, across every desktop and Space.",
+    group: "utilities",
+    icon: "▢",
+    keywords: ["wallpaper", "desktop picture", "background", "screen"],
+    page: "wallpaper",
+    reach: 35,
+    run: ({ actions }) => {
+      actions.openTab({ kind: "tool", commandId: "page.wallpaper", title: "Wallpaper" });
+      return false;
+    },
+  },
+  {
+    id: "window-opacity",
+    title: "Set window opacity",
+    detail:
+      "Dims one of Caduceus's own windows — the staff or the Command Center, never another app's window. macOS only.",
+    group: "utilities",
+    icon: "◐",
+    keywords: ["opacity", "transparency", "window", "dim", "staff", "command center", "fade"],
+    form: {
+      fields: [
+        {
+          kind: "select",
+          id: "target",
+          label: "Window",
+          options: [
+            { value: "staff", label: "Staff" },
+            { value: "command_center", label: "Command Center" },
+          ],
+          default: "staff",
+        },
+        { kind: "number", id: "opacity", label: "Opacity (%)", min: 5, max: 100, step: 5, default: "100" },
+      ],
+    },
+    reach: 18,
+    run: async ({ values, actions }) => {
+      const target = (values.target || "staff") as api.OpacityTarget;
+      const percent = Math.max(5, Math.min(100, Number(values.opacity ?? "100") || 100));
+      try {
+        await api.windowSetOpacity(target, percent / 100);
+        actions.notify(`Opacity set to ${percent}%.`);
+        return false;
+      } catch (error) {
+        actions.notify(api.errorMessage(error), "error");
+        return false;
+      }
+    },
+  },
+
   {
     id: "page.search",
     title: "Search my files by meaning",

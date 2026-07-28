@@ -25,6 +25,11 @@ const CLIPBOARD_KEY_ACCOUNT: &str = "clipboard-encryption-key";
 /// Account name for the speech-to-text endpoint key.
 const STT_KEY_ACCOUNT: &str = "stt-api-key";
 
+/// Keychain account name for a TOTP account's shared secret.
+fn totp_account(id: &str) -> String {
+    format!("totp.{id}.secret")
+}
+
 #[derive(Debug, Error)]
 pub enum SecretError {
     #[error("no OS keychain is available on this system: {0}")]
@@ -127,6 +132,32 @@ pub fn get_stt_api_key_opt() -> Option<String> {
 
 pub fn has_stt_api_key() -> bool {
     get_stt_api_key_opt().is_some()
+}
+
+// ---------------------------------------------------------------------------
+// TOTP (2FA code picker) shared secrets
+// ---------------------------------------------------------------------------
+//
+// The base32 secret is the one thing a TOTP entry has that must never touch
+// disk in the clear: anyone who reads it can mint the same six-digit codes
+// forever. Everything else about an account (its label, issuer, digit count,
+// period) is harmless metadata and lives in `tools::totp`'s own JSON store,
+// exactly the split `BackendConfig`/`has_api_key` already makes for provider
+// keys above.
+
+pub fn set_totp_secret(id: &str, secret_base32: &str) -> SecretResult<()> {
+    entry(&totp_account(id))?.set_password(secret_base32).map_err(SecretError::from)
+}
+
+pub fn get_totp_secret(id: &str) -> SecretResult<String> {
+    entry(&totp_account(id))?.get_password().map_err(SecretError::from)
+}
+
+pub fn delete_totp_secret(id: &str) -> SecretResult<()> {
+    match entry(&totp_account(id))?.delete_credential() {
+        Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
+        Err(e) => Err(SecretError::from(e)),
+    }
 }
 
 // ---------------------------------------------------------------------------

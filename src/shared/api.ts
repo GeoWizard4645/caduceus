@@ -1527,3 +1527,237 @@ export interface RoutingDecision {
 
 export const routingPreview = (prompt: string) =>
   invoke<RoutingDecision>("routing_preview", { prompt });
+
+// --- CSV / table cleaner ----------------------------------------------------
+//
+// Mirrors `src-tauri/src/tools/csv_clean.rs`: a hand-written RFC 4180-style
+// parser/writer, not a new `csv` crate dependency.
+
+export interface CsvCleanOptions {
+  /** A single character to split fields on; omit to auto-detect. */
+  delimiter?: string;
+  trim?: boolean;
+  dedupe?: boolean;
+  hasHeader?: boolean;
+}
+
+export interface CsvCleanResult {
+  csv: string;
+  rows: number;
+  columns: number;
+  duplicatesRemoved: number;
+  raggedRowsFixed: number;
+  detectedDelimiter: string;
+}
+
+export const csvClean = (input: string, options?: CsvCleanOptions) =>
+  invoke<CsvCleanResult>("csv_clean", { input, options });
+
+// --- Redactor ----------------------------------------------------------------
+//
+// Mirrors `src-tauri/src/tools/redactor.rs`.
+
+export type PiiKind = "email" | "phone" | "ssn" | "credit_card" | "ip_address";
+
+export interface RedactMatch {
+  kind: PiiKind;
+  text: string;
+  start: number;
+  end: number;
+}
+
+export interface RedactResult {
+  text: string;
+  matches: RedactMatch[];
+}
+
+/** Redact PII in `text`. `kinds` empty means "check everything". `replacement`
+ * may contain `{KIND}`, substituted with the matched kind's label. */
+export const redactText = (text: string, kinds: PiiKind[], replacement?: string) =>
+  invoke<RedactResult>("redact_text", { text, kinds, replacement });
+
+// --- Habit tracker -----------------------------------------------------------
+//
+// Mirrors `src-tauri/src/tools/habits.rs`. Its own JSON store, not
+// `Settings` — see that module's docs.
+
+export interface Habit {
+  id: string;
+  name: string;
+  /** YYYY-MM-DD, the day the habit was created. */
+  createdAt: string;
+  /** `#rrggbb`, or empty for "no colour chosen". */
+  color: string;
+  /** Every day this habit was marked done, as YYYY-MM-DD. */
+  completions: string[];
+}
+
+export interface StreakInfo {
+  current: number;
+  longest: number;
+  totalCompletions: number;
+}
+
+export const habitsList = () => invoke<Habit[]>("habits_list");
+
+export const habitsCreate = (name: string, color?: string) =>
+  invoke<Habit>("habits_create", { name, color });
+
+export const habitsDelete = (id: string) => invoke<void>("habits_delete", { id });
+
+/** Flip whether `date` (YYYY-MM-DD) is marked done for this habit. */
+export const habitsToggleDay = (id: string, date: string) =>
+  invoke<Habit>("habits_toggle_day", { id, date });
+
+export const habitsStreak = (id: string) => invoke<StreakInfo>("habits_streak", { id });
+
+// --- Birthdays -----------------------------------------------------------------
+//
+// Mirrors `src-tauri/src/tools/birthdays.rs`.
+
+export interface Birthday {
+  id: string;
+  name: string;
+  month: number;
+  day: number;
+  /** The birth year, if known — drives "turning N". */
+  year: number | null;
+  notes: string;
+}
+
+/** A birthday with its next occurrence resolved — what `birthdaysList` returns. */
+export interface UpcomingBirthday extends Birthday {
+  /** ISO date of the next time this birthday occurs, today included. */
+  nextOccurrence: string;
+  daysUntil: number;
+  /** The age they turn on `nextOccurrence`, if `year` is known. */
+  turning: number | null;
+}
+
+export const birthdaysList = () => invoke<UpcomingBirthday[]>("birthdays_list");
+
+export const birthdaysAdd = (
+  name: string,
+  month: number,
+  day: number,
+  year?: number | null,
+  notes?: string,
+) => invoke<Birthday>("birthdays_add", { name, month, day, year: year ?? null, notes });
+
+export const birthdaysUpdate = (
+  id: string,
+  name: string,
+  month: number,
+  day: number,
+  year?: number | null,
+  notes?: string,
+) => invoke<Birthday>("birthdays_update", { id, name, month, day, year: year ?? null, notes });
+
+export const birthdaysDelete = (id: string) => invoke<void>("birthdays_delete", { id });
+
+// --- Subscription tracker -------------------------------------------------------
+//
+// Mirrors `src-tauri/src/tools/subscriptions.rs`.
+
+export type BillingCycle = "weekly" | "monthly" | "quarterly" | "yearly";
+
+export interface Subscription {
+  id: string;
+  name: string;
+  cost: number;
+  cycle: BillingCycle;
+  /** YYYY-MM-DD — the next *known* renewal at the time this was saved; see
+   * the Rust module for why a stale date here is not a data-entry error. */
+  renewalDate: string;
+  notes: string;
+}
+
+export interface UpcomingSubscription extends Subscription {
+  /** `renewalDate` rolled forward past today. */
+  nextRenewal: string;
+  daysUntil: number;
+  /** `cost` converted to a monthly rate, for comparing across cycles. */
+  monthlyEquivalent: number;
+}
+
+export interface SubscriptionSummary {
+  count: number;
+  monthlyTotal: number;
+  yearlyTotal: number;
+}
+
+export const subscriptionsList = () => invoke<UpcomingSubscription[]>("subscriptions_list");
+
+export const subscriptionsSummary = () => invoke<SubscriptionSummary>("subscriptions_summary");
+
+export const subscriptionsAdd = (
+  name: string,
+  cost: number,
+  cycle: BillingCycle,
+  renewalDate: string,
+  notes?: string,
+) => invoke<Subscription>("subscriptions_add", { name, cost, cycle, renewalDate, notes });
+
+export const subscriptionsUpdate = (
+  id: string,
+  name: string,
+  cost: number,
+  cycle: BillingCycle,
+  renewalDate: string,
+  notes?: string,
+) => invoke<Subscription>("subscriptions_update", { id, name, cost, cycle, renewalDate, notes });
+
+export const subscriptionsDelete = (id: string) => invoke<void>("subscriptions_delete", { id });
+
+// --- 2FA code picker -------------------------------------------------------------
+//
+// Mirrors `src-tauri/src/tools/totp.rs`. The secret itself never round-trips
+// through these calls after `totpAddAccount` — it lives only in the OS
+// keychain from then on; see that module's docs.
+
+export interface TotpAccount {
+  id: string;
+  label: string;
+  issuer: string;
+  digits: number;
+  period: number;
+}
+
+export interface TotpCurrentCode {
+  code: string;
+  secondsRemaining: number;
+  period: number;
+}
+
+export const totpListAccounts = () => invoke<TotpAccount[]>("totp_list_accounts");
+
+export const totpAddAccount = (
+  label: string,
+  issuer: string | undefined,
+  secret: string,
+  digits?: number,
+  period?: number,
+) => invoke<TotpAccount>("totp_add_account", { label, issuer, secret, digits, period });
+
+export const totpDeleteAccount = (id: string) => invoke<void>("totp_delete_account", { id });
+
+export const totpCurrentCode = (id: string) => invoke<TotpCurrentCode>("totp_current_code", { id });
+
+// --- Wallpaper switching ---------------------------------------------------------
+//
+// Mirrors `src-tauri/src/tools/wallpaper.rs`. Sets every desktop/Space's
+// picture via `osascript` — nothing installed, no private API.
+
+export const wallpaperSet = (path: string) => invoke<ToolOutcome>("wallpaper_set", { path });
+
+// --- Own-window opacity -----------------------------------------------------------
+//
+// Mirrors `window::set_window_opacity` in `src-tauri/src/window/mod.rs`.
+// Scoped to Caduceus's own windows — there is no macOS API for dimming a
+// window that belongs to another process, and this deliberately does not
+// reach for the private one. macOS only.
+
+export type OpacityTarget = "staff" | "command_center";
+
+export const windowSetOpacity = (target: OpacityTarget, opacity: number) =>
+  invoke<void>("window_set_opacity", { target, opacity });
