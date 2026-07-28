@@ -2,27 +2,20 @@
 //! system-audio half of a finished call recording into text once the call is
 //! over.
 //!
-//! # Wiring this module still needs — deliberately not done here
+//! # Wiring status
 //!
-//! This file was written under a rule that `lib.rs` gets exactly one new
-//! line (`pub mod meeting;`) and nothing else, so the two commands below are
-//! **not** in `generate_handler!` yet and the pop-out window is **not** yet
-//! allow-listed for any capability. Both are ordinary, mechanical additions
-//! for whoever wires this in:
-//!
-//! 1. Add `meeting::meeting_open_popout` and
-//!    `meeting::meeting_transcribe_system_audio` to the `generate_handler!`
-//!    list in `lib.rs`, next to every other command there.
-//! 2. Add `"meeting-popout"` to the `windows` allow-list in
-//!    `src-tauri/capabilities/default.json`. That file says it plainly: "a
-//!    window missing from it silently loses every permission below,
-//!    including the ability to receive events at all." Without this the
-//!    pop-out opens as a blank, inert window — it can call no command
-//!    (including the two below) and will never see a `voice-partial`. The
-//!    same appears to already be true of every dynamically-created
-//!    `widget-<uuid>` window, which is not in that list either; not this
-//!    module's file to fix, but worth checking before assuming the pop-out
-//!    is somehow special-cased.
+//! Both commands below (`meeting_open_popout` and
+//! `meeting_transcribe_system_audio`) are registered in the
+//! `generate_handler!` list in `lib.rs`, and `"meeting-popout"` is in the
+//! `windows` allow-list in `src-tauri/capabilities/default.json` alongside
+//! `widget-*`. That file says it plainly: "a window missing from it silently
+//! loses every permission below, including the ability to receive events at
+//! all" — a window left off would open blank and inert, unable to call any
+//! command or see a `voice-partial`, but the pop-out is not in that state:
+//! it is fully wired end to end, with the frontend at
+//! `src/meeting/MeetingPopout.tsx` and `src/meeting/meetingApi.ts` calling
+//! both commands by name, and reachable from the palette via `page.meeting`
+//! (see `src/command-center/pages/tools/MeetingPage.tsx`).
 //!
 //! # Why system audio is not transcribed live — the honest answer
 //!
