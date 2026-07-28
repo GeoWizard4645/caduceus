@@ -3,14 +3,129 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Caduceus — a command centre for your Mac</title>
-<meta name="description" content="A private, local-first command centre for macOS — fully open source and customizable, with no monetization, no data collection, no telemetry, and no tracking.">
+<title>Caduceus — open-source macOS command palette and launcher</title>
+<meta name="description" content="A fast, local-first command centre for macOS: app launcher, calculator, clipboard history, on-device voice and an optional AI agent. Open source, no accounts, no tracking.">
 
-<meta property="og:title" content="Caduceus">
-<meta property="og:description" content="Private, secure, and as local as you want. Open source, customizable, and free — no accounts, no tracking.">
+
+<link rel="canonical" href="https://caduceus.vivaanshahani.com/">
+<meta name="theme-color" content="#12131d">
+<meta name="author" content="Vivaan Shahani">
+<meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1">
+
+<meta property="og:site_name" content="Caduceus">
+<meta property="og:locale" content="en_GB">
 <meta property="og:type" content="website">
+<meta property="og:url" content="https://caduceus.vivaanshahani.com/">
+<meta property="og:title" content="Caduceus — open-source macOS command palette and launcher">
+<meta property="og:description" content="A fast, local-first command centre for macOS: app launcher, calculator, clipboard history, on-device voice and an optional AI agent. Open source, no accounts, no tracking.">
+<meta property="og:image" content="https://caduceus.vivaanshahani.com/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="The Caduceus mark beside the words “Caduceus — a fast, local-first command centre for your Mac”">
+
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Caduceus — open-source macOS command palette and launcher">
+<meta name="twitter:description" content="A fast, local-first command centre for macOS: app launcher, calculator, clipboard history, on-device voice and an optional AI agent. Open source, no accounts, no tracking.">
+<meta name="twitter:image" content="https://caduceus.vivaanshahani.com/og-image.png">
+<meta name="twitter:image:alt" content="The Caduceus mark beside the words “Caduceus — a fast, local-first command centre for your Mac”">
 
 <link rel="icon" href="caduceus-mark.png">
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "SoftwareApplication",
+      "@id": "https://caduceus.vivaanshahani.com/#app",
+      "name": "Caduceus",
+      "alternateName": "Caduceus for macOS",
+      "description": "A fast, local-first command centre for macOS: a floating staff, a command palette that launches apps and does maths, searchable clipboard history, on-device push-to-talk voice, and an optional AI agent that can drive the machine when asked. Works fully offline with no account and no API key.",
+      "applicationCategory": "UtilitiesApplication",
+      "applicationSubCategory": "Productivity",
+      "operatingSystem": "macOS 11.0 or later",
+      "processorRequirements": "Apple Silicon or Intel",
+      "softwareVersion": "3.3.2",
+      "fileSize": "12MB",
+      "downloadUrl": "https://github.com/GeoWizard4645/caduceus/releases/latest",
+      "installUrl": "https://caduceus.vivaanshahani.com/",
+      "softwareHelp": {
+        "@id": "https://caduceus.vivaanshahani.com/docs"
+      },
+      "releaseNotes": "https://github.com/GeoWizard4645/caduceus/releases",
+      "license": "https://www.gnu.org/licenses/gpl-3.0.html",
+      "isAccessibleForFree": true,
+      "image": "https://caduceus.vivaanshahani.com/og-image.png",
+      "screenshot": "https://caduceus.vivaanshahani.com/og-image.png",
+      "url": "https://caduceus.vivaanshahani.com/",
+      "sameAs": [
+        "https://github.com/GeoWizard4645/caduceus"
+      ],
+      "author": {
+        "@id": "https://caduceus.vivaanshahani.com/#author"
+      },
+      "publisher": {
+        "@id": "https://caduceus.vivaanshahani.com/#author"
+      },
+      "offers": {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "USD",
+        "availability": "https://schema.org/InStock"
+      },
+      "featureList": [
+        "Command palette with fuzzy app launcher",
+        "Inline calculator and unit conversion",
+        "Searchable clipboard history with optional encryption at rest",
+        "On-device push-to-talk voice transcription",
+        "Window management and system controls",
+        "Screen OCR, colour picker and QR codes",
+        "Developer tools: hashing, JSON, UUID, base64",
+        "Optional AI agent via Hermes, Ollama or any OpenAI-compatible endpoint",
+        "One-file JavaScript extensions with a permission-checked API"
+      ]
+    },
+    {
+      "@type": "SoftwareSourceCode",
+      "@id": "https://caduceus.vivaanshahani.com/#source",
+      "name": "Caduceus source",
+      "codeRepository": "https://github.com/GeoWizard4645/caduceus",
+      "programmingLanguage": [
+        "Rust",
+        "TypeScript"
+      ],
+      "runtimePlatform": "Tauri",
+      "license": "https://www.gnu.org/licenses/gpl-3.0.html",
+      "about": {
+        "@id": "https://caduceus.vivaanshahani.com/#app"
+      }
+    },
+    {
+      "@type": "Person",
+      "@id": "https://caduceus.vivaanshahani.com/#author",
+      "name": "Vivaan Shahani",
+      "url": "https://vivaanshahani.com",
+      "sameAs": [
+        "https://github.com/GeoWizard4645"
+      ]
+    },
+    {
+      "@type": "WebSite",
+      "@id": "https://caduceus.vivaanshahani.com/#website",
+      "url": "https://caduceus.vivaanshahani.com/",
+      "name": "Caduceus",
+      "inLanguage": "en-GB",
+      "publisher": {
+        "@id": "https://caduceus.vivaanshahani.com/#author"
+      },
+      "about": {
+        "@id": "https://caduceus.vivaanshahani.com/#app"
+      }
+    }
+  ]
+}
+</script>
+
 <script>
 (function () {
   var k = "caduceus-site-theme";

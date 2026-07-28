@@ -1,6 +1,6 @@
 [package]
 name = "caduceus"
-version = "3.2.1"
+version = "3.3.2"
 description = "Caduceus — a fast, local-first AI command center for your desktop."
 authors = ["Caduceus contributors"]
 license = "GPL-3.0-or-later"
