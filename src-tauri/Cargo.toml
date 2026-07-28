@@ -91,6 +91,10 @@ sysinfo = { version = "0.39", default-features = false, features = ["system", "d
 qrcodegen = "1.8"
 regex = "1.13.1"
 argon2 = "0.5.3"
+# ---- 2FA code picker -------------------------------------------------------
+# RFC 6238 TOTP generation, including base32 secret decoding (`Secret::Encoded`)
+# so this is the only new dependency the feature needs.
+totp-rs = { version = "5", features = ["gen_secret"] }
 
 # ---- Platform-specific ----------------------------------------------------
 [target.'cfg(target_os = "macos")'.dependencies]

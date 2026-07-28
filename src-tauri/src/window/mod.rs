@@ -888,6 +888,51 @@ pub fn set_palette_floating<R: Runtime>(app: &AppHandle<R>, floating: bool) -> R
 }
 
 
+/// Which of Caduceus's own windows [`set_window_opacity`] can dim.
+///
+/// Deliberately not "any window" — a foreign window's opacity is not
+/// something this process is allowed to touch at all (see
+/// `tools::knowledge`'s "always-on-top gap" for the same boundary on window
+/// level), so the only sensible reading of "opacity control" for a launcher
+/// like this one is *its own* windows: the staff and the Command Center.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum OpacityTarget {
+    Staff,
+    CommandCenter,
+}
+
+/// Set how much of the desktop shows through one of Caduceus's own windows —
+/// not the webview content's CSS opacity, the whole window, chrome included.
+///
+/// macOS only: `NSWindow.alphaValue` is the mechanism, and there is no
+/// equivalent this crate already reaches for on Windows or Linux. Asking on
+/// another platform is a clear, readable error rather than a silent no-op.
+pub fn set_window_opacity<R: Runtime>(
+    app: &AppHandle<R>,
+    target: OpacityTarget,
+    opacity: f32,
+) -> Result<(), String> {
+    let window = match target {
+        OpacityTarget::Staff => staff(app),
+        OpacityTarget::CommandCenter => command_center(app),
+    };
+    let Some(window) = window else {
+        return Err("That window is not open right now.".into());
+    };
+
+    #[cfg(target_os = "macos")]
+    {
+        macos::set_window_opacity(&window, opacity);
+        Ok(())
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = (window, opacity);
+        Err("Window opacity control is only available on macOS.".into())
+    }
+}
+
 /// Open the chat window, optionally on a specific thread.
 ///
 /// Like Settings, this is a window you read and type in for minutes at a time,

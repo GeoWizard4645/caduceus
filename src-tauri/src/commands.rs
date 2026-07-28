@@ -2820,6 +2820,18 @@ pub fn set_palette_floating<R: Runtime>(app: AppHandle<R>, floating: bool) -> Re
     window::set_palette_floating(&app, floating)
 }
 
+/// Dim one of Caduceus's own windows (the staff or the Command Center) —
+/// scoped to windows this process owns; see `window::OpacityTarget`. macOS
+/// only.
+#[tauri::command]
+pub fn window_set_opacity<R: Runtime>(
+    app: AppHandle<R>,
+    target: window::OpacityTarget,
+    opacity: f32,
+) -> Res<()> {
+    window::set_window_opacity(&app, target, opacity)
+}
+
 // ---------------------------------------------------------------------------
 // Regex tester
 // ---------------------------------------------------------------------------

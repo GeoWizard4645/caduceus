@@ -15,6 +15,7 @@ import type { ComponentType } from "react";
 import type { ToolPageId } from "@/shared/commands";
 import type { ToolPageProps } from "../ToolPage";
 
+import { BirthdaysPage } from "./BirthdaysPage";
 import { CitationsPage } from "./CitationsPage";
 import { ColorsPage } from "./ColorsPage";
 import { ConvertPage } from "./ConvertPage";
@@ -25,6 +26,7 @@ import { DesktopShapesPage } from "./DesktopShapesPage";
 import { DesktopSortPage } from "./DesktopSortPage";
 import { DocumentsPage } from "./DocumentsPage";
 import { GitCommitPage } from "./GitCommitPage";
+import { HabitsPage } from "./HabitsPage";
 import { ImagesPage } from "./ImagesPage";
 import { MeetingPage } from "./MeetingPage";
 import { PermissionsSetupPage } from "./PermissionsSetupPage";
@@ -37,7 +39,10 @@ import { SecurityPage } from "./SecurityPage";
 import { SnippetsPage } from "./SnippetsPage";
 import { StickyNotesPage } from "./StickyNotesPage";
 import { StoragePage } from "./StoragePage";
+import { SubscriptionsPage } from "./SubscriptionsPage";
 import { TimePage } from "./TimePage";
+import { TotpPage } from "./TotpPage";
+import { WallpaperPage } from "./WallpaperPage";
 import { WidgetsPage } from "./WidgetsPage";
 
 export const TOOL_PAGES: Record<ToolPageId, ComponentType<ToolPageProps>> = {
@@ -65,4 +70,9 @@ export const TOOL_PAGES: Record<ToolPageId, ComponentType<ToolPageProps>> = {
   curl: CurlPage,
   "git-commit": GitCommitPage,
   dependencies: DependenciesPage,
+  habits: HabitsPage,
+  birthdays: BirthdaysPage,
+  subscriptions: SubscriptionsPage,
+  totp: TotpPage,
+  wallpaper: WallpaperPage,
 };

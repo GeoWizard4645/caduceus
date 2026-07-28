@@ -177,6 +177,43 @@ pub fn present_command_center<R: Runtime>(window: &WebviewWindow<R>) {
     configure_overlay(window, panel::Kind::Command, Present::WithoutActivating);
 }
 
+/// Set the window's overall alpha value — how much of the desktop behind it
+/// shows through the whole window, chrome included, not just its CSS opacity.
+///
+/// This is the "opacity control" the roadmap asked for, deliberately scoped
+/// to windows this process owns: `NSWindow.alphaValue` is a property the
+/// *owning* process sets on its own window, the same boundary documented at
+/// length in `tools::knowledge`'s "always-on-top gap" section — nothing here
+/// can dim a window belonging to another app, and nothing here tries to.
+///
+/// Same main-thread hop as [`configure_overlay`], for the same reason:
+/// AppKit calls from a Tokio worker thread abort the process.
+pub fn set_window_opacity<R: Runtime>(window: &WebviewWindow<R>, opacity: f32) {
+    let opacity = opacity.clamp(0.05, 1.0) as f64;
+    let handle = window.clone();
+    let (done_tx, done_rx) = mpsc::sync_channel(1);
+
+    let scheduled = window.run_on_main_thread(move || {
+        if let Ok(raw) = handle.ns_window() {
+            // SAFETY: `ns_window()` hands back this window's live `NSWindow`,
+            // and this closure runs on the main thread.
+            unsafe {
+                let ns_window: &NSWindow = &*raw.cast();
+                ns_window.setAlphaValue(opacity);
+            }
+        }
+        let _ = done_tx.send(());
+    });
+
+    if scheduled.is_err() {
+        log::warn!("could not schedule opacity change on the main thread");
+        return;
+    }
+    if done_rx.recv_timeout(MAIN_THREAD_TIMEOUT).is_err() {
+        log::warn!("timed out waiting for opacity change on the main thread");
+    }
+}
+
 /// Keep the window where the user is, even once it is holding tabs.
 ///
 /// This used to hand the window back to AppKit wholesale — `Default` collection

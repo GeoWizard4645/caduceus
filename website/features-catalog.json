@@ -1265,6 +1265,10 @@
           "detail": "Snippets with placeholders that fill themselves in — today’s date, next week’s, whatever is on the clipboard — plus emoji searched by meaning rather than name, Markdown pasted as styled text, and a proofreader for what a spellchecker cannot see."
         },
         {
+          "name": "Redact personal info (PII)",
+          "detail": "Finds emails, phone numbers, Social Security numbers, credit card numbers and IP addresses in text and replaces each with a placeholder. Runs entirely on this Mac — nothing is sent anywhere."
+        },
+        {
           "name": "Lorem ipsum",
           "detail": "Three sentences of placeholder text."
         },
@@ -1515,6 +1519,34 @@
         {
           "name": "What is on today",
           "detail": "Today’s remaining calendar events, read straight from Apple Calendar. Does not launch Calendar to look."
+        },
+        {
+          "name": "Clean a CSV / table",
+          "detail": "Trims whitespace, normalises the delimiter, straightens ragged rows and removes exact-duplicate rows from pasted or uploaded table data. Runs entirely on this Mac."
+        },
+        {
+          "name": "Habit tracker",
+          "detail": "Create habits, tap a day to mark it done, and watch the streak. Stored locally — nothing leaves this Mac."
+        },
+        {
+          "name": "Birthdays",
+          "detail": "Add a person and their birthday; see who's coming up next, soonest first. Stored locally."
+        },
+        {
+          "name": "Subscription tracker",
+          "detail": "Track what you pay, how often, and when it renews next — with a running monthly and yearly total. Stored locally."
+        },
+        {
+          "name": "2FA code picker",
+          "detail": "Store a TOTP secret and watch the current 6-digit code with a countdown. The secret lives only in the macOS keychain."
+        },
+        {
+          "name": "Set desktop wallpaper",
+          "detail": "Choose an image and set it as your desktop picture, across every desktop and Space."
+        },
+        {
+          "name": "Set window opacity",
+          "detail": "Dims one of Caduceus's own windows — the staff or the Command Center, never another app's window. macOS only."
         },
         {
           "name": "Search my files by meaning",
