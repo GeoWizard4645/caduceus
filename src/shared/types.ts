@@ -635,6 +635,78 @@ export type ExtraToolId =
   | "sql_format"
   | "hosts_view";
 
+/**
+ * A parsed `curl` invocation. Mirrors `tools::devextra::CurlRequest`.
+ *
+ * `headers` and `basicAuth` are tuples rather than a record because a
+ * request may repeat a header, and serde serialises a Rust tuple as a plain
+ * two-element array.
+ */
+export interface CurlRequest {
+  method: string;
+  url: string;
+  headers: [string, string][];
+  body: string | null;
+  basicAuth: [string, string] | null;
+  followRedirects: boolean;
+  /** Recorded from `-k`/`--insecure`, but never acted on — TLS is always verified. */
+  insecure: boolean;
+  compressed: boolean;
+  /** Flags this parser recognised but does not model, e.g. `-o file`. */
+  ignoredFlags: string[];
+}
+
+/** The result of replaying a parsed `curl` command. Mirrors `tools::devextra::HttpPlaygroundResult`. */
+export interface HttpPlaygroundResult {
+  ok: boolean;
+  request: CurlRequest;
+  status: number | null;
+  statusText: string | null;
+  headers: [string, string][];
+  body: string;
+  bodyTruncated: boolean;
+  error: string | null;
+}
+
+/** One file's entry in `git status --porcelain`. Mirrors `tools::devextra::GitFileChange`. */
+export interface GitFileChange {
+  path: string;
+  status: string;
+}
+
+/**
+ * Git status for a repository, plus a commit message drafted from the diff.
+ * Mirrors `tools::devextra::GitCommitAssist`. Read-only end to end — nothing
+ * that produces this ever stages or commits.
+ */
+export interface GitCommitAssist {
+  ok: boolean;
+  branch: string | null;
+  staged: GitFileChange[];
+  unstaged: GitFileChange[];
+  suggestedMessage: string | null;
+  error: string | null;
+}
+
+/** How tightly a dependency's version is pinned. Mirrors `tools::devextra::PinKind`. */
+export type PinKind = "exact" | "range" | "unpinned" | "other";
+
+/** Mirrors `tools::devextra::DependencyEntry`. */
+export interface DependencyEntry {
+  name: string;
+  version: string;
+  group: string;
+  pin: PinKind;
+}
+
+/** Mirrors `tools::devextra::DependencyReport`. */
+export interface DependencyReport {
+  manifest: string;
+  entries: DependencyEntry[];
+  exactCount: number;
+  looseCount: number;
+}
+
 // --- extensions --------------------------------------------------------------
 
 export interface Extension {

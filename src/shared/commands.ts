@@ -25,7 +25,7 @@
 import * as api from "./api";
 import { PERMISSION_WALL } from "./permissions";
 import type { Tab } from "./tabs";
-import type { MediaAction, SystemAction, ToolId, WindowVerb } from "./types";
+import type { ExtraToolId, MediaAction, SystemAction, ToolId, WindowVerb } from "./types";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -252,7 +252,10 @@ export type ToolPageId =
   | "documents"
   | "security"
   | "snippets"
-  | "widgets";
+  | "widgets"
+  | "curl"
+  | "git-commit"
+  | "dependencies";
 
 /**
  * The form a command's page should render.
@@ -444,6 +447,30 @@ async function tool(actions: CommandActions, id: ToolId, input: string): Promise
       text: result.output,
       message: `${result.message}${suffix}`.trim(),
     });
+    return false;
+  } catch (error) {
+    actions.notify(api.errorMessage(error), "error");
+    return false;
+  }
+}
+
+/**
+ * Run one of the second bench's plain-text tools (`tools::devextra`) and show
+ * whatever it produced.
+ *
+ * A separate function from {@link tool} rather than a shared one parameterised
+ * over the invoke call: `run_extra_tool`'s `ToolResult` never sets `autoCopy`
+ * (see `ok_result` in `devextra.rs`), so the copy-and-suffix dance `tool` does
+ * would always be dead code here.
+ */
+async function extraTool(actions: CommandActions, id: ExtraToolId, input: string): Promise<CommandResult> {
+  try {
+    const result = await api.runExtraTool(id, input);
+    if (!result.ok) {
+      actions.notify(result.message, "error");
+      return false;
+    }
+    actions.showOutput({ title: result.title, text: result.output, message: result.message });
     return false;
   } catch (error) {
     actions.notify(api.errorMessage(error), "error");
@@ -1227,6 +1254,123 @@ const TOOL_COMMANDS: CommandDef[] = TOOL_SPECS.map((spec) => ({
   trigger: spec.trigger,
   argument: spec.argument,
   run: ({ input, actions }) => tool(actions, spec.id, input),
+}));
+
+// ---------------------------------------------------------------------------
+// The second tool bench (`tools::devextra`)
+// ---------------------------------------------------------------------------
+//
+// Hand-rolled formatters and inspectors that needed something a plain
+// string-in-string-out `ToolId` cannot express — see the header comment on
+// `devextra.rs` for why these live apart from `TOOL_SPECS` above.
+
+interface ExtraToolSpec {
+  id: ExtraToolId;
+  title: string;
+  detail: string;
+  group: CommandGroupId;
+  icon: string;
+  keywords: string[];
+  trigger?: string;
+  argument?: string;
+}
+
+const EXTRA_TOOL_SPECS: ExtraToolSpec[] = [
+  {
+    id: "yaml_format",
+    title: "Format YAML",
+    detail:
+      "Pretty-prints the block and flow YAML people actually write — comments and multi-document ‘---’ streams included. Anchors, aliases, explicit tags and merge keys are reported as errors rather than silently reshaped.",
+    group: "developer",
+    icon: "☰",
+    keywords: ["yaml", "yml", "format", "pretty", "indent", "config", "beautify"],
+    trigger: "yaml",
+    argument: "YAML to format",
+  },
+  {
+    id: "yaml_validate",
+    title: "Validate YAML",
+    detail:
+      "Checks whether text is valid YAML without changing it, under the same rules as the formatter — anchors, aliases and merge keys are refused rather than guessed at.",
+    group: "developer",
+    icon: "☰",
+    keywords: ["yaml", "yml", "validate", "lint", "check", "well-formed"],
+    argument: "YAML to validate",
+  },
+  {
+    id: "xml_format",
+    title: "Format XML",
+    detail:
+      "Checks well-formedness the way a browser's parser would — matching tags, quoted attributes, exactly one root, no bare & or < — and pretty-prints what parses. Not DTD or schema validation, since neither is fetched.",
+    group: "developer",
+    icon: "<>",
+    keywords: ["xml", "format", "pretty", "indent", "markup"],
+    trigger: "xml",
+    argument: "XML to format",
+  },
+  {
+    id: "xml_validate",
+    title: "Validate XML",
+    detail: "Checks whether markup is well-formed XML, without changing it.",
+    group: "developer",
+    icon: "<>",
+    keywords: ["xml", "validate", "lint", "well-formed", "check", "markup"],
+    argument: "XML to validate",
+  },
+  {
+    id: "html_entity_encode",
+    title: "HTML entity encode",
+    detail:
+      "The wide version: escapes the five markup-significant characters by name and every other non-ASCII character as a numeric reference — not just the five “HTML escape” covers.",
+    group: "developer",
+    icon: "&",
+    keywords: ["html", "entity", "entities", "encode", "escape", "unicode", "numeric reference"],
+    trigger: "htmlentity",
+    argument: "text to encode",
+  },
+  {
+    id: "html_entity_decode",
+    title: "HTML entity decode",
+    detail:
+      "Decodes the classic named HTML entity set (©, —, ½, Greek letters and more) plus decimal and hex numeric references back to text. An entity missing its ‘;’, or naming something unknown, is left exactly as written.",
+    group: "developer",
+    icon: "&",
+    keywords: ["html", "entity", "entities", "decode", "unescape", "numeric reference"],
+    trigger: "unhtmlentity",
+    argument: "entities to decode",
+  },
+  {
+    id: "sql_format",
+    title: "Format SQL",
+    detail:
+      "Breaks a query onto readable lines: one major clause per line, joins and boolean conjunctions indented beneath, keywords uppercased, strings and identifiers left alone. A line-breaker, not a full parser — it works across dialects rather than getting one exactly right.",
+    group: "developer",
+    icon: "⌗",
+    keywords: ["sql", "format", "query", "pretty", "beautify", "database"],
+    trigger: "sql",
+    argument: "SQL to format",
+  },
+  {
+    id: "hosts_view",
+    title: "View /etc/hosts",
+    detail:
+      "Every alias entry in /etc/hosts, this machine's local overrides for name resolution. Read-only — editing needs root, which this never asks for.",
+    group: "network",
+    icon: "⌁",
+    keywords: ["hosts", "etc hosts", "dns", "alias", "localhost", "domain", "resolve", "127.0.0.1"],
+  },
+];
+
+const EXTRA_TOOL_COMMANDS: CommandDef[] = EXTRA_TOOL_SPECS.map((spec) => ({
+  id: `extra.${spec.id}`,
+  title: spec.title,
+  detail: spec.detail,
+  group: spec.group,
+  icon: spec.icon,
+  keywords: spec.keywords,
+  trigger: spec.trigger,
+  argument: spec.argument,
+  run: ({ input, actions }) => extraTool(actions, spec.id, input),
 }));
 
 // ---------------------------------------------------------------------------
@@ -2733,6 +2877,60 @@ const PAGE_COMMANDS: CommandDef[] = [
     },
   },
   {
+    id: "page.curl",
+    title: "cURL / HTTP playground",
+    detail:
+      "Paste a curl command — including whatever a browser’s “Copy as cURL” produces — and it is parsed, shown back, and replayed for real. –k/--insecure is recorded but never honoured: TLS is always verified regardless of what the pasted command asked for.",
+    group: "developer",
+    icon: "⇌",
+    keywords: [
+      "curl", "http", "https", "request", "api", "postman", "insomnia", "rest",
+      "playground", "fetch", "endpoint", "webhook",
+    ],
+    page: "curl",
+    reach: 44,
+    run: ({ actions }) => {
+      actions.openTab({ kind: "tool", commandId: "page.curl", title: "cURL playground" });
+      return false;
+    },
+  },
+  {
+    id: "page.git-commit",
+    title: "Git commit assist",
+    detail:
+      "Reads a repository’s status and diff and drafts a commit message through whichever AI backend is configured. Every git call is read-only — this never stages or commits; you still press commit yourself.",
+    group: "devenv",
+    icon: "⑂",
+    keywords: [
+      "git", "commit", "message", "diff", "status", "staged", "changelog",
+      "conventional commit", "commit message",
+    ],
+    page: "git-commit",
+    reach: 40,
+    run: ({ actions }) => {
+      actions.openTab({ kind: "tool", commandId: "page.git-commit", title: "Git commit assist" });
+      return false;
+    },
+  },
+  {
+    id: "page.dependencies",
+    title: "Dependency inspector",
+    detail:
+      "Reads a package.json, Cargo.toml, or requirements.txt and shows how tightly each dependency is pinned — exact, a movable range, or unpinned entirely. No network lookups: only what the manifest itself says.",
+    group: "devenv",
+    icon: "⬡",
+    keywords: [
+      "dependency", "dependencies", "package", "npm", "cargo", "pip", "requirements",
+      "pin", "semver", "lockfile", "audit", "package.json",
+    ],
+    page: "dependencies",
+    reach: 38,
+    run: ({ actions }) => {
+      actions.openTab({ kind: "tool", commandId: "page.dependencies", title: "Dependency inspector" });
+      return false;
+    },
+  },
+  {
     id: "page.qr",
     title: "QR code",
     detail:
@@ -3437,6 +3635,7 @@ export const COMMANDS: CommandDef[] = [
   ...PAGE_COMMANDS,
   ...WINDOW_COMMANDS,
   ...TOOL_COMMANDS,
+  ...EXTRA_TOOL_COMMANDS,
   ...CASE_COMMANDS,
   ...SYSTEM_COMMANDS,
   ...LIST_COMMANDS,
