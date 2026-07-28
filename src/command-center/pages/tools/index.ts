@@ -35,6 +35,7 @@ import { SnippetsPage } from "./SnippetsPage";
 import { StickyNotesPage } from "./StickyNotesPage";
 import { StoragePage } from "./StoragePage";
 import { TimePage } from "./TimePage";
+import { WidgetsPage } from "./WidgetsPage";
 
 export const TOOL_PAGES: Record<ToolPageId, ComponentType<ToolPageProps>> = {
   colors: ColorsPage,
@@ -57,4 +58,5 @@ export const TOOL_PAGES: Record<ToolPageId, ComponentType<ToolPageProps>> = {
   search: SearchPage,
   documents: DocumentsPage,
   snippets: SnippetsPage,
+  widgets: WidgetsPage,
 };
