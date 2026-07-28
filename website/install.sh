@@ -11,8 +11,8 @@
 # The configured-package flow adds optional pieces on top:
 #
 #   ... | bash -s -- --with=caduceus,hermes,ollama \
-#                    --pull=qwen3.5:1.7b,qwen2.5vl:7b \
-#                    --ai=qwen3.5:1.7b --hermes-model=qwen2.5vl:7b
+#                    --pull=qwen3.5:2b,qwen2.5vl:7b \
+#                    --ai=qwen3.5:2b --hermes-model=qwen2.5vl:7b
 #
 #   --with=a,b,c          components: deps, caduceus, hermes, ollama
 #                         "deps" = Xcode Command Line Tools + python3, and is
