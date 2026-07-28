@@ -21,7 +21,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import * as api from "@/shared/api";
-import { useDebounced, useSettings, useTauriEvent, useToasts } from "@/shared/hooks";
+import { useDebounced, useSettings, useTauriEvent, useToasts, useUpdateCheck } from "@/shared/hooks";
 import { highlightSegments } from "@/shared/fuzzy";
 import {
   collectResults,
@@ -60,6 +60,7 @@ export function HomeTab({
 }) {
   const { settings } = useSettings();
   const { toasts, notify } = useToasts();
+  const update = useUpdateCheck(active);
 
   const [input, setInput] = useState("");
   const [selected, setSelected] = useState(0);
@@ -646,6 +647,50 @@ export function HomeTab({
         </div>
       )}
 
+      {update?.updateAvailable && (
+        <div className="no-drag shrink-0 border-t border-accent/30 bg-accent/12 px-4 py-2.5">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <p className="min-w-0 text-[13px] leading-snug text-ink">
+              <span className="font-semibold text-accent">
+                Update available — Caduceus {update.latestVersion ?? "latest"}
+              </span>
+              <span className="text-ink-mute"> · you&apos;re on {update.currentVersion}</span>
+            </p>
+            <div className="row shrink-0 gap-2">
+              <button
+                type="button"
+                onClick={() => onOpenTab({ kind: "settings", section: "help" })}
+                className="rounded-lg border border-line bg-surface/80 px-2.5 py-1.5 text-2xs font-medium text-ink-soft transition-colors hover:bg-raised hover:text-ink"
+              >
+                Details in Settings
+              </button>
+              {update.releaseUrl && (
+                <button
+                  type="button"
+                  onClick={() => void api.openExternalUrl(update.releaseUrl!)}
+                  className="rounded-lg border border-line bg-surface/80 px-2.5 py-1.5 text-2xs font-medium text-ink-soft transition-colors hover:bg-raised hover:text-ink"
+                >
+                  Release notes
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() =>
+                  void api.openExternalUrl(
+                    update.downloadUrl ??
+                      update.releaseUrl ??
+                      "https://github.com/GeoWizard4645/caduceus/releases/latest",
+                  )
+                }
+                className="rounded-lg bg-accent px-3.5 py-1.5 text-[13px] font-semibold text-accent-ink shadow-glow transition-opacity hover:opacity-95"
+              >
+                Get update ↗
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* --- footer ------------------------------------------------------ */}
       <div className="flex shrink-0 items-center justify-between border-t border-line px-4 py-2 text-2xs text-ink-faint">
         <div className="row">
@@ -664,10 +709,19 @@ export function HomeTab({
         <div className="row">
           <button
             type="button"
-            onClick={() => onOpenTab({ kind: "settings" })}
-            className="no-drag rounded px-1.5 py-0.5 transition-colors hover:bg-raised hover:text-ink"
+            onClick={() => onOpenTab({ kind: "settings", section: update?.updateAvailable ? "help" : undefined })}
+            className={cx(
+              "no-drag rounded px-1.5 py-0.5 transition-colors hover:bg-raised hover:text-ink",
+              update?.updateAvailable && "font-medium text-accent",
+            )}
           >
             Settings
+            {update?.updateAvailable && (
+              <span
+                aria-hidden="true"
+                className="ml-1.5 inline-block h-1.5 w-1.5 translate-y-[-1px] rounded-full bg-accent shadow-glow"
+              />
+            )}
           </button>
         </div>
       </div>

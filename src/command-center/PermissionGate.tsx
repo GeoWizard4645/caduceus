@@ -19,7 +19,7 @@ import {
 
 import * as api from "@/shared/api";
 import { PERMISSIONS } from "@/shared/permissions";
-import { rememberResume, type PermissionId, type Tab } from "@/shared/tabs";
+import { rememberResume, type PermissionId } from "@/shared/tabs";
 import { Button, Spinner, cx } from "@/shared/ui";
 
 const POLL_MS = 1200;
@@ -59,7 +59,6 @@ export function PermissionGate({
   permissions,
   scope,
   retryCommandId,
-  onOpenTab,
   children,
 }: {
   active: boolean;
@@ -67,7 +66,6 @@ export function PermissionGate({
   /** Distinguishes session acks per command or page. */
   scope: string;
   retryCommandId?: string;
-  onOpenTab: (request: Omit<Tab, "id">) => void;
   children: ReactNode;
 }) {
   const [blocking, setBlocking] = useState<PermissionId | null>(null);
@@ -75,7 +73,10 @@ export function PermissionGate({
   const [opening, setOpening] = useState(false);
   const [repairing, setRepairing] = useState(false);
   const [note, setNote] = useState<string | null>(null);
+  // Which grant has been asked for in this session. Not a guard on asking —
+  // that was the bug — only what decides whether the button says "again".
   const prompted = useRef<string | null>(null);
+  const [askedOnce, setAskedOnce] = useState(false);
   const wasScreenGranted = useRef<boolean | null>(null);
 
   const unique = useMemo(
@@ -114,37 +115,58 @@ export function PermissionGate({
 
   const reportMissing = useCallback((id: PermissionId) => {
     prompted.current = null;
+    setAskedOnce(false);
     setBlocking(id);
     setGranted(PERMISSIONS[id].detectable ? false : null);
   }, []);
 
+  /**
+   * Ask macOS for `id`, and show the pane where it is turned on.
+   *
+   * `force` is the difference between the two callers, and getting it wrong
+   * breaks this either way round:
+   *
+   * * The **effect** below runs whenever a grant starts blocking, and must be
+   *   idempotent — without `prompted` it would re-open System Settings on every
+   *   render whose parent handed down a fresh callback.
+   * * The **button** must not be idempotent. It used to share the guard, which
+   *   made every press after the first a complete no-op — including the part
+   *   that opens System Settings, on a control labelled "Open System Settings
+   *   again". And since `requestPermission` is what actually registers Caduceus
+   *   with TCC (`CGRequestScreenCaptureAccess`), a first attempt that did not
+   *   take could never be retried: the app stayed missing from the Screen
+   *   Recording list no matter how many times you pressed it.
+   *
+   * Asking more than once is harmless — macOS shows its consent dialog at most
+   * once per app and simply reports the current answer after that.
+   */
   const beginGrantFlow = useCallback(
-    async (id: PermissionId) => {
+    async (id: PermissionId, force = false) => {
+      if (!force && prompted.current === id) return;
       const info = PERMISSIONS[id];
       setOpening(true);
       setNote(null);
       try {
-        if (prompted.current !== id) {
-          prompted.current = id;
-          await api.requestPermission(id);
-          await api.openSystemSettings(info.pane);
-          // Deliberately *not* `onOpenTab({ kind: "permission" })`.
-          //
-          // This component already renders the page underneath with a
-          // walkthrough overlay on top of it, which is the behaviour the
-          // permission flow is supposed to have: the tool loads, discovers it
-          // is blocked, and says so in place. Opening a second tab on top of
-          // that moved you off the page you had just asked for and left you to
-          // find your way back — the tool was still open, but you had been
-          // taken somewhere else to read about it.
-        }
+        prompted.current = id;
+        await api.requestPermission(id);
+        await api.openSystemSettings(info.pane);
+        setAskedOnce(true);
+        // Deliberately *not* `onOpenTab({ kind: "permission" })`.
+        //
+        // This component already renders the page underneath with a
+        // walkthrough overlay on top of it, which is the behaviour the
+        // permission flow is supposed to have: the tool loads, discovers it
+        // is blocked, and says so in place. Opening a second tab on top of
+        // that moved you off the page you had just asked for and left you to
+        // find your way back — the tool was still open, but you had been
+        // taken somewhere else to read about it.
       } catch (error) {
         setNote(api.errorMessage(error));
       } finally {
         setOpening(false);
       }
     },
-    [onOpenTab, retryCommandId],
+    [],
   );
 
   useEffect(() => {
@@ -211,7 +233,8 @@ export function PermissionGate({
           : outcome.message,
       );
       if (outcome.granted) await refresh();
-      else if (!outcome.willRelaunch) await beginGrantFlow(blocking);
+      // Forced: repair exists precisely because the first attempt did not work.
+      else if (!outcome.willRelaunch) await beginGrantFlow(blocking, true);
     } catch (error) {
       setNote(api.errorMessage(error));
     } finally {
@@ -292,9 +315,9 @@ export function PermissionGate({
                   <Button
                     tone="primary"
                     disabled={opening}
-                    onClick={() => void beginGrantFlow(blocking)}
+                    onClick={() => void beginGrantFlow(blocking, true)}
                   >
-                    {opening ? "Opening…" : "Open System Settings again"}
+                    {opening ? "Opening…" : askedOnce ? "Open System Settings again" : "Open System Settings"}
                   </Button>
                   <Button disabled={repairing} onClick={() => void repair()}>
                     {repairing ? "Repairing…" : "Repair stale grant"}

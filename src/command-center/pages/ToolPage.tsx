@@ -99,7 +99,6 @@ export function ToolPage({
       permissions={requiredPermissions}
       scope={command.id}
       retryCommandId={command.id}
-      onOpenTab={onOpenTab}
     >
       {page}
     </PermissionGate>

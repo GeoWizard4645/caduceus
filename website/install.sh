@@ -629,11 +629,28 @@ PY
 }
 
 prime_macos_permissions() {
-  local bin="${INSTALL_DIR}/${APP_NAME}.app/Contents/MacOS/${APP_NAME}"
-  [ -x "$bin" ] || return 0
+  local app="${INSTALL_DIR}/${APP_NAME}.app"
+  [ -d "$app" ] || return 0
   say "Screen Recording — macOS must approve this in System Settings (cannot be enabled from the terminal alone)."
   say "Caduceus will ask to register; turn it on in the list when Settings opens."
-  "$bin" --prime-macos-permissions 2>/dev/null || true
+
+  # `open`, not the executable directly.
+  #
+  # macOS attributes a TCC request to the *responsible process*, not to whatever
+  # called the API. A Mach-O binary spawned by this script is a child of the
+  # shell, so the responsible process walks up to Terminal — and Terminal is
+  # what lands in the Screen & System Audio Recording list, while Caduceus never
+  # appears at all. That is the exact symptom this function exists to prevent,
+  # and running the binary directly caused it.
+  #
+  # `open` hands the launch to launchd, which makes the app its own responsible
+  # process. `-n` forces a fresh instance so `--args` is actually delivered
+  # rather than merely activating a copy that is already running.
+  open -n -a "$app" --args --prime-macos-permissions 2>/dev/null || true
+
+  # The primer exits as soon as it has asked; give it long enough to get the
+  # request in before the installer prints its closing notes over the top.
+  sleep 2
 }
 
 # --- run --------------------------------------------------------------------
