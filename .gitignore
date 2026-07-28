@@ -35,6 +35,9 @@ pnpm-debug.log*
 /tmp/
 *.local
 
+# Agent / IDE worktrees (never commit)
+.claude/
+
 # Wrangler
 .wrangler/
 
