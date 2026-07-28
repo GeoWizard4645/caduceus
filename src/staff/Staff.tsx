@@ -56,6 +56,9 @@ export function Staff() {
   const [flash, setFlash] = useState<{ text: string; ok: boolean } | null>(null);
   /** Keep icons on the arc while fading out — never slide them back to the staff. */
   const [arcHeld, setArcHeld] = useState(false);
+  // Which pop-out the pointer is over, for the name chip below the arc. Held by
+  // id rather than index so re-ordering mid-hover cannot mislabel one.
+  const [namedId, setNamedId] = useState<string | null>(null);
   const [voice, setVoice] = useState<VoiceState>("idle");
   /** Live size while a corner-drag is in progress; null means use settings. */
   const [liveStaffSize, setLiveStaffSize] = useState<number | null>(null);
@@ -211,6 +214,11 @@ export function Staff() {
         await api.openCommandCenter("clipboard");
       } else if (outcome.frontendAction === "system_monitor") {
         await api.openCommandCenter("system");
+      } else if (outcome.frontendAction?.startsWith("open_feature:")) {
+        // The staff has no tabs of its own; the Command Center owns the page.
+        await api.openCommandCenter(
+          `feature:${outcome.frontendAction.slice("open_feature:".length)}`,
+        );
       } else if (!outcome.ok) {
         setFlash({ text: outcome.message, ok: false });
       }
@@ -292,6 +300,7 @@ export function Staff() {
   const showResize = hover.hovering || resizing;
   const expanded = hover.expanded;
   const onArc = expanded || arcHeld;
+  const named = expanded ? staffShortcuts.find((s) => s.id === namedId) : undefined;
   const fadingOut = arcHeld && !expanded;
   const arcSide = onArc ? sideWhileExpanded.current : side;
   const arcRadius = onArc ? popoutRadiusWhileExpanded.current || popoutRadius : popoutRadius;
@@ -300,6 +309,30 @@ export function Staff() {
     <div className="relative h-full w-full overflow-hidden">
       {/* Everything is positioned from the exact centre of the window. */}
       <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
+        {/* --- the hovered shortcut's name ------------------------------
+            Below the arc rather than beside the icon: the window is only as
+            wide as the arc is, so a label placed outward would be clipped by
+            the window edge, and one placed inward would sit on the staff. A
+            fixed spot under the arc is always inside, and always in the same
+            place, so the eye learns where to look. */}
+        <div
+          aria-hidden={!named}
+          style={{
+            // Clamped: the arc radius goes to 132 and the window is only 340
+            // tall, so `radius + gap` alone puts the chip's lower half through
+            // the bottom edge at the largest setting.
+            transform: `translate(-50%, calc(-50% + ${Math.min(arcRadius + 30, 138)}px))`,
+            opacity: named ? 1 : 0,
+          }}
+          className={cx(
+            "pointer-events-none absolute left-0 top-0 max-w-[190px] truncate rounded-full px-2.5 py-1",
+            "staff-popout shadow-float text-[11px] font-medium leading-none text-ink",
+            "transition-opacity duration-150 ease-cad",
+          )}
+        >
+          {named?.label}
+        </div>
+
         {/* --- pop-out icons ------------------------------------------- */}
         {staffShortcuts.map((shortcut, index) => {
           const { x, y } = arcPosition(index, staffShortcuts.length, arcSide, arcRadius);
@@ -313,6 +346,8 @@ export function Staff() {
               title={`${shortcut.label}${shortcut.description ? ` — ${shortcut.description}` : ""}`}
               aria-label={shortcut.label}
               onClick={() => void runShortcut(shortcut)}
+              onPointerEnter={() => setNamedId(shortcut.id)}
+              onPointerLeave={() => setNamedId((current) => (current === shortcut.id ? null : current))}
               onTransitionEnd={(e) => {
                 if (fadingOut && e.propertyName === "opacity") releaseArcLayout();
               }}

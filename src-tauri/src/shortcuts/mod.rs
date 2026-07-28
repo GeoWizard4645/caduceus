@@ -36,6 +36,14 @@ pub enum ShortcutKind {
     /// Run `target` as AppleScript via `osascript`. macOS only; a no-op with a
     /// clear error elsewhere.
     RunAppleScript,
+    /// Open a built-in feature's page — `target` is a command id from the
+    /// registry in `shared/commands.ts` (e.g. `page.colors`, `dev.sha256`).
+    ///
+    /// Handled in the frontend, like the two below it: which page a command id
+    /// means is a fact about the React registry, and Rust has no copy of it.
+    /// That is deliberate — a second list of every feature, on this side, is a
+    /// list that would drift.
+    OpenFeature,
     /// Open the Command Center pre-filtered to clipboard history. Handled in
     /// the frontend; `target` is ignored.
     ClipboardView,

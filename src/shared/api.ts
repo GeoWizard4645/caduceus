@@ -784,6 +784,13 @@ export const stayAwake = (on: boolean) => invoke<ToolOutcome>("stay_awake", { on
 
 export const stayAwakeState = () => invoke<boolean>("stay_awake_state");
 
+/** Encode text as an SVG QR code. Generated locally; nothing is uploaded. */
+export const generateQr = (text: string, ecc = "medium") =>
+  invoke<string>("generate_qr", { text, ecc });
+
+/** The frontmost browser's active-tab URL, or null if it is not a browser. */
+export const frontTabUrl = () => invoke<string | null>("front_tab_url");
+
 export const searchFiles = (query: string, limit = 40) =>
   invoke<FileHit[]>("search_files", { query, limit });
 

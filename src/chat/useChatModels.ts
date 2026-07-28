@@ -15,14 +15,36 @@ export interface ModelChoice {
   value: string;
   label: string;
   backendId: string;
+  /** Heading this row is filed under in the composer's grouped dropdown. */
+  group: string;
   /** Set when this row comes from a detected Ollama tag not yet wired up. */
   connect?: { provider: DetectedProvider; model: string };
+  /**
+   * Set when this row points the Hermes backend at a specific model. Empty
+   * string means "clear the override and use whatever `hermes setup` picked".
+   */
+  hermesModel?: string;
 }
+
+/** One `<optgroup>` in the composer dropdown, preserving first-seen order. */
+export interface ModelGroup {
+  label: string;
+  choices: ModelChoice[];
+}
+
+const GROUP_HERMES = "Hermes Agent";
+const GROUP_BACKENDS = "Backends";
+const GROUP_DISCOVER = "Discover models";
 
 const backendId = (providerId: string) => `local-${providerId}`;
 
 function backendLabel(b: BackendConfig): string {
-  if (b.kind === "hermes") return "Hermes Agent";
+  if (b.kind === "hermes") {
+    const model = b.model?.trim();
+    // A configured model is the point of this row; show it. Blank means Hermes
+    // falls back to whatever `hermes setup` chose, so we just name the agent.
+    return model ? `Hermes · ${model}` : "Hermes Agent";
+  }
   const model = b.model?.trim();
   return model ? `${b.displayName || b.id} · ${model}` : b.displayName || b.id;
 }
@@ -37,7 +59,73 @@ function choicesFromSettings(settings: Settings, mode: ChatMode): ModelChoice[] 
     value: b.id,
     label: backendLabel(b),
     backendId: b.id,
+    group: b.kind === "hermes" ? GROUP_HERMES : GROUP_BACKENDS,
   }));
+}
+
+/**
+ * Alternative models to run Hermes with. Hermes routes to whatever provider it
+ * was set up with (usually a local Ollama), and takes a `-m <model>` override —
+ * so the models worth offering are the ones the localhost scan actually found,
+ * plus whatever Hermes is currently pointed at. Selecting one writes the
+ * Hermes backend's `model` field; the Rust side turns that into `-m`.
+ */
+function hermesModelChoices(scan: LocalAiScan | null, settings: Settings): ModelChoice[] {
+  const hermes = settings.agents.backends.find((b) => b.kind === "hermes");
+  if (!hermes) return [];
+  const current = hermes.model?.trim() ?? "";
+
+  const models = new Set<string>();
+  if (scan) {
+    for (const provider of scan.providers) {
+      if (!provider.running) continue;
+      for (const model of provider.models.slice(0, 12)) models.add(model);
+    }
+  }
+  // Always offer whatever Hermes reports it is using, even if the scan missed it
+  // (e.g. a cloud provider the localhost probe can't enumerate).
+  const configured = scan?.hermes?.model?.trim();
+  if (configured) models.add(configured);
+
+  const rows: ModelChoice[] = [];
+  // Escape hatch: hand control back to Hermes' own config. Only meaningful when
+  // an override is currently set — otherwise the plain "Hermes Agent" row is it.
+  if (current !== "") {
+    rows.push({
+      value: "hermes-model:",
+      label: "Hermes · use its own default",
+      backendId: hermes.id,
+      group: GROUP_HERMES,
+      hermesModel: "",
+    });
+  }
+  for (const model of models) {
+    if (model === current) continue; // already the plain Hermes row
+    rows.push({
+      value: `hermes-model:${model}`,
+      label: `Hermes · ${model}`,
+      backendId: hermes.id,
+      group: GROUP_HERMES,
+      hermesModel: model,
+    });
+  }
+  return rows;
+}
+
+/** Bucket flat choices into ordered `<optgroup>`s, first-seen group order. */
+function groupChoices(choices: ModelChoice[]): ModelGroup[] {
+  const order: string[] = [];
+  const byGroup = new Map<string, ModelChoice[]>();
+  for (const choice of choices) {
+    let bucket = byGroup.get(choice.group);
+    if (!bucket) {
+      bucket = [];
+      byGroup.set(choice.group, bucket);
+      order.push(choice.group);
+    }
+    bucket.push(choice);
+  }
+  return order.map((label) => ({ label, choices: byGroup.get(label)! }));
 }
 
 function connectChoices(scan: LocalAiScan | null, settings: Settings, mode: ChatMode): ModelChoice[] {
@@ -52,6 +140,7 @@ function connectChoices(scan: LocalAiScan | null, settings: Settings, mode: Chat
         value: `connect:${provider.id}:${model}`,
         label: `Connect ${provider.displayName} · ${model}`,
         backendId: id,
+        group: GROUP_DISCOVER,
         connect: { provider, model },
       });
     }
@@ -83,8 +172,14 @@ export function useChatModels(mode: ChatMode) {
 
   const choices = useMemo(() => {
     if (!settings) return [];
-    return [...choicesFromSettings(settings, mode), ...connectChoices(scan, settings, mode)];
+    return [
+      ...choicesFromSettings(settings, mode),
+      ...hermesModelChoices(scan, settings),
+      ...connectChoices(scan, settings, mode),
+    ];
   }, [settings, scan, mode]);
+
+  const groups = useMemo(() => groupChoices(choices), [choices]);
 
   const activeBackendId =
     mode === "computer"
@@ -96,6 +191,17 @@ export function useChatModels(mode: ChatMode) {
       if (!settings) return;
       const choice = choices.find((c) => c.value === value);
       if (!choice) return;
+
+      if (choice.hermesModel !== undefined) {
+        const next = structuredClone(settings);
+        const hermes = next.agents.backends.find((b) => b.id === choice.backendId);
+        if (hermes) hermes.model = choice.hermesModel;
+        if (mode === "chat") next.agents.primaryBackendId = choice.backendId;
+        else next.agents.computerUseBackendId = choice.backendId;
+        await api.updateSettings(next);
+        await reload();
+        return;
+      }
 
       if (choice.connect) {
         const { provider, model } = choice.connect;
@@ -144,6 +250,7 @@ export function useChatModels(mode: ChatMode) {
     info,
     scan,
     choices,
+    groups,
     activeBackendId,
     hermesModel,
     selectChoice,

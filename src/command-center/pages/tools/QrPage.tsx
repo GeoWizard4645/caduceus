@@ -1,0 +1,157 @@
+/**
+ * QR codes, for the tab you are on or anything you type.
+ *
+ * The default input is the frontmost browser's URL, because "put this page on
+ * my phone" is what a QR code on a desktop is nearly always for. When the
+ * frontmost app is not a browser the box simply starts empty — asking is worse
+ * than an empty box you can paste into.
+ *
+ * The encoder is Nayuki's `qrcodegen` on the Rust side and the result is SVG,
+ * so what is on screen is the same shape that gets copied, saved or printed.
+ */
+
+import { useCallback, useEffect, useRef, useState } from "react";
+
+import * as api from "@/shared/api";
+import { Button, Field, Section, Select, TextArea } from "@/shared/ui";
+import type { ToolPageProps } from "../ToolPage";
+
+/** Error-correction levels, in the order they trade size for robustness. */
+const LEVELS = [
+  { value: "low", label: "Low — smallest code" },
+  { value: "medium", label: "Medium — the usual choice" },
+  { value: "quartile", label: "Quartile — survives some damage" },
+  { value: "high", label: "High — survives a logo over it" },
+] as const;
+
+export function QrPage({ onSetTitle }: ToolPageProps) {
+  const [text, setText] = useState("");
+  const [ecc, setEcc] = useState<string>("medium");
+  const [svg, setSvg] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [note, setNote] = useState<string | null>(null);
+  const prefilled = useRef(false);
+
+  useEffect(() => {
+    onSetTitle?.("QR code");
+  }, [onSetTitle]);
+
+  // Ask what the frontmost browser is showing, once. `front_tab_url` answers
+  // null when the frontmost app is not a browser, which is not an error.
+  useEffect(() => {
+    if (prefilled.current) return;
+    prefilled.current = true;
+    void api
+      .frontTabUrl()
+      .then((url) => {
+        if (url) {
+          setText(url);
+          setNote("Filled in from the browser tab that was in front.");
+        }
+      })
+      .catch(() => {
+        // No browser, no permission, no matter — the box still works.
+      });
+  }, []);
+
+  const encode = useCallback(async (value: string, level: string) => {
+    if (!value.trim()) {
+      setSvg(null);
+      setError(null);
+      return;
+    }
+    try {
+      setSvg(await api.generateQr(value, level));
+      setError(null);
+    } catch (failure) {
+      setSvg(null);
+      setError(api.errorMessage(failure));
+    }
+  }, []);
+
+  // Re-encodes as you type. A QR code is cheap enough to regenerate per
+  // keystroke — the alternative is a Generate button you have to remember.
+  useEffect(() => {
+    const timer = setTimeout(() => void encode(text, ecc), 120);
+    return () => clearTimeout(timer);
+  }, [text, ecc, encode]);
+
+  const copySvg = () => {
+    if (!svg) return;
+    navigator.clipboard
+      .writeText(svg)
+      .then(() => setNote("SVG copied."))
+      .catch(() => setError("Could not copy that."));
+  };
+
+  return (
+    <div className="mx-auto h-full max-w-[760px] overflow-y-auto px-6 py-5">
+      <div className="mb-4">
+        <h1 className="text-[17px] font-semibold tracking-[-0.015em] text-ink">QR code</h1>
+        <p className="mt-1 max-w-prose text-[13px] leading-relaxed text-ink-mute">
+          Encodes a link, some text, a Wi-Fi string — anything short. Generated on this Mac; nothing
+          is uploaded to make it.
+        </p>
+      </div>
+
+      <Section title="What to encode">
+        <Field label="Text or URL">
+          <TextArea
+            value={text}
+            onChange={setText}
+            rows={3}
+            placeholder="https://example.com"
+          />
+        </Field>
+        <div className="mt-3 grid grid-cols-2 gap-3">
+          <Field label="Error correction" hint="Higher survives more damage, at a denser code.">
+            <Select
+              value={ecc}
+              onChange={setEcc}
+              options={LEVELS.map((l) => ({ value: l.value, label: l.label }))}
+            />
+          </Field>
+          <div className="flex items-end">
+            <Button
+              onClick={() => {
+                void api.frontTabUrl().then((url) => {
+                  if (url) {
+                    setText(url);
+                    setNote("Filled in from the browser tab that was in front.");
+                  } else {
+                    setNote("The app in front is not a browser Caduceus can ask.");
+                  }
+                });
+              }}
+            >
+              Use the current tab
+            </Button>
+          </div>
+        </div>
+      </Section>
+
+      {error && (
+        <p className="mt-3 text-2xs leading-relaxed text-danger">{error}</p>
+      )}
+      {note && !error && <p className="mt-3 text-2xs text-ink-faint">{note}</p>}
+
+      {svg && (
+        <Section title="Code">
+          <div className="flex flex-col items-center gap-3">
+            {/* The SVG is generated by this app from the text above; there is no
+                remote content and no user-supplied markup in it. */}
+            <div
+              className="w-full max-w-[280px] overflow-hidden rounded-cad border border-line bg-white p-3"
+              dangerouslySetInnerHTML={{ __html: svg }}
+            />
+            <div className="row gap-2">
+              <Button size="sm" onClick={copySvg}>
+                Copy SVG
+              </Button>
+            </div>
+          </div>
+        </Section>
+      )}
+    </div>
+  );
+}

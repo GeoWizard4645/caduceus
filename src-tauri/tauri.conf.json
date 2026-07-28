@@ -20,7 +20,8 @@
         "scope": [
           "$APPCONFIG/staff/*",
           "$APPCONFIG/appearance/*",
-          "$APPCONFIG/icons/*"
+          "$APPCONFIG/icons/*",
+          "$APPCONFIG/shortcut-icons/*"
         ]
       }
     },

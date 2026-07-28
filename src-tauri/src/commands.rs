@@ -1110,6 +1110,23 @@ pub fn search_files(query: String, limit: Option<usize>) -> Vec<tools::FileHit> 
     tools::search_files(&query, limit.unwrap_or(40))
 }
 
+/// Encode text as an SVG QR code.
+#[tauri::command]
+pub fn generate_qr(text: String, ecc: Option<String>) -> Res<String> {
+    tools::qr::svg(&text, ecc.as_deref().unwrap_or("medium"))
+}
+
+/// The URL of the frontmost browser's active tab, for "QR of this tab".
+///
+/// `None` when the frontmost app is not a browser Caduceus knows how to ask,
+/// which is an ordinary answer rather than an error.
+#[tauri::command]
+pub async fn front_tab_url() -> Option<String> {
+    tauri::async_runtime::spawn_blocking(tools::qr::front_tab_url)
+        .await
+        .unwrap_or(None)
+}
+
 #[tauri::command]
 pub fn define_word(word: String) -> tools::ToolOutcome {
     tools::define_word(&word)

@@ -88,6 +88,7 @@ uuid = { version = "1", features = ["v4", "serde"] }
 parking_lot = "0.12"
 dirs = "6"
 sysinfo = { version = "0.39", default-features = false, features = ["system", "disk", "network", "component"] }
+qrcodegen = "1.8"
 
 # ---- Platform-specific ----------------------------------------------------
 [target.'cfg(target_os = "macos")'.dependencies]

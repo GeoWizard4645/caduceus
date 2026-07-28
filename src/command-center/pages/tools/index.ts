@@ -21,13 +21,16 @@ import { ConvertPage } from "./ConvertPage";
 import { DesktopShapesPage } from "./DesktopShapesPage";
 import { DesktopSortPage } from "./DesktopSortPage";
 import { MeetingPage } from "./MeetingPage";
+import { PermissionsSetupPage } from "./PermissionsSetupPage";
 import { ProcessesPage } from "./ProcessesPage";
+import { QrPage } from "./QrPage";
 import { ScreenRecordPage } from "./ScreenRecordPage";
 import { StickyNotesPage } from "./StickyNotesPage";
 import { StoragePage } from "./StoragePage";
 
 export const TOOL_PAGES: Record<ToolPageId, ComponentType<ToolPageProps>> = {
   colors: ColorsPage,
+  qr: QrPage,
   "sticky-notes": StickyNotesPage,
   convert: ConvertPage,
   processes: ProcessesPage,
@@ -36,5 +39,6 @@ export const TOOL_PAGES: Record<ToolPageId, ComponentType<ToolPageProps>> = {
   "desktop-shapes": DesktopShapesPage,
   citations: CitationsPage,
   meeting: MeetingPage,
+  permissions: PermissionsSetupPage,
   "screen-record": ScreenRecordPage,
 };

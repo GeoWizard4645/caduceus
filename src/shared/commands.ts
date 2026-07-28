@@ -233,6 +233,7 @@ export interface CommandDef {
 /** Bespoke pages, named rather than imported so the registry stays data. */
 export type ToolPageId =
   | "colors"
+  | "qr"
   | "sticky-notes"
   | "convert"
   | "processes"
@@ -241,6 +242,7 @@ export type ToolPageId =
   | "desktop-shapes"
   | "citations"
   | "meeting"
+  | "permissions"
   | "screen-record";
 
 /**
@@ -613,6 +615,174 @@ const WINDOW_SPECS: WindowSpec[] = [
     title: "Window: move to previous display",
     detail: "The same, in the other direction.",
     keywords: ["monitor", "screen", "display", "move"],
+  },
+  {
+    verb: "center_half",
+    title: "Window: center half",
+    detail: "Half the width and half the height, centred — the size to read something in without it filling the screen.",
+    keywords: ["snap", "centre", "half", "middle"],
+  },
+  {
+    verb: "top_third",
+    title: "Window: top third",
+    detail: "The upper third of the display, full width. Thirds by row rather than by column.",
+    keywords: ["snap", "third", "row", "top"],
+  },
+  {
+    verb: "bottom_third",
+    title: "Window: bottom third",
+    detail: "The lower third of the display, full width.",
+    keywords: ["snap", "third", "row", "bottom"],
+  },
+  {
+    verb: "top_two_thirds",
+    title: "Window: top two-thirds",
+    detail: "The upper two-thirds, full width — pairs with the bottom third.",
+    keywords: ["snap", "two thirds", "row", "top"],
+  },
+  {
+    verb: "bottom_two_thirds",
+    title: "Window: bottom two-thirds",
+    detail: "The lower two-thirds, full width.",
+    keywords: ["snap", "two thirds", "row", "bottom"],
+  },
+  {
+    verb: "center_two_thirds",
+    title: "Window: center two-thirds",
+    detail: "Two-thirds of the height, full width, centred vertically.",
+    keywords: ["snap", "two thirds", "centre", "middle"],
+  },
+  {
+    verb: "top_left_sixth",
+    title: "Window: top-left sixth",
+    detail: "One cell of a two-row, three-column grid. Six windows tile the screen exactly.",
+    keywords: ["snap", "sixth", "grid", "corner"],
+  },
+  {
+    verb: "top_center_sixth",
+    title: "Window: top-center sixth",
+    detail: "The top-middle cell of the six-way grid.",
+    keywords: ["snap", "sixth", "grid", "centre"],
+  },
+  {
+    verb: "top_right_sixth",
+    title: "Window: top-right sixth",
+    detail: "The top-right cell of the six-way grid.",
+    keywords: ["snap", "sixth", "grid", "corner"],
+  },
+  {
+    verb: "bottom_left_sixth",
+    title: "Window: bottom-left sixth",
+    detail: "The bottom-left cell of the six-way grid.",
+    keywords: ["snap", "sixth", "grid", "corner"],
+  },
+  {
+    verb: "bottom_center_sixth",
+    title: "Window: bottom-center sixth",
+    detail: "The bottom-middle cell of the six-way grid.",
+    keywords: ["snap", "sixth", "grid", "centre"],
+  },
+  {
+    verb: "bottom_right_sixth",
+    title: "Window: bottom-right sixth",
+    detail: "The bottom-right cell of the six-way grid.",
+    keywords: ["snap", "sixth", "grid", "corner"],
+  },
+  {
+    verb: "first_fourth",
+    title: "Window: first fourth",
+    detail: "The leftmost quarter-width column. Four of these tile an ultrawide exactly.",
+    keywords: ["snap", "fourth", "quarter", "column", "ultrawide"],
+  },
+  {
+    verb: "second_fourth",
+    title: "Window: second fourth",
+    detail: "The second quarter-width column from the left.",
+    keywords: ["snap", "fourth", "quarter", "column", "ultrawide"],
+  },
+  {
+    verb: "third_fourth",
+    title: "Window: third fourth",
+    detail: "The third quarter-width column from the left.",
+    keywords: ["snap", "fourth", "quarter", "column", "ultrawide"],
+  },
+  {
+    verb: "last_fourth",
+    title: "Window: last fourth",
+    detail: "The rightmost quarter-width column.",
+    keywords: ["snap", "fourth", "quarter", "column", "ultrawide"],
+  },
+  {
+    verb: "first_three_fourths",
+    title: "Window: first three-fourths",
+    detail: "The left three-quarters — the wide side of a three-quarter/one-quarter split.",
+    keywords: ["snap", "three fourths", "three quarters", "wide"],
+  },
+  {
+    verb: "last_three_fourths",
+    title: "Window: last three-fourths",
+    detail: "The right three-quarters.",
+    keywords: ["snap", "three fourths", "three quarters", "wide"],
+  },
+  {
+    verb: "top_three_fourths",
+    title: "Window: top three-fourths",
+    detail: "The upper three-quarters, full width.",
+    keywords: ["snap", "three fourths", "three quarters", "top"],
+  },
+  {
+    verb: "bottom_three_fourths",
+    title: "Window: bottom three-fourths",
+    detail: "The lower three-quarters, full width.",
+    keywords: ["snap", "three fourths", "three quarters", "bottom"],
+  },
+  {
+    verb: "center_three_fourths",
+    title: "Window: center three-fourths",
+    detail: "Three-quarters of both axes, centred — large, with the desktop still showing round the edge.",
+    keywords: ["snap", "three fourths", "three quarters", "centre"],
+  },
+  {
+    verb: "maximize_height",
+    title: "Window: maximize height",
+    detail: "Stretches the window from the top of the usable area to the bottom, leaving its width and horizontal position exactly as they were.",
+    keywords: ["tall", "height", "vertical", "stretch"],
+  },
+  {
+    verb: "maximize_width",
+    title: "Window: maximize width",
+    detail: "Stretches the window across the full width, leaving its height and vertical position alone.",
+    keywords: ["wide", "width", "horizontal", "stretch"],
+  },
+  {
+    verb: "move_up",
+    title: "Window: move up",
+    detail: "Nudges the window 64 points up without resizing it, stopping at the edge of the display.",
+    keywords: ["nudge", "move", "up", "shift"],
+  },
+  {
+    verb: "move_down",
+    title: "Window: move down",
+    detail: "Nudges the window 64 points down.",
+    keywords: ["nudge", "move", "down", "shift"],
+  },
+  {
+    verb: "move_left",
+    title: "Window: move left",
+    detail: "Nudges the window 64 points left.",
+    keywords: ["nudge", "move", "left", "shift"],
+  },
+  {
+    verb: "move_right",
+    title: "Window: move right",
+    detail: "Nudges the window 64 points right.",
+    keywords: ["nudge", "move", "right", "shift"],
+  },
+  {
+    verb: "restore",
+    title: "Window: restore",
+    detail: "Puts the window back where it was before the last Caduceus window command — the undo for a snap that went to the wrong place.",
+    keywords: ["undo", "revert", "back", "restore", "original"],
   },
   {
     verb: "toggle_full_screen",
@@ -1284,6 +1454,109 @@ const SYSTEM_SPECS: SystemSpec[] = [
     group: "sound",
   },
   {
+    action: "volume_zero",
+    title: "Set volume to 0%",
+    detail: "Silences the output by setting the level to zero, which is different from muting — the slider moves, so the next volume-up starts from silence.",
+    icon: "▁",
+    keywords: ["volume", "zero", "0", "silent", "sound"],
+    group: "sound",
+  },
+  {
+    action: "volume_quarter",
+    title: "Set volume to 25%",
+    detail: "Sets the output level to a quarter and releases mute.",
+    icon: "▂",
+    keywords: ["volume", "quarter", "25", "sound", "quiet"],
+    group: "sound",
+  },
+  {
+    action: "volume_half",
+    title: "Set volume to 50%",
+    detail: "Sets the output level to half and releases mute.",
+    icon: "▄",
+    keywords: ["volume", "half", "50", "sound"],
+    group: "sound",
+  },
+  {
+    action: "volume_three_quarters",
+    title: "Set volume to 75%",
+    detail: "Sets the output level to three-quarters and releases mute.",
+    icon: "▆",
+    keywords: ["volume", "three quarters", "75", "sound", "loud"],
+    group: "sound",
+  },
+  {
+    action: "volume_full",
+    title: "Set volume to 100%",
+    detail: "Sets the output level to maximum and releases mute.",
+    icon: "█",
+    keywords: ["volume", "full", "max", "100", "sound", "loud"],
+    group: "sound",
+  },
+  {
+    action: "toggle_bluetooth",
+    title: "Toggle Bluetooth",
+    detail: "Turns Bluetooth on or off. Uses blueutil when it is installed; otherwise it drives the Control Centre item, which needs the Accessibility permission.",
+    icon: "ᛒ",
+    keywords: ["bluetooth", "wireless", "airpods", "toggle"],
+  },
+  {
+    action: "show_desktop",
+    title: "Show the desktop",
+    detail: "Sends the Show Desktop key, sweeping every window aside. Sending it again brings them back.",
+    icon: "▭",
+    keywords: ["desktop", "show", "hide", "windows", "clear", "reveal"],
+    close: true,
+  },
+  {
+    action: "hide_others",
+    title: "Hide all apps except the frontmost",
+    detail: "Sends ⌥⌘H, so macOS's own rules about what can be hidden still apply.",
+    icon: "◫",
+    keywords: ["hide", "others", "except", "frontmost", "focus", "declutter"],
+    close: true,
+  },
+  {
+    action: "unhide_all",
+    title: "Unhide all hidden apps",
+    detail: "Brings every hidden application back on screen, and says how many there were.",
+    icon: "◪",
+    keywords: ["unhide", "show", "reveal", "hidden", "apps", "restore"],
+  },
+  {
+    action: "quit_all_apps",
+    title: "Quit all apps",
+    detail: "Asks every visible application to quit, so anything with unsaved work still prompts. Caduceus and Finder are left alone.",
+    icon: "⏻",
+    keywords: ["quit", "close", "all", "apps", "everything", "clean slate"],
+    confirm: "Quit every open application?",
+  },
+  {
+    action: "quit_others",
+    title: "Quit all apps except the frontmost",
+    detail: "The same, sparing whatever you are currently working in. Caduceus and Finder are left alone.",
+    icon: "⏻",
+    keywords: ["quit", "close", "others", "except", "frontmost", "focus"],
+    confirm: "Quit every application except the one in front?",
+  },
+  {
+    action: "open_camera",
+    title: "Open the camera",
+    detail: "Opens Photo Booth, which is the camera app every Mac ships with.",
+    icon: "◉",
+    keywords: ["camera", "webcam", "photo booth", "facetime", "video"],
+    close: true,
+  },
+  {
+    action: "open_trash",
+    title: "Open the Trash",
+    detail: "Opens the Trash in Finder and brings Finder forward.",
+    icon: "⌫",
+    keywords: ["trash", "bin", "open", "deleted", "recycle"],
+    group: "files",
+    close: true,
+  },
+  {
     action: "brightness_up",
     title: "Brightness up",
     detail:
@@ -1587,31 +1860,14 @@ const OTHER_COMMANDS: CommandDef[] = [
     id: "utility.permissions",
     title: "Check Caduceus's permissions",
     detail:
-      "Shows which of Accessibility and Screen Recording Caduceus currently holds, and whether the native helper is installed. Reads the state without prompting.",
+      "See Accessibility and Screen Recording status, open the right Settings panes, and repair stale grants after an update.",
     group: "utilities",
     icon: "⚿",
+    page: "permissions",
     keywords: ["permission", "permissions", "accessibility", "screen recording", "privacy", "tcc", "grant"],
-    async run({ actions }) {
-      try {
-        const report = await api.systemPermissions();
-        const line = (label: string, granted: boolean) =>
-          `${granted ? "granted" : "not granted"}`.padEnd(12) + label;
-        actions.showOutput({
-          title: "Permissions",
-          text: [
-            line("Accessibility — window management, brightness", report.accessibility),
-            line("Screen Recording — screenshots, screen OCR", report.screenRecording),
-            line("Native helper — OCR and audio switching", report.nativeHelper),
-          ].join("\n"),
-          message: report.accessibility
-            ? "Grant anything missing in System Settings → Privacy & Security."
-            : "Window management needs Accessibility: System Settings → Privacy & Security → Accessibility.",
-        });
-        return false;
-      } catch (error) {
-        actions.notify(api.errorMessage(error), "error");
-        return false;
-      }
+    run({ actions }) {
+      actions.openTab({ kind: "tool", commandId: "utility.permissions", title: "Permissions" });
+      return false;
     },
   },
 
@@ -2120,6 +2376,24 @@ const PAGE_COMMANDS: CommandDef[] = [
     reach: 96,
     run: ({ actions }) => {
       actions.openTab({ kind: "tool", commandId: "page.sticky-notes", title: "Sticky Notes" });
+      return false;
+    },
+  },
+  {
+    id: "page.qr",
+    title: "QR code",
+    detail:
+      "Turns a link or a line of text into a QR code, so a phone can pick it up off the screen. Starts from whatever the frontmost browser tab is showing. Encoded on this Mac — nothing is uploaded to draw it.",
+    group: "utilities",
+    icon: "▩",
+    keywords: [
+      "qr", "qrcode", "barcode", "scan", "phone", "share", "link", "url",
+      "send to phone", "handoff",
+    ],
+    page: "qr",
+    reach: 62,
+    run: ({ actions }) => {
+      actions.openTab({ kind: "tool", commandId: "page.qr", title: "QR code" });
       return false;
     },
   },

@@ -70,6 +70,24 @@ pub async fn execute_shortcut(
             output: None,
         },
 
+        // The frontend opens the page; `target` names which one. Rust does not
+        // validate the id — the registry that defines valid ids lives in the
+        // webview, and a stale id there produces a "no such feature" message
+        // rather than something this side could say anything useful about.
+        ShortcutKind::OpenFeature => {
+            if shortcut.target.trim().is_empty() {
+                return ExecOutcome::err(
+                    "This shortcut has no feature chosen. Pick one in Settings → Shortcuts.",
+                );
+            }
+            ExecOutcome {
+                ok: true,
+                message: String::new(),
+                frontend_action: Some(format!("open_feature:{}", shortcut.target.trim())),
+                output: None,
+            }
+        }
+
         ShortcutKind::SystemMonitor => ExecOutcome {
             ok: true,
             message: "Opening system status".into(),

@@ -47,6 +47,11 @@ pub enum SystemAction {
     VolumeUp,
     VolumeDown,
     ToggleMute,
+    VolumeZero,
+    VolumeQuarter,
+    VolumeHalf,
+    VolumeThreeQuarters,
+    VolumeFull,
 
     // --- displays ---
     BrightnessUp,
@@ -54,6 +59,16 @@ pub enum SystemAction {
 
     // --- network ---
     ToggleWifi,
+    ToggleBluetooth,
+
+    // --- applications ---
+    ShowDesktop,
+    HideOthers,
+    UnhideAll,
+    QuitAllApps,
+    QuitOthers,
+    OpenCamera,
+    OpenTrash,
 }
 
 impl SystemAction {
@@ -292,7 +307,182 @@ pub fn run(action: SystemAction) -> ToolOutcome {
                 Err(e) => ToolOutcome::err(format!("Could not change Wi-Fi: {e}")),
             }
         }
+
+        SystemAction::VolumeZero => set_volume(0),
+        SystemAction::VolumeQuarter => set_volume(25),
+        SystemAction::VolumeHalf => set_volume(50),
+        SystemAction::VolumeThreeQuarters => set_volume(75),
+        SystemAction::VolumeFull => set_volume(100),
+
+        // `blueutil` is not on a stock Mac, so this drives the menu-bar item
+        // through System Events instead. It is uglier and it needs Accessibility,
+        // but it works on a machine with nothing installed — which is the whole
+        // premise of every offline command here.
+        SystemAction::ToggleBluetooth => match toggle_bluetooth() {
+            Ok(message) => ToolOutcome::ok(message),
+            Err(e) => ToolOutcome::err(e),
+        },
+
+        // ⌥⌘H is the system's own "hide others". Sending the keystroke keeps
+        // whatever exceptions macOS already makes (it never hides Finder's
+        // desktop, for one) rather than reimplementing them wrongly.
+        SystemAction::HideOthers => {
+            match osa(
+                "tell application \"System Events\" to keystroke \"h\" using {option down, command down}",
+            ) {
+                Ok(_) => ToolOutcome::ok("Hid every other app"),
+                Err(e) => ToolOutcome::err(e),
+            }
+        }
+
+        SystemAction::UnhideAll => match unhide_all() {
+            Ok(count) => ToolOutcome::ok(format!("Unhid {count} app{}", plural(count))),
+            Err(e) => ToolOutcome::err(e),
+        },
+
+        SystemAction::ShowDesktop => {
+            // F11 is the Show Desktop binding on every macOS version that has
+            // had one. Mission Control can rebind it, in which case this is a
+            // no-op rather than a wrong action.
+            match osa("tell application \"System Events\" to key code 103") {
+                Ok(_) => ToolOutcome::ok("Showing the desktop"),
+                Err(e) => ToolOutcome::err(e),
+            }
+        }
+
+        SystemAction::QuitAllApps => match quit_apps(false) {
+            Ok(count) => ToolOutcome::ok(format!("Quit {count} app{}", plural(count))),
+            Err(e) => ToolOutcome::err(e),
+        },
+
+        SystemAction::QuitOthers => match quit_apps(true) {
+            Ok(count) => ToolOutcome::ok(format!("Quit {count} app{}", plural(count))),
+            Err(e) => ToolOutcome::err(e),
+        },
+
+        SystemAction::OpenCamera => match run_tool("open", &["-a", "Photo Booth"]) {
+            Ok(_) => ToolOutcome::ok("Opened Photo Booth"),
+            Err(e) => ToolOutcome::err(format!("Could not open the camera: {e}")),
+        },
+
+        SystemAction::OpenTrash => {
+            match osa("tell application \"Finder\" to open trash\nactivate application \"Finder\"") {
+                Ok(_) => ToolOutcome::ok("Opened the Trash"),
+                Err(e) => ToolOutcome::err(e),
+            }
+        }
     }
+}
+
+fn plural(count: usize) -> &'static str {
+    if count == 1 {
+        ""
+    } else {
+        "s"
+    }
+}
+
+/// Set the output volume to an absolute percentage, releasing mute with it.
+///
+/// Setting a level while muted is the one case where the command appears to do
+/// nothing: the number changes and the speakers stay silent. Asking for 0% is
+/// the exception — that *is* the silence you asked for.
+fn set_volume(level: i32) -> ToolOutcome {
+    match osa(&format!("set volume output volume {level}")) {
+        Ok(_) => {
+            if level > 0 {
+                let _ = osa("set volume output muted false");
+            }
+            ToolOutcome::ok(format!("Volume {level}%"))
+        }
+        Err(e) => ToolOutcome::err(e),
+    }
+}
+
+/// Quit running applications, optionally sparing the frontmost one.
+///
+/// Caduceus is always spared: quitting the thing that is running the command
+/// mid-command leaves no way to report what happened. Finder is spared because
+/// `quit` on Finder does not quit it, it just closes the windows and produces a
+/// misleading count.
+fn quit_apps(keep_frontmost: bool) -> Result<usize, String> {
+    let keep = if keep_frontmost {
+        osa("tell application \"System Events\" to get name of first application process whose frontmost is true")
+            .unwrap_or_default()
+            .trim()
+            .to_string()
+    } else {
+        String::new()
+    };
+
+    let listed = osa(
+        "tell application \"System Events\" to get name of every application process \
+         whose background only is false",
+    )?;
+
+    let mut quit = 0usize;
+    for name in listed.split(", ").map(str::trim).filter(|n| !n.is_empty()) {
+        if name == "Caduceus" || name == "Finder" || (keep_frontmost && name == keep) {
+            continue;
+        }
+        if osa(&format!(
+            "tell application \"{}\" to quit",
+            crate::shortcuts::escape_applescript(name)
+        ))
+        .is_ok()
+        {
+            quit += 1;
+        }
+    }
+    Ok(quit)
+}
+
+/// Reveal every hidden application.
+fn unhide_all() -> Result<usize, String> {
+    let hidden = osa(
+        "tell application \"System Events\" to get name of every application process \
+         whose visible is false and background only is false",
+    )?;
+
+    let mut shown = 0usize;
+    for name in hidden.split(", ").map(str::trim).filter(|n| !n.is_empty()) {
+        if osa(&format!(
+            "tell application \"System Events\" to set visible of application process \"{}\" to true",
+            crate::shortcuts::escape_applescript(name)
+        ))
+        .is_ok()
+        {
+            shown += 1;
+        }
+    }
+    Ok(shown)
+}
+
+/// Flip Bluetooth through the menu bar's own control.
+///
+/// `blueutil` is checked for first because when it *is* installed this is one
+/// command instead of four UI steps, and it needs no Accessibility grant.
+fn toggle_bluetooth() -> Result<String, String> {
+    if let Ok(state) = run_tool("blueutil", &["-p"]) {
+        let on = state.trim() == "1";
+        run_tool("blueutil", &["-p", if on { "0" } else { "1" }])?;
+        return Ok(if on { "Bluetooth off".into() } else { "Bluetooth on".into() });
+    }
+
+    // The Control Centre route. Fragile by nature — it is driving a menu — so
+    // it says what it did rather than claiming a state it cannot read back.
+    osa(
+        "tell application \"System Events\" to tell process \"ControlCenter\"\n\
+         \tclick menu bar item \"Bluetooth\" of menu bar 1\n\
+         \tdelay 0.3\n\
+         \tclick checkbox 1 of window 1\n\
+         \tkey code 53\n\
+         end tell",
+    )
+    .map(|_| "Toggled Bluetooth".to_string())
+    .map_err(|e| {
+        format!("{e} Install blueutil (`brew install blueutil`) for a route that needs no permissions.")
+    })
 }
 
 fn restart_process(name: &str, message: &str) -> ToolOutcome {

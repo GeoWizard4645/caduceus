@@ -45,7 +45,7 @@ import { loadUsage, recordUsage } from "@/shared/usage";
 import type { CommandOutput } from "@/shared/commands";
 
 import { AgentPanel } from "./AgentPanel";
-import type { Tab } from "@/shared/tabs";
+import { tabForMode, type Tab } from "@/shared/tabs";
 
 export function HomeTab({
   active,
@@ -123,6 +123,12 @@ export function HomeTab({
     // Only the tab in front reacts. Otherwise every Home tab would swallow the
     // same keystroke, and the one you can see might not be the one that got it.
     if (!active) return;
+    // A request that names a destination — a staff shortcut set to "clipboard
+    // history" — belongs to that tab. This one is still `active` at the moment
+    // the event fires, because the Command Center has not re-rendered yet, so
+    // without this it would take the focus straight back off the tab that was
+    // just opened.
+    if (tabForMode(payload?.mode)) return;
     setInput(payload.prefill);
     setSelected(0);
     setOutput(null);
@@ -199,21 +205,24 @@ export function HomeTab({
     else inputRef.current?.focus();
   });
 
-const CHAT_OPEN_PREFIX = "/ ";
-const aiPortalOpened = useRef(false);
+  const aiPortalOpened = useRef(false);
+
+  const aiPrefix =
+    settings?.commandCenter.prefixes.find((p) => p.action === "primary_ai")?.prefix ?? "/";
+  const chatOpenPrefix = `${aiPrefix} `;
 
   useEffect(() => {
-    if (!active) return;
-    const opensChat = input === CHAT_OPEN_PREFIX || input.startsWith(CHAT_OPEN_PREFIX);
+    if (!active || !settings) return;
+    const opensChat = input === chatOpenPrefix || input.startsWith(chatOpenPrefix);
     if (opensChat && !aiPortalOpened.current) {
       aiPortalOpened.current = true;
-      const remainder = input.startsWith(CHAT_OPEN_PREFIX) ? input.slice(2) : "";
+      const remainder = input.startsWith(chatOpenPrefix) ? input.slice(chatOpenPrefix.length) : "";
       onOpenTab({ kind: "chat", prefill: remainder, chatMode: "chat" });
       setInput("");
       return;
     }
     if (!opensChat) aiPortalOpened.current = false;
-  }, [input, active, onOpenTab]);
+  }, [input, active, onOpenTab, settings, chatOpenPrefix]);
 
   // --- results ------------------------------------------------------------
   useEffect(() => {
@@ -492,11 +501,14 @@ const aiPortalOpened = useRef(false);
   // discoverable by looking at it. The AI prefix is read from settings rather
   // than hardcoded to "/" — it is rebindable, and a placeholder that advertises
   // a prefix the user has renamed is worse than no placeholder.
-  const aiPrefix =
-    settings.commandCenter.prefixes.find((p) => p.action === "primary_ai")?.prefix ?? "/";
   const placeholder =
     `Search apps, search ${hostOf(settings.commandCenter.searchUrlTemplate)}, ` +
-    `type ${aiPrefix} for AI or your own shortcuts, or do maths — 2+2`;
+    `type ${aiPrefix} then space for AI or your shortcuts, or do maths — 2+2`;
+
+  const wantsAiSpace =
+    input.length > 0 &&
+    input.trimEnd() === aiPrefix &&
+    !input.startsWith(chatOpenPrefix);
 
   const grouped = groupResults(results);
 
@@ -559,13 +571,25 @@ const aiPortalOpened = useRef(false);
       )}
 
       {/* Prefix badge: shows which route Enter will take, before you commit. */}
-      {parsed?.rule && (
+      {wantsAiSpace ? (
         <div className="row shrink-0 px-5 pb-2">
           <span className="rounded-md border border-accent/30 bg-accent/12 px-2 py-0.5 text-2xs font-medium text-accent">
-            {parsed.rule.label || parsed.rule.prefix}
+            Caduceus AI
           </span>
-          <span className="truncate text-2xs text-ink-faint">{parsed.rule.description}</span>
+          <span className="truncate text-2xs text-ink-faint">
+            Press <Kbd>space</Kbd> to open the AI workspace — or keep typing a question after{" "}
+            <span className="font-mono text-ink-mute">{chatOpenPrefix}</span>
+          </span>
         </div>
+      ) : (
+        parsed?.rule && (
+          <div className="row shrink-0 px-5 pb-2">
+            <span className="rounded-md border border-accent/30 bg-accent/12 px-2 py-0.5 text-2xs font-medium text-accent">
+              {parsed.rule.label || parsed.rule.prefix}
+            </span>
+            <span className="truncate text-2xs text-ink-faint">{parsed.rule.description}</span>
+          </div>
+        )
       )}
 
       <div className="hairline shrink-0" />

@@ -56,10 +56,50 @@ pub fn import_icon<R: Runtime>(
         .chars()
         .filter(|c| c.is_ascii_alphanumeric() || *c == '-')
         .collect();
-    let filename = format!("{safe_id}.png");
-    let dest = dir.join(&filename);
-    img.save(&dest)
+
+    // Encode first so the filename can carry a hash of the bytes.
+    //
+    // The name used to be just `<id>.png`, which meant replacing a shortcut's
+    // icon wrote different pixels to the same path — and the webview, which
+    // loads it through `asset://`, went on showing the cached first one. The
+    // upload had worked and looked like it had not. A content-addressed name
+    // changes the URL whenever the image changes, so there is nothing to
+    // invalidate.
+    let mut png = std::io::Cursor::new(Vec::new());
+    img.write_to(&mut png, image::ImageFormat::Png)
+        .map_err(|e| format!("Could not encode the icon: {e}"))?;
+    let png = png.into_inner();
+
+    let filename = format!("{safe_id}-{}.png", short_hash(&png));
+    std::fs::write(dir.join(&filename), &png)
         .map_err(|e| format!("Could not save the icon: {e}"))?;
 
+    // Drop this shortcut's previous icons. Without it the directory grows by
+    // one file per upload forever, and they are never referenced again.
+    if let Ok(entries) = std::fs::read_dir(&dir) {
+        let prefix = format!("{safe_id}-");
+        for entry in entries.flatten() {
+            let name = entry.file_name();
+            let name = name.to_string_lossy();
+            if name.starts_with(&prefix) && name != filename {
+                let _ = std::fs::remove_file(entry.path());
+            }
+        }
+    }
+
     Ok(icon_token(&filename))
+}
+
+/// A short, stable, non-cryptographic digest — enough to tell two images apart.
+///
+/// FNV-1a rather than a hashing crate: this names a cache file, so the only
+/// property that matters is that different bytes usually produce different
+/// names.
+fn short_hash(bytes: &[u8]) -> String {
+    let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
+    for byte in bytes {
+        hash ^= *byte as u64;
+        hash = hash.wrapping_mul(0x1000_0000_01b3);
+    }
+    format!("{hash:08x}")
 }

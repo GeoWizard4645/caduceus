@@ -1,9 +1,8 @@
 /**
- * Claude-style AI workspace inside the Command Center.
+ * Caduceus AI workspace inside the Command Center.
  *
- * Open it with `/` + space in the palette, or after sending a `/` question.
- * Chat and Cowork (computer use) share one composer; model routing follows
- * Settings → AI and whatever localhost scan finds.
+ * Open it with the primary AI prefix + space in Search, from palette rows
+ * (ai, chat, local), or after sending a prefixed question from the palette.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -19,13 +18,19 @@ import { Spinner, cx } from "@/shared/ui";
 import { attachmentsToPrompt, filesToAttachments, type PickedAttachment } from "./chatAttachments";
 import { Thread } from "./Thread";
 import { type ChatMode, useChatModels } from "./useChatModels";
+import { CaduceusMark } from "@/shared/CaduceusMark";
 
 const QUICK_PROMPTS = [
-  { label: "Write", icon: "✎", text: "Help me write: " },
-  { label: "Learn", icon: "🎓", text: "Explain like I'm new to this: " },
+  { label: "Summarize", icon: "≡", text: "Summarize this clearly: " },
+  { label: "Draft", icon: "✎", text: "Help me write: " },
+  { label: "Explain", icon: "◈", text: "Explain like I'm new to this: " },
   { label: "Code", icon: "{ }", text: "Write code for: " },
-  { label: "Life stuff", icon: "☕", text: "Help me plan: " },
+  { label: "Plan", icon: "☰", text: "Help me plan: " },
 ] as const;
+
+function primaryAiPrefix(settings: Settings): string {
+  return settings.commandCenter.prefixes.find((p) => p.action === "primary_ai")?.prefix ?? "/";
+}
 
 function displayName(_settings: Settings): string {
   return "there";
@@ -51,7 +56,7 @@ export function Chat({
 } = {}) {
   const { settings } = useSettings();
   const [mode, setMode] = useState<ChatMode>(initialMode);
-  const { choices, activeBackendId, hermesModel, selectChoice } = useChatModels(mode);
+  const { choices, groups, activeBackendId, hermesModel, selectChoice } = useChatModels(mode);
 
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeId, setActiveId] = useState<number | null>(null);
@@ -226,36 +231,47 @@ export function Chat({
 
   if (!settings) {
     return (
-      <div className="flex h-full w-full items-center justify-center bg-[#262624] text-ink-faint">
+      <div className="flex h-full w-full items-center justify-center bg-base text-ink-faint">
         <Spinner />
       </div>
     );
   }
 
   const name = displayName(settings);
+  const paletteAiHint = `${primaryAiPrefix(settings)} then space in Search`;
 
   return (
-    <div className="flex h-full w-full overflow-hidden bg-[#262624] text-[#ececec]">
-      <aside className="flex w-[248px] shrink-0 flex-col border-r border-white/[0.08] bg-[#1f1f1d]">
+    <div className="flex h-full w-full overflow-hidden bg-base text-ink">
+      <aside className="flex w-[252px] shrink-0 flex-col border-r border-line bg-surface/80">
         <div className="drag h-11 shrink-0" />
+
+        <div className="flex items-center gap-2.5 px-4 pb-3">
+          <CaduceusMark height={22} title="Caduceus" className="shrink-0" />
+          <div className="min-w-0">
+            <p className="truncate text-[13px] font-semibold tracking-[-0.01em] text-ink">Caduceus AI</p>
+            <p className="truncate text-[11px] text-ink-faint">Chat & Cowork</p>
+          </div>
+        </div>
 
         <div className="px-3 pb-2">
           <button
             type="button"
             onClick={() => void newChat()}
-            className="no-drag flex w-full items-center gap-2 rounded-lg border border-white/[0.1] bg-white/[0.04] px-3 py-2 text-[13px] font-medium text-[#ececec] transition-colors hover:bg-white/[0.07]"
+            className="no-drag flex w-full items-center justify-center gap-2 rounded-lg border border-line bg-raised/80 px-3 py-2 text-[13px] font-medium text-ink transition-colors hover:border-accent/35 hover:bg-accent/8"
           >
-            <span className="text-lg leading-none">+</span>
+            <span className="text-lg leading-none text-accent">+</span>
             New chat
           </button>
         </div>
 
         <div className="px-3 pb-2">
-          <div className="inline-flex rounded-lg bg-white/[0.06] p-0.5 text-[12px]">
-            <span className="rounded-md bg-white/[0.12] px-2.5 py-1 font-medium">Chat</span>
+          <div className="inline-flex w-full rounded-lg border border-line bg-base/40 p-0.5 text-[12px]">
+            <span className="flex-1 rounded-md bg-accent/15 px-2.5 py-1 text-center font-medium text-accent">
+              Chat
+            </span>
             <button
               type="button"
-              className="rounded-md px-2.5 py-1 text-[#a8a8a6] transition-colors hover:text-[#ececec]"
+              className="flex-1 rounded-md px-2.5 py-1 text-ink-mute transition-colors hover:text-ink"
               onClick={() => onOpenTab?.({ kind: "settings", section: "ai" })}
             >
               Models
@@ -263,14 +279,17 @@ export function Chat({
           </div>
         </div>
 
-        <p className="px-4 pb-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-[#737371]">
+        <p className="px-4 pb-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-faint">
           Recents
         </p>
         <div className="flex-1 overflow-y-auto px-2 pb-4">
           {conversations.length === 0 && (
-            <p className="px-2 py-3 text-[12px] leading-relaxed text-[#737371]">
-              Type <code className="text-[#a8a8a6]">/</code> then space in the Command Center to open
-              this view.
+            <p className="rounded-lg border border-line/80 bg-raised/30 px-2.5 py-3 text-[11px] leading-relaxed text-ink-mute">
+              Open Search and type{" "}
+              <code className="rounded bg-base/60 px-1 py-0.5 font-mono text-[10px] text-ink-soft">
+                {paletteAiHint}
+              </code>{" "}
+              for a quick question without leaving the palette.
             </p>
           )}
           {conversations.map((c) => (
@@ -285,11 +304,11 @@ export function Chat({
               onKeyDown={(e) => e.key === "Enter" && setActiveId(c.id)}
               className={cx(
                 "group mb-0.5 cursor-pointer rounded-lg px-2.5 py-2 text-left transition-colors",
-                c.id === activeId ? "bg-white/[0.1]" : "hover:bg-white/[0.06]",
+                c.id === activeId ? "bg-accent/12 ring-1 ring-accent/25" : "hover:bg-raised/80",
               )}
             >
               <div className="flex items-start justify-between gap-2">
-                <span className="truncate text-[12px] font-medium text-[#d4d4d2]">
+                <span className="truncate text-[12px] font-medium text-ink-soft">
                   {c.title || "New chat"}
                 </span>
                 <button
@@ -299,13 +318,13 @@ export function Chat({
                     e.stopPropagation();
                     void remove(c.id);
                   }}
-                  className="shrink-0 rounded px-1 text-[11px] text-[#737371] opacity-0 group-hover:opacity-100 hover:text-[#ececec]"
+                  className="shrink-0 rounded px-1 text-[11px] text-ink-faint opacity-0 group-hover:opacity-100 hover:text-ink"
                 >
                   ✕
                 </button>
               </div>
               {c.preview && (
-                <p className="mt-0.5 truncate text-[11px] text-[#737371]">{c.preview}</p>
+                <p className="mt-0.5 truncate text-[11px] text-ink-faint">{c.preview}</p>
               )}
             </div>
           ))}
@@ -327,22 +346,30 @@ export function Chat({
           <>
             <div className="flex min-h-0 flex-1 flex-col">
               {showGreeting ? (
-                <div className="flex flex-1 flex-col items-center justify-center px-6 pb-8 pt-4">
-                  <div className="flex items-center gap-3">
-                    <span className="text-2xl" aria-hidden="true">
-                      ✦
-                    </span>
-                    <h1
-                      className="text-[32px] font-normal leading-tight text-[#ececec]"
-                      style={{ fontFamily: "'Iowan Old Style', 'Palatino Linotype', Palatino, Georgia, serif" }}
-                    >
-                      {timeGreeting()}, {name}
-                    </h1>
+                <div className="flex flex-1 flex-col items-center justify-center px-6 pb-6 pt-2">
+                  <div className="mb-5 rounded-2xl border border-line bg-surface/60 p-4 shadow-panel">
+                    <CaduceusMark height={40} title="Caduceus" />
                   </div>
+                  <h1 className="text-center text-[28px] font-semibold tracking-[-0.02em] text-ink sm:text-[32px]">
+                    {timeGreeting()}, {name}
+                  </h1>
+                  <p className="mt-2 max-w-md text-center text-[14px] leading-relaxed text-ink-mute">
+                    Ask anything, attach files, or switch to Cowork to act on your Mac. Routing via{" "}
+                    <span className="text-ink-soft">{modelLabel}</span>.
+                  </p>
+                  {choices.length === 0 && (
+                    <button
+                      type="button"
+                      onClick={() => onOpenTab?.({ kind: "settings", section: "ai" })}
+                      className="no-drag mt-4 rounded-lg border border-accent/35 bg-accent/10 px-4 py-2 text-[13px] font-medium text-accent transition-colors hover:bg-accent/16"
+                    >
+                      Set up a model in Settings → AI
+                    </button>
+                  )}
                 </div>
               ) : (
                 <Thread
-                  className="flex-1 text-[#ececec]"
+                  className="flex-1 text-ink"
                   messages={messages}
                   pending={pending}
                   error={error}
@@ -356,18 +383,18 @@ export function Chat({
 
             <div className="shrink-0 px-6 pb-5 pt-2">
               <div className="mx-auto max-w-[720px]">
-                <div className="rounded-2xl border border-white/[0.12] bg-[#30302e] shadow-[0_8px_32px_rgba(0,0,0,0.35)]">
+                <div className="rounded-2xl border border-line bg-surface shadow-float ring-1 ring-white/[0.04]">
                   {attachMeta.length > 0 && (
-                    <div className="flex flex-wrap gap-1.5 border-b border-white/[0.08] px-3 py-2">
+                    <div className="flex flex-wrap gap-1.5 border-b border-line px-3 py-2">
                       {attachMeta.map((a) => (
                         <span
                           key={a.id}
-                          className="inline-flex items-center gap-1 rounded-full bg-white/[0.08] px-2 py-0.5 text-[11px] text-[#c8c8c6]"
+                          className="inline-flex items-center gap-1 rounded-full bg-raised px-2 py-0.5 text-[11px] text-ink-soft"
                         >
                           {a.kind === "image" ? "🖼" : "📎"} {a.preview}
                           <button
                             type="button"
-                            className="text-[#737371] hover:text-[#ececec]"
+                            className="text-ink-faint hover:text-ink"
                             onClick={() => removeAttachment(a.id)}
                           >
                             ×
@@ -388,10 +415,14 @@ export function Chat({
                       }
                     }}
                     rows={2}
-                    placeholder={mode === "computer" ? "Tell Caduceus what to do on your Mac…" : "Type / for skills in the palette · ask anything here"}
+                    placeholder={
+                      mode === "computer"
+                        ? "Tell Caduceus what to do on your Mac…"
+                        : `Ask Caduceus anything · Search: ${paletteAiHint}`
+                    }
                     className={cx(
                       "no-drag w-full resize-none bg-transparent px-4 pt-4 text-[15px] leading-relaxed",
-                      "text-[#ececec] outline-none placeholder:text-[#737371]",
+                      "text-ink outline-none placeholder:text-ink-faint",
                     )}
                   />
 
@@ -408,18 +439,18 @@ export function Chat({
                         type="button"
                         title="Attach files or images"
                         onClick={() => fileRef.current?.click()}
-                        className="no-drag flex h-8 w-8 items-center justify-center rounded-lg border border-white/[0.1] text-[#c8c8c6] hover:bg-white/[0.06]"
+                        className="no-drag flex h-8 w-8 items-center justify-center rounded-lg border border-line text-ink-mute hover:bg-raised/80 hover:text-ink"
                       >
                         +
                       </button>
 
-                      <div className="inline-flex rounded-lg bg-[#262624] p-0.5 text-[12px]">
+                      <div className="inline-flex rounded-lg border border-line bg-base/50 p-0.5 text-[12px]">
                         <button
                           type="button"
                           onClick={() => setMode("chat")}
                           className={cx(
                             "rounded-md px-2.5 py-1 font-medium transition-colors",
-                            mode === "chat" ? "bg-[#404040] text-[#ececec]" : "text-[#737371] hover:text-[#c8c8c6]",
+                            mode === "chat" ? "bg-accent/15 text-accent" : "text-ink-mute hover:text-ink",
                           )}
                         >
                           Chat
@@ -430,8 +461,8 @@ export function Chat({
                           className={cx(
                             "rounded-md px-2.5 py-1 font-medium transition-colors",
                             mode === "computer"
-                              ? "bg-[#404040] text-[#ececec]"
-                              : "text-[#737371] hover:text-[#c8c8c6]",
+                              ? "bg-accent/15 text-accent"
+                              : "text-ink-mute hover:text-ink",
                           )}
                         >
                           Cowork
@@ -444,23 +475,27 @@ export function Chat({
                         <select
                           value={selectValue}
                           onChange={(e) => void selectChoice(e.target.value)}
-                          className="no-drag max-w-[200px] truncate rounded-lg border border-white/[0.1] bg-[#262624] px-2 py-1.5 text-[11px] text-[#c8c8c6] outline-none"
+                          className="no-drag max-w-[200px] truncate rounded-lg border border-line bg-base px-2 py-1.5 text-[11px] text-ink-soft outline-none"
                           title="Model / backend"
                         >
-                          {choices.map((c) => (
-                            <option key={c.value} value={c.value}>
-                              {c.label}
-                            </option>
+                          {groups.map((g) => (
+                            <optgroup key={g.label} label={g.label}>
+                              {g.choices.map((c) => (
+                                <option key={c.value} value={c.value}>
+                                  {c.label}
+                                </option>
+                              ))}
+                            </optgroup>
                           ))}
                         </select>
                       ) : (
-                        <span className="text-[11px] text-[#737371]">{modelLabel}</span>
+                        <span className="text-[11px] text-ink-faint">{modelLabel}</span>
                       )}
                       <button
                         type="button"
                         onClick={() => void send()}
                         disabled={(!draft.trim() && attachFiles.current.length === 0) || !!pending}
-                        className="no-drag flex h-8 w-8 items-center justify-center rounded-lg bg-[#d97757] text-[#1a1a18] disabled:opacity-40"
+                        className="no-drag flex h-8 w-8 items-center justify-center rounded-lg bg-accent text-accent-ink shadow-glow disabled:opacity-40"
                         title="Send"
                       >
                         {pending ? <Spinner /> : "↑"}
@@ -469,31 +504,33 @@ export function Chat({
                   </div>
                 </div>
 
-                <div className="mt-3 flex flex-wrap justify-center gap-2">
-                  {QUICK_PROMPTS.map((p) => (
+                {showGreeting && (
+                  <div className="mt-3 flex flex-wrap justify-center gap-2">
+                    {QUICK_PROMPTS.map((p) => (
+                      <button
+                        key={p.label}
+                        type="button"
+                        onClick={() => {
+                          setDraft(p.text);
+                          inputRef.current?.focus();
+                        }}
+                        className="no-drag inline-flex items-center gap-1.5 rounded-full border border-line bg-raised/40 px-3 py-1.5 text-[12px] text-ink-soft transition-colors hover:border-accent/30 hover:bg-accent/8 hover:text-ink"
+                      >
+                        <span className="text-ink-faint">{p.icon}</span>
+                        {p.label}
+                      </button>
+                    ))}
                     <button
-                      key={p.label}
                       type="button"
-                      onClick={() => {
-                        setDraft(p.text);
-                        inputRef.current?.focus();
-                      }}
-                      className="no-drag inline-flex items-center gap-1.5 rounded-full border border-white/[0.1] bg-white/[0.04] px-3 py-1.5 text-[12px] text-[#c8c8c6] transition-colors hover:bg-white/[0.08]"
+                      onClick={() => onOpenTab?.({ kind: "settings", section: "ai" })}
+                      className="no-drag inline-flex items-center gap-1.5 rounded-full border border-dashed border-line px-3 py-1.5 text-[12px] text-ink-mute hover:border-accent/35 hover:text-ink"
                     >
-                      <span className="text-[#737371]">{p.icon}</span>
-                      {p.label}
+                      + Add model
                     </button>
-                  ))}
-                  <button
-                    type="button"
-                    onClick={() => onOpenTab?.({ kind: "settings", section: "ai" })}
-                    className="no-drag inline-flex items-center gap-1.5 rounded-full border border-white/[0.1] bg-white/[0.04] px-3 py-1.5 text-[12px] text-[#737371] hover:text-[#c8c8c6]"
-                  >
-                    + Add model
-                  </button>
-                </div>
+                  </div>
+                )}
 
-                {flash && <p className="mt-2 text-center text-[11px] text-[#737371]">{flash}</p>}
+                {flash && <p className="mt-2 text-center text-[11px] text-ink-faint">{flash}</p>}
               </div>
             </div>
           </>

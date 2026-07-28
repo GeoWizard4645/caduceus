@@ -167,6 +167,15 @@ function toItem(
         actions.openTab({ kind: "system" });
         return false;
       }
+      const feature = featureFromAction(outcome.frontendAction);
+      if (feature) {
+        const command = COMMANDS.find((c) => c.id === feature);
+        if (!command) {
+          actions.notify(`This shortcut points at a feature that no longer exists.`, "error");
+          return false;
+        }
+        return command.run({ input: "", values: {}, actions });
+      }
       if (!outcome.ok) {
         actions.notify(outcome.message, "error");
         return false;
@@ -174,6 +183,18 @@ function toItem(
       return true;
     },
   };
+}
+
+/**
+ * The command id inside an `open_feature:<id>` action, if that is what it is.
+ *
+ * Rust sends the id back as part of the action string rather than as its own
+ * field because `ExecOutcome.frontend_action` is a single string that several
+ * kinds already share, and widening it would mean touching every caller.
+ */
+function featureFromAction(action: string | null | undefined): string | null {
+  const prefix = "open_feature:";
+  return action?.startsWith(prefix) ? action.slice(prefix.length) : null;
 }
 
 function describeTarget(shortcut: Shortcut): string {
@@ -186,6 +207,8 @@ function describeTarget(shortcut: Shortcut): string {
       return shortcut.target;
     case "run_applescript":
       return "AppleScript";
+    case "open_feature":
+      return COMMANDS.find((c) => c.id === shortcut.target)?.title ?? "A Caduceus feature";
     case "clipboard_view":
       return "Browse clipboard history";
     case "system_monitor":
@@ -464,6 +487,58 @@ export const appLauncherProvider: ResultProvider = {
   },
 };
 
+/**
+ * Local files, matched on every plain query — not just behind `file`/`find`.
+ *
+ * `liveListProvider`'s file search only fires once you have already typed the
+ * word "file", which is right for a deliberate browse but wrong for the far
+ * more common case: typing a filename because you want that file, the same way
+ * typing an app's name means you want that app. So this runs unconditionally,
+ * scored to land where that expectation puts it — after Applications, before
+ * Commands, and never as its own tab or page.
+ *
+ * Gated at two characters rather than one: `mdfind` is Spotlight's own index,
+ * not a directory walk, so it is fast, but a single letter still matches
+ * enough of the disk to be noise on every keystroke.
+ */
+export const fileSearchProvider: ResultProvider = {
+  id: "files-inline",
+  title: "Files",
+  async search({ query, parsed, settings, actions }) {
+    if (parsed?.rule) return [];
+    const trimmed = query.trim();
+    if (trimmed.length < 2) return [];
+
+    // Capped well under the source limit: files are a supporting result here,
+    // not the reason the palette is open, and five is enough to catch "the
+    // thing I meant" without pushing every command off the visible list.
+    const limit = Math.min(5, settings.commandCenter.maxResultsPerSource);
+
+    let hits: Awaited<ReturnType<typeof api.searchFiles>>;
+    try {
+      hits = await api.searchFiles(trimmed, limit);
+    } catch {
+      // A slow or failing Spotlight index must not empty the palette.
+      return [];
+    }
+
+    return hits.map((hit, index) => {
+      const match = fuzzyMatch(trimmed, hit.name);
+      return {
+        id: `file-inline:${hit.path}`,
+        title: hit.name,
+        subtitle: hit.path.replace(/^\/Users\/[^/]+/, "~"),
+        icon: "▤",
+        group: "Files",
+        score: (match?.score ?? 500 - index) + FILE_LEAD,
+        positions: match?.positions ?? undefined,
+        accessory: "↵ reveal",
+        run: () => rowOutcome(actions, () => api.revealPath(hit.path)),
+      };
+    });
+  },
+};
+
 // ---------------------------------------------------------------------------
 // Calculator
 // ---------------------------------------------------------------------------
@@ -651,6 +726,52 @@ export const captureProvider: ResultProvider = {
  * SHA-256, and a command sit in one ranked list with everything else rather
  * than in a submenu you have to know exists.
  */
+/** Opens the Caduceus AI tab from plain search terms (ai, chat, local, …). */
+export const aiWorkspaceProvider: ResultProvider = {
+  id: "ai",
+  title: "AI",
+  search({ query, parsed, settings, actions }) {
+    if (parsed?.rule) return [];
+
+    const score = fuzzyScore(query, [
+      "Caduceus AI",
+      "AI chat assistant",
+      "chat with AI",
+      "local models",
+      "local AI",
+      "ollama",
+      "hermes",
+      "llm",
+    ]);
+    if (score === null) return [];
+
+    const aiPrefix =
+      settings.commandCenter.prefixes.find((p) => p.action === "primary_ai")?.prefix ?? "/";
+
+    return [
+      {
+        id: "ai:workspace",
+        usageKey: "ai:workspace",
+        title: "Caduceus AI",
+        subtitle: `Chat, Cowork, and local models · ${aiPrefix} then space in Search`,
+        icon: "⚕",
+        group: "AI",
+        score: score + 120 + usageBoost("ai:workspace"),
+        positions: fuzzyMatch(query, "Caduceus AI")?.positions,
+        accessory: "↵",
+        openPage: () => {
+          actions.openTab({ kind: "settings", section: "ai" });
+          return false;
+        },
+        run: () => {
+          actions.openTab({ kind: "chat", chatMode: "chat" });
+          return false;
+        },
+      },
+    ];
+  },
+};
+
 export const favoritesProvider: ResultProvider = {
   id: "favorites",
   title: "Favorites",
@@ -835,6 +956,16 @@ const EMPTY_STATE_BASE = 180;
  * poor match and the command an excellent one.
  */
 const APP_LEAD = 45;
+
+/**
+ * How far a matched file's fuzzy score is lifted above a command's.
+ *
+ * Between the two: an app is overwhelmingly a request to launch it, but a file
+ * on your Mac named close to what you typed is still more likely to be what you
+ * meant than a command whose *description* happens to contain the word — so
+ * files sit above `commandProvider`'s `score - 10` and below `APP_LEAD`.
+ */
+const FILE_LEAD = 15;
 
 function truncate(text: string, max: number): string {
   return text.length <= max ? text : `${text.slice(0, max - 1)}…`;
@@ -1162,11 +1293,13 @@ export const extensionProvider: ResultProvider = {
 export const defaultProviders: ResultProvider[] = [
   calculatorProvider,
   favoritesProvider,
+  aiWorkspaceProvider,
   commandProvider,
   liveListProvider,
   shortcutProvider,
   conversionProvider,
   appLauncherProvider,
+  fileSearchProvider,
   captureProvider,
   extensionProvider,
   searchFallbackProvider,

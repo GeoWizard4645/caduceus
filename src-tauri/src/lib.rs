@@ -139,6 +139,8 @@ pub fn run() {
             commands::set_palette_floating,
             commands::search_files,
             commands::define_word,
+            commands::generate_qr,
+            commands::front_tab_url,
             commands::convert_image,
             commands::inspect_extension,
             commands::install_extension,

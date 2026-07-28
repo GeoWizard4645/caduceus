@@ -2,6 +2,7 @@ import { useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 
 import * as api from "@/shared/api";
+import { COMMANDS } from "@/shared/commands";
 import { GLYPH_NAMES, GLYPH_PREFIX } from "@/shared/glyphs";
 import { ShortcutIcon } from "@/shared/ShortcutIcon";
 import type { RuntimeInfo, Shortcut, ShortcutKind } from "@/shared/types";
@@ -27,6 +28,7 @@ const KIND_LABELS: Record<ShortcutKind, string> = {
   open_app: "Launch an app",
   run_command: "Run a shell command",
   run_applescript: "Run AppleScript",
+  open_feature: "Open a Caduceus feature",
   clipboard_view: "Open clipboard history",
   system_monitor: "Open system status",
 };
@@ -38,9 +40,23 @@ const TARGET_HINTS: Record<ShortcutKind, string> = {
   run_command:
     "Runs in your login shell. {query} is inserted safely quoted; the raw text is also in $CADUCEUS_QUERY.",
   run_applescript: "AppleScript source. {query} is substituted verbatim.",
+  open_feature: "Which built-in tool, command or page this opens.",
   clipboard_view: "No target needed.",
   system_monitor: "No target needed.",
 };
+
+/**
+ * Every built-in feature a shortcut can point at, grouped and alphabetised.
+ *
+ * Derived from the command registry rather than written out, so a feature added
+ * there is bindable here with no second list to update.
+ */
+const FEATURE_OPTIONS = COMMANDS.map((command) => ({
+  value: command.id,
+  label: `${command.title} · ${command.group}`,
+}))
+  .slice()
+  .sort((a, b) => a.label.localeCompare(b.label));
 
 export function ShortcutsTab({ draft, info }: { draft: Draft; info: RuntimeInfo | null }) {
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -305,7 +321,19 @@ function ShortcutRow({
 
           {needsTarget && (
             <Field label="Target" hint={TARGET_HINTS[shortcut.kind]} wide>
-              {shortcut.kind === "run_applescript" ? (
+              {shortcut.kind === "open_feature" ? (
+                // A closed list rather than a text box: the valid values are
+                // exactly the registry's command ids, and typing one by hand is
+                // a way to save a shortcut that silently opens nothing.
+                <Select
+                  value={shortcut.target}
+                  onChange={(v) => onChange((s) => (s.target = v))}
+                  options={[
+                    { value: "", label: "Choose a feature…", disabled: true },
+                    ...FEATURE_OPTIONS,
+                  ]}
+                />
+              ) : shortcut.kind === "run_applescript" ? (
                 <TextArea
                   mono
                   rows={5}

@@ -267,6 +267,83 @@ interface StoredTabs {
   activeId: string;
 }
 
+/**
+ * The tab a `open_command_center` mode asks for, if it asks for one.
+ *
+ * Rust takes a `mode` string rather than a tab kind, because the modes predate
+ * tabs and are what shortcuts persist in settings. Anything unrecognised —
+ * including `"default"` — means the palette, so a mode added on the Rust side
+ * without a tab here degrades to opening the window rather than doing nothing.
+ *
+ * Shared by the Command Center (which honours it) and the Home tab (which must
+ * *not* steal focus when the request was for somewhere else).
+ */
+export function tabForMode(mode: string | undefined): Omit<Tab, "id"> | null {
+  // `feature:<command id>` is how the staff asks for a built-in page. It is a
+  // mode rather than a new IPC command because the staff already has exactly
+  // one way to make the Command Center appear, and a second one would need its
+  // own window-showing, focus and Space-switching handling to match.
+  const feature = mode?.startsWith("feature:") ? mode.slice("feature:".length) : null;
+  if (feature) return { kind: "tool", commandId: feature };
+
+  switch (mode) {
+    case "clipboard":
+      return { kind: "clipboard" };
+    case "system":
+      return { kind: "system" };
+    default:
+      return null;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Surviving a relaunch
+// ---------------------------------------------------------------------------
+
+/**
+ * What to reopen after Caduceus restarts itself.
+ *
+ * Granting Screen Recording requires a relaunch — macOS only re-reads that grant
+ * at process start. The relaunch is fine; losing what you were *doing* is not.
+ * Without this, you ask for the screen recorder, grant the permission, and the
+ * app comes back to an empty palette having silently thrown away the one thing
+ * you asked for.
+ *
+ * `localStorage`, not `sessionStorage`: the point is to outlive the process.
+ */
+const RESUME_KEY = "caduceus.resume.v1";
+
+export function rememberResume(request: Omit<Tab, "id">): void {
+  try {
+    localStorage.setItem(RESUME_KEY, JSON.stringify(request));
+  } catch {
+    // Not being able to remember is survivable; the relaunch still works.
+  }
+}
+
+/**
+ * Read the pending resume and clear it in one go.
+ *
+ * Consumed rather than merely read, so a relaunch for some other reason later
+ * does not reopen a page from a permission grant three days ago.
+ */
+export function takeResume(): Omit<Tab, "id"> | null {
+  try {
+    const raw = localStorage.getItem(RESUME_KEY);
+    localStorage.removeItem(RESUME_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || !isTabKind(parsed.kind)) return null;
+    // Same validation the restore path applies: a tab that cannot render takes
+    // the whole window down, and this one is built from storage too.
+    if (parsed.kind === "tool" && typeof parsed.commandId !== "string") return null;
+    if (parsed.kind === "extension" && typeof parsed.extensionId !== "string") return null;
+    return parsed as Omit<Tab, "id">;
+  } catch {
+    return null;
+  }
+}
+
 export function saveTabs(tabs: Tab[], activeId: string): void {
   try {
     const payload: StoredTabs = { tabs: tabs.map(forStorage), activeId };

@@ -20,6 +20,8 @@
 //! AppKit is the odd one out — `NSScreen` uses a bottom-left origin with Y up —
 //! and [`screens`] is the single place that conversion happens.
 
+use std::sync::Mutex;
+
 use serde::{Deserialize, Serialize};
 
 use super::accessibility::{self as ax, AxElement};
@@ -97,6 +99,7 @@ pub enum Verb {
     RightHalf,
     TopHalf,
     BottomHalf,
+    CenterHalf,
     TopLeftQuarter,
     TopRightQuarter,
     BottomLeftQuarter,
@@ -104,14 +107,41 @@ pub enum Verb {
     FirstThird,
     CenterThird,
     LastThird,
+    TopThird,
+    BottomThird,
     FirstTwoThirds,
     LastTwoThirds,
+    TopTwoThirds,
+    BottomTwoThirds,
+    CenterTwoThirds,
+    TopLeftSixth,
+    TopCenterSixth,
+    TopRightSixth,
+    BottomLeftSixth,
+    BottomCenterSixth,
+    BottomRightSixth,
+    FirstFourth,
+    SecondFourth,
+    ThirdFourth,
+    LastFourth,
+    FirstThreeFourths,
+    LastThreeFourths,
+    TopThreeFourths,
+    BottomThreeFourths,
+    CenterThreeFourths,
+    MaximizeHeight,
+    MaximizeWidth,
     Maximize,
     AlmostMaximize,
     ReasonableSize,
     Center,
     Larger,
     Smaller,
+    MoveUp,
+    MoveDown,
+    MoveLeft,
+    MoveRight,
+    Restore,
     NextDisplay,
     PreviousDisplay,
     ToggleFullScreen,
@@ -125,6 +155,7 @@ impl Verb {
             Verb::RightHalf => "Right half",
             Verb::TopHalf => "Top half",
             Verb::BottomHalf => "Bottom half",
+            Verb::CenterHalf => "Center half",
             Verb::TopLeftQuarter => "Top-left quarter",
             Verb::TopRightQuarter => "Top-right quarter",
             Verb::BottomLeftQuarter => "Bottom-left quarter",
@@ -132,14 +163,41 @@ impl Verb {
             Verb::FirstThird => "First third",
             Verb::CenterThird => "Middle third",
             Verb::LastThird => "Last third",
+            Verb::TopThird => "Top third",
+            Verb::BottomThird => "Bottom third",
             Verb::FirstTwoThirds => "First two-thirds",
             Verb::LastTwoThirds => "Last two-thirds",
+            Verb::TopTwoThirds => "Top two-thirds",
+            Verb::BottomTwoThirds => "Bottom two-thirds",
+            Verb::CenterTwoThirds => "Center two-thirds",
+            Verb::TopLeftSixth => "Top-left sixth",
+            Verb::TopCenterSixth => "Top-center sixth",
+            Verb::TopRightSixth => "Top-right sixth",
+            Verb::BottomLeftSixth => "Bottom-left sixth",
+            Verb::BottomCenterSixth => "Bottom-center sixth",
+            Verb::BottomRightSixth => "Bottom-right sixth",
+            Verb::FirstFourth => "First fourth",
+            Verb::SecondFourth => "Second fourth",
+            Verb::ThirdFourth => "Third fourth",
+            Verb::LastFourth => "Last fourth",
+            Verb::FirstThreeFourths => "First three-fourths",
+            Verb::LastThreeFourths => "Last three-fourths",
+            Verb::TopThreeFourths => "Top three-fourths",
+            Verb::BottomThreeFourths => "Bottom three-fourths",
+            Verb::CenterThreeFourths => "Center three-fourths",
+            Verb::MaximizeHeight => "Maximize height",
+            Verb::MaximizeWidth => "Maximize width",
             Verb::Maximize => "Maximize",
             Verb::AlmostMaximize => "Almost maximize",
             Verb::ReasonableSize => "Reasonable size",
             Verb::Center => "Center",
             Verb::Larger => "Make bigger",
             Verb::Smaller => "Make smaller",
+            Verb::MoveUp => "Move up",
+            Verb::MoveDown => "Move down",
+            Verb::MoveLeft => "Move left",
+            Verb::MoveRight => "Move right",
+            Verb::Restore => "Restore",
             Verb::NextDisplay => "Move to next display",
             Verb::PreviousDisplay => "Move to previous display",
             Verb::ToggleFullScreen => "Toggle full screen",
@@ -161,6 +219,14 @@ const REASONABLE: f64 = 0.68;
 const RESIZE_STEP: f64 = 0.1;
 /// Below this, a resized window stops being usable.
 const MIN_SIDE: f64 = 120.0;
+/// How far one [`Verb::MoveUp`]/[`Verb::MoveDown`]/[`Verb::MoveLeft`]/
+/// [`Verb::MoveRight`] nudges the window, in points.
+///
+/// A fixed step rather than a fraction of the display: a nudge is for "one
+/// pixel-perfect correction after a snap", and that correction is the same size
+/// whether the monitor is 13" or a 4K panel — a percentage would make it too
+/// small to notice on a big display and too coarse to use on a small one.
+const NUDGE_STEP: f64 = 64.0;
 
 /// Where a window should end up.
 ///
@@ -181,6 +247,7 @@ pub fn target_frame(
         Verb::RightHalf => Frame::new(v.x + v.width / 2.0, v.y, v.width / 2.0, v.height),
         Verb::TopHalf => Frame::new(v.x, v.y, v.width, v.height / 2.0),
         Verb::BottomHalf => Frame::new(v.x, v.y + v.height / 2.0, v.width, v.height / 2.0),
+        Verb::CenterHalf => centered(v, v.width / 2.0, v.height / 2.0),
 
         Verb::TopLeftQuarter => Frame::new(v.x, v.y, v.width / 2.0, v.height / 2.0),
         Verb::TopRightQuarter => {
@@ -196,6 +263,7 @@ pub fn target_frame(
             v.height / 2.0,
         ),
 
+        // --- thirds: columns (dividing width) --------------------------
         Verb::FirstThird => Frame::new(v.x, v.y, v.width / 3.0, v.height),
         Verb::CenterThird => Frame::new(v.x + v.width / 3.0, v.y, v.width / 3.0, v.height),
         Verb::LastThird => Frame::new(v.x + 2.0 * v.width / 3.0, v.y, v.width / 3.0, v.height),
@@ -203,6 +271,62 @@ pub fn target_frame(
         Verb::LastTwoThirds => {
             Frame::new(v.x + v.width / 3.0, v.y, 2.0 * v.width / 3.0, v.height)
         }
+
+        // --- thirds: rows (dividing height) -----------------------------
+        Verb::TopThird => Frame::new(v.x, v.y, v.width, v.height / 3.0),
+        Verb::BottomThird => Frame::new(v.x, v.y + 2.0 * v.height / 3.0, v.width, v.height / 3.0),
+        Verb::TopTwoThirds => Frame::new(v.x, v.y, v.width, 2.0 * v.height / 3.0),
+        Verb::BottomTwoThirds => {
+            Frame::new(v.x, v.y + v.height / 3.0, v.width, 2.0 * v.height / 3.0)
+        }
+        Verb::CenterTwoThirds => centered(v, v.width, v.height * 2.0 / 3.0),
+
+        // --- sixths: a 2-row, 3-column grid ------------------------------
+        Verb::TopLeftSixth => Frame::new(v.x, v.y, v.width / 3.0, v.height / 2.0),
+        Verb::TopCenterSixth => {
+            Frame::new(v.x + v.width / 3.0, v.y, v.width / 3.0, v.height / 2.0)
+        }
+        Verb::TopRightSixth => {
+            Frame::new(v.x + 2.0 * v.width / 3.0, v.y, v.width / 3.0, v.height / 2.0)
+        }
+        Verb::BottomLeftSixth => {
+            Frame::new(v.x, v.y + v.height / 2.0, v.width / 3.0, v.height / 2.0)
+        }
+        Verb::BottomCenterSixth => Frame::new(
+            v.x + v.width / 3.0,
+            v.y + v.height / 2.0,
+            v.width / 3.0,
+            v.height / 2.0,
+        ),
+        Verb::BottomRightSixth => Frame::new(
+            v.x + 2.0 * v.width / 3.0,
+            v.y + v.height / 2.0,
+            v.width / 3.0,
+            v.height / 2.0,
+        ),
+
+        // --- fourths: columns (dividing width into four) -----------------
+        Verb::FirstFourth => Frame::new(v.x, v.y, v.width / 4.0, v.height),
+        Verb::SecondFourth => Frame::new(v.x + v.width / 4.0, v.y, v.width / 4.0, v.height),
+        Verb::ThirdFourth => Frame::new(v.x + 2.0 * v.width / 4.0, v.y, v.width / 4.0, v.height),
+        Verb::LastFourth => Frame::new(v.x + 3.0 * v.width / 4.0, v.y, v.width / 4.0, v.height),
+
+        // --- three-fourths -----------------------------------------------
+        Verb::FirstThreeFourths => Frame::new(v.x, v.y, v.width * 3.0 / 4.0, v.height),
+        Verb::LastThreeFourths => {
+            Frame::new(v.x + v.width / 4.0, v.y, v.width * 3.0 / 4.0, v.height)
+        }
+        Verb::TopThreeFourths => Frame::new(v.x, v.y, v.width, v.height * 3.0 / 4.0),
+        Verb::BottomThreeFourths => {
+            Frame::new(v.x, v.y + v.height / 4.0, v.width, v.height * 3.0 / 4.0)
+        }
+        Verb::CenterThreeFourths => centered(v, v.width * 3.0 / 4.0, v.height * 3.0 / 4.0),
+
+        // --- single-axis maximize -----------------------------------------
+        // Keeps the other axis exactly as it was, the way dragging just the
+        // top or side edge to the screen border does.
+        Verb::MaximizeHeight => Frame::new(current.x, v.y, current.width, v.height),
+        Verb::MaximizeWidth => Frame::new(v.x, current.y, v.width, current.height),
 
         Verb::Maximize => v,
 
@@ -217,6 +341,18 @@ pub fn target_frame(
         Verb::Larger => scaled_about_center(current, 1.0 + RESIZE_STEP, &v),
         Verb::Smaller => scaled_about_center(current, 1.0 - RESIZE_STEP, &v),
 
+        // --- nudges: same size, a fixed step in one direction ------------
+        Verb::MoveUp => Frame::new(current.x, current.y - NUDGE_STEP, current.width, current.height),
+        Verb::MoveDown => {
+            Frame::new(current.x, current.y + NUDGE_STEP, current.width, current.height)
+        }
+        Verb::MoveLeft => {
+            Frame::new(current.x - NUDGE_STEP, current.y, current.width, current.height)
+        }
+        Verb::MoveRight => {
+            Frame::new(current.x + NUDGE_STEP, current.y, current.width, current.height)
+        }
+
         Verb::NextDisplay | Verb::PreviousDisplay => {
             if screens.len() < 2 {
                 return None;
@@ -226,8 +362,9 @@ pub fn target_frame(
             return Some(proportional_move(current, &v, &target.visible).rounded());
         }
 
-        // Handled by AX directly; there is no frame to compute.
-        Verb::ToggleFullScreen => return None,
+        // Handled by AX directly, or by `apply` reading its own state; there is
+        // no frame [`target_frame`] alone can compute.
+        Verb::ToggleFullScreen | Verb::Restore => return None,
     };
 
     Some(frame.clamped_into(&v).rounded())
@@ -440,6 +577,15 @@ fn window_frame(window: &AxElement) -> Option<Frame> {
     Some(Frame::new(position.x, position.y, size.width, size.height))
 }
 
+/// The frame a window had just before the last verb Caduceus applied to it.
+///
+/// One slot, not one per window: [`Verb::Restore`] undoes whatever Caduceus
+/// itself just did, which in practice is always the window you were just
+/// looking at. A map keyed by window identity would have to solve "what
+/// identifies a window across an AX round-trip" for a feature that is used
+/// once, right after a snap that went wrong.
+static LAST_FRAME: Mutex<Option<Frame>> = Mutex::new(None);
+
 /// Run a window verb against the focused window.
 #[cfg(target_os = "macos")]
 pub fn apply<R: tauri::Runtime>(app: &tauri::AppHandle<R>, verb: Verb) -> WindowOutcome {
@@ -468,18 +614,29 @@ pub fn apply<R: tauri::Runtime>(app: &tauri::AppHandle<R>, verb: Verb) -> Window
         return WindowOutcome::err("Could not read that window's position.");
     };
 
-    let screens = screens(app);
-    if screens.is_empty() {
-        return WindowOutcome::err("Could not read your display layout.");
-    }
-    let index = screen_for(current, &screens);
-
-    let Some(target) = target_frame(verb, current, &screens[index], &screens, index) else {
-        return if verb.moves_display() {
-            WindowOutcome::err("There is only one display.")
-        } else {
-            WindowOutcome::err("Nothing to do.")
+    let target = if verb == Verb::Restore {
+        let mut slot = LAST_FRAME.lock().unwrap_or_else(|e| e.into_inner());
+        let Some(previous) = slot.replace(current) else {
+            return WindowOutcome::err("Nothing to restore — Caduceus has not moved this window yet.");
         };
+        previous
+    } else {
+        let screens = screens(app);
+        if screens.is_empty() {
+            return WindowOutcome::err("Could not read your display layout.");
+        }
+        let index = screen_for(current, &screens);
+
+        let Some(target) = target_frame(verb, current, &screens[index], &screens, index) else {
+            return if verb.moves_display() {
+                WindowOutcome::err("There is only one display.")
+            } else {
+                WindowOutcome::err("Nothing to do.")
+            };
+        };
+
+        *LAST_FRAME.lock().unwrap_or_else(|e| e.into_inner()) = Some(current);
+        target
     };
 
     // Size, position, size. Apps with a minimum width clamp the first size
@@ -622,6 +779,141 @@ mod tests {
     #[test]
     fn maximize_fills_the_visible_area() {
         assert_eq!(place(Verb::Maximize), screen().visible);
+    }
+
+    #[test]
+    fn row_thirds_divide_height_where_column_thirds_divide_width() {
+        let top = place(Verb::TopThird);
+        let bottom = place(Verb::BottomThird);
+        let v = screen().visible;
+        // Full width, a third of the height — the transpose of FirstThird.
+        assert_eq!(top.width, v.width);
+        assert_eq!(top.y, v.y);
+        assert_eq!(bottom.y + bottom.height, v.y + v.height);
+        assert_eq!(top.height + place(Verb::BottomTwoThirds).height, v.height);
+    }
+
+    #[test]
+    fn six_cells_tile_the_visible_area_exactly() {
+        let total: f64 = [
+            Verb::TopLeftSixth,
+            Verb::TopCenterSixth,
+            Verb::TopRightSixth,
+            Verb::BottomLeftSixth,
+            Verb::BottomCenterSixth,
+            Verb::BottomRightSixth,
+        ]
+        .into_iter()
+        .map(|v| {
+            let f = place(v);
+            f.width * f.height
+        })
+        .sum();
+        let v = screen().visible;
+        assert_eq!(total, v.width * v.height);
+    }
+
+    #[test]
+    fn the_sixths_grid_has_no_seams_between_neighbours() {
+        let left = place(Verb::TopLeftSixth);
+        let center = place(Verb::TopCenterSixth);
+        let right = place(Verb::TopRightSixth);
+        assert_eq!(left.x + left.width, center.x);
+        assert_eq!(center.x + center.width, right.x);
+        assert_eq!(right.x + right.width, screen().visible.width);
+        // And the bottom row starts exactly where the top row ends.
+        assert_eq!(left.y + left.height, place(Verb::BottomLeftSixth).y);
+    }
+
+    #[test]
+    fn four_columns_tile_the_width_with_no_drift() {
+        let columns = [Verb::FirstFourth, Verb::SecondFourth, Verb::ThirdFourth, Verb::LastFourth];
+        let mut edge = screen().visible.x;
+        for verb in columns {
+            let f = place(verb);
+            assert_eq!(f.x, edge, "{verb:?} does not start where the last one ended");
+            edge = f.x + f.width;
+        }
+        assert_eq!(edge, screen().visible.x + screen().visible.width);
+    }
+
+    #[test]
+    fn three_fourths_pairs_with_the_fourth_it_leaves_behind() {
+        let wide = place(Verb::FirstThreeFourths);
+        let narrow = place(Verb::LastFourth);
+        assert_eq!(wide.x + wide.width, narrow.x);
+        assert_eq!(wide.width + narrow.width, screen().visible.width);
+    }
+
+    /// The point of a single-axis maximize is that the *other* axis is untouched.
+    #[test]
+    fn maximizing_one_axis_leaves_the_other_alone() {
+        let tall = place(Verb::MaximizeHeight);
+        assert_eq!(tall.width, window().width);
+        assert_eq!(tall.x, window().x);
+        assert_eq!(tall.height, screen().visible.height);
+
+        let wide = place(Verb::MaximizeWidth);
+        assert_eq!(wide.height, window().height);
+        assert_eq!(wide.y, window().y);
+        assert_eq!(wide.width, screen().visible.width);
+    }
+
+    #[test]
+    fn a_nudge_moves_without_resizing() {
+        for verb in [Verb::MoveUp, Verb::MoveDown, Verb::MoveLeft, Verb::MoveRight] {
+            let moved = place(verb);
+            assert_eq!(moved.width, window().width, "{verb:?} resized");
+            assert_eq!(moved.height, window().height, "{verb:?} resized");
+        }
+        assert_eq!(place(Verb::MoveLeft).x, window().x - NUDGE_STEP);
+        assert_eq!(place(Verb::MoveRight).x, window().x + NUDGE_STEP);
+        assert_eq!(place(Verb::MoveUp).y, window().y - NUDGE_STEP);
+        assert_eq!(place(Verb::MoveDown).y, window().y + NUDGE_STEP);
+    }
+
+    /// Nudging repeatedly must stop at the edge rather than walk off-screen.
+    #[test]
+    fn nudging_stops_at_the_edge_of_the_display() {
+        let screens = [screen()];
+        let mut frame = window();
+        for _ in 0..40 {
+            frame = target_frame(Verb::MoveLeft, frame, &screens[0], &screens, 0).unwrap();
+        }
+        assert_eq!(frame.x, screens[0].visible.x);
+        assert_eq!(frame.width, window().width, "clamping must not resize");
+    }
+
+    /// `Restore` is state held by `apply`, not arithmetic — it has no frame.
+    #[test]
+    fn restore_has_no_computed_frame() {
+        let screens = [screen()];
+        assert!(target_frame(Verb::Restore, window(), &screens[0], &screens, 0).is_none());
+    }
+
+    #[test]
+    fn every_new_placement_also_stays_inside_the_visible_area() {
+        let screens = [screen()];
+        let verbs = [
+            Verb::CenterHalf,
+            Verb::TopThird, Verb::BottomThird,
+            Verb::TopTwoThirds, Verb::BottomTwoThirds, Verb::CenterTwoThirds,
+            Verb::TopLeftSixth, Verb::TopCenterSixth, Verb::TopRightSixth,
+            Verb::BottomLeftSixth, Verb::BottomCenterSixth, Verb::BottomRightSixth,
+            Verb::FirstFourth, Verb::SecondFourth, Verb::ThirdFourth, Verb::LastFourth,
+            Verb::FirstThreeFourths, Verb::LastThreeFourths,
+            Verb::TopThreeFourths, Verb::BottomThreeFourths, Verb::CenterThreeFourths,
+            Verb::MaximizeHeight, Verb::MaximizeWidth,
+            Verb::MoveUp, Verb::MoveDown, Verb::MoveLeft, Verb::MoveRight,
+        ];
+        let v = screens[0].visible;
+        for verb in verbs {
+            let f = target_frame(verb, window(), &screens[0], &screens, 0).unwrap();
+            assert!(f.x >= v.x, "{verb:?} escaped left");
+            assert!(f.y >= v.y, "{verb:?} escaped up");
+            assert!(f.x + f.width <= v.x + v.width, "{verb:?} escaped right");
+            assert!(f.y + f.height <= v.y + v.height, "{verb:?} escaped down");
+        }
     }
 
     #[test]
@@ -861,13 +1153,24 @@ mod tests {
     #[test]
     fn every_verb_has_a_label() {
         let verbs = [
-            Verb::LeftHalf, Verb::RightHalf, Verb::TopHalf, Verb::BottomHalf,
+            Verb::LeftHalf, Verb::RightHalf, Verb::TopHalf, Verb::BottomHalf, Verb::CenterHalf,
             Verb::TopLeftQuarter, Verb::TopRightQuarter, Verb::BottomLeftQuarter,
             Verb::BottomRightQuarter, Verb::FirstThird, Verb::CenterThird, Verb::LastThird,
-            Verb::FirstTwoThirds, Verb::LastTwoThirds, Verb::Maximize, Verb::AlmostMaximize,
+            Verb::TopThird, Verb::BottomThird,
+            Verb::FirstTwoThirds, Verb::LastTwoThirds,
+            Verb::TopTwoThirds, Verb::BottomTwoThirds, Verb::CenterTwoThirds,
+            Verb::TopLeftSixth, Verb::TopCenterSixth, Verb::TopRightSixth,
+            Verb::BottomLeftSixth, Verb::BottomCenterSixth, Verb::BottomRightSixth,
+            Verb::FirstFourth, Verb::SecondFourth, Verb::ThirdFourth, Verb::LastFourth,
+            Verb::FirstThreeFourths, Verb::LastThreeFourths,
+            Verb::TopThreeFourths, Verb::BottomThreeFourths, Verb::CenterThreeFourths,
+            Verb::MaximizeHeight, Verb::MaximizeWidth,
+            Verb::Maximize, Verb::AlmostMaximize,
             Verb::ReasonableSize, Verb::Center, Verb::Larger, Verb::Smaller,
+            Verb::MoveUp, Verb::MoveDown, Verb::MoveLeft, Verb::MoveRight, Verb::Restore,
             Verb::NextDisplay, Verb::PreviousDisplay, Verb::ToggleFullScreen,
         ];
+        assert_eq!(verbs.len(), 50, "a verb was added without a label test");
         for verb in verbs {
             assert!(!verb.label().is_empty(), "{verb:?}");
         }

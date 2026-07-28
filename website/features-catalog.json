@@ -698,6 +698,118 @@
           "detail": "The same, in the other direction."
         },
         {
+          "name": "Window: center half",
+          "detail": "Half the width and half the height, centred — the size to read something in without it filling the screen."
+        },
+        {
+          "name": "Window: top third",
+          "detail": "The upper third of the display, full width. Thirds by row rather than by column."
+        },
+        {
+          "name": "Window: bottom third",
+          "detail": "The lower third of the display, full width."
+        },
+        {
+          "name": "Window: top two-thirds",
+          "detail": "The upper two-thirds, full width — pairs with the bottom third."
+        },
+        {
+          "name": "Window: bottom two-thirds",
+          "detail": "The lower two-thirds, full width."
+        },
+        {
+          "name": "Window: center two-thirds",
+          "detail": "Two-thirds of the height, full width, centred vertically."
+        },
+        {
+          "name": "Window: top-left sixth",
+          "detail": "One cell of a two-row, three-column grid. Six windows tile the screen exactly."
+        },
+        {
+          "name": "Window: top-center sixth",
+          "detail": "The top-middle cell of the six-way grid."
+        },
+        {
+          "name": "Window: top-right sixth",
+          "detail": "The top-right cell of the six-way grid."
+        },
+        {
+          "name": "Window: bottom-left sixth",
+          "detail": "The bottom-left cell of the six-way grid."
+        },
+        {
+          "name": "Window: bottom-center sixth",
+          "detail": "The bottom-middle cell of the six-way grid."
+        },
+        {
+          "name": "Window: bottom-right sixth",
+          "detail": "The bottom-right cell of the six-way grid."
+        },
+        {
+          "name": "Window: first fourth",
+          "detail": "The leftmost quarter-width column. Four of these tile an ultrawide exactly."
+        },
+        {
+          "name": "Window: second fourth",
+          "detail": "The second quarter-width column from the left."
+        },
+        {
+          "name": "Window: third fourth",
+          "detail": "The third quarter-width column from the left."
+        },
+        {
+          "name": "Window: last fourth",
+          "detail": "The rightmost quarter-width column."
+        },
+        {
+          "name": "Window: first three-fourths",
+          "detail": "The left three-quarters — the wide side of a three-quarter/one-quarter split."
+        },
+        {
+          "name": "Window: last three-fourths",
+          "detail": "The right three-quarters."
+        },
+        {
+          "name": "Window: top three-fourths",
+          "detail": "The upper three-quarters, full width."
+        },
+        {
+          "name": "Window: bottom three-fourths",
+          "detail": "The lower three-quarters, full width."
+        },
+        {
+          "name": "Window: center three-fourths",
+          "detail": "Three-quarters of both axes, centred — large, with the desktop still showing round the edge."
+        },
+        {
+          "name": "Window: maximize height",
+          "detail": "Stretches the window from the top of the usable area to the bottom, leaving its width and horizontal position exactly as they were."
+        },
+        {
+          "name": "Window: maximize width",
+          "detail": "Stretches the window across the full width, leaving its height and vertical position alone."
+        },
+        {
+          "name": "Window: move up",
+          "detail": "Nudges the window 64 points up without resizing it, stopping at the edge of the display."
+        },
+        {
+          "name": "Window: move down",
+          "detail": "Nudges the window 64 points down."
+        },
+        {
+          "name": "Window: move left",
+          "detail": "Nudges the window 64 points left."
+        },
+        {
+          "name": "Window: move right",
+          "detail": "Nudges the window 64 points right."
+        },
+        {
+          "name": "Window: restore",
+          "detail": "Puts the window back where it was before the last Caduceus window command — the undo for a snap that went to the wrong place."
+        },
+        {
           "name": "Window: toggle full screen",
           "detail": "Enters or leaves macOS full screen — the green-button behaviour, with its own Space."
         },
@@ -773,6 +885,34 @@
           "detail": "Shuts the Mac down."
         },
         {
+          "name": "Toggle Bluetooth",
+          "detail": "Turns Bluetooth on or off. Uses blueutil when it is installed; otherwise it drives the Control Centre item, which needs the Accessibility permission."
+        },
+        {
+          "name": "Show the desktop",
+          "detail": "Sends the Show Desktop key, sweeping every window aside. Sending it again brings them back."
+        },
+        {
+          "name": "Hide all apps except the frontmost",
+          "detail": "Sends ⌥⌘H, so macOS's own rules about what can be hidden still apply."
+        },
+        {
+          "name": "Unhide all hidden apps",
+          "detail": "Brings every hidden application back on screen, and says how many there were."
+        },
+        {
+          "name": "Quit all apps",
+          "detail": "Asks every visible application to quit, so anything with unsaved work still prompts. Caduceus and Finder are left alone."
+        },
+        {
+          "name": "Quit all apps except the frontmost",
+          "detail": "The same, sparing whatever you are currently working in. Caduceus and Finder are left alone."
+        },
+        {
+          "name": "Open the camera",
+          "detail": "Opens Photo Booth, which is the camera app every Mac ships with."
+        },
+        {
           "name": "Brightness up",
           "detail": "Raises display brightness by synthesising the hardware key, which is the only route Apple has not broken. Needs the Accessibility permission."
         },
@@ -810,6 +950,26 @@
         {
           "name": "Mute / unmute",
           "detail": "Toggles output mute and says which state it landed in."
+        },
+        {
+          "name": "Set volume to 0%",
+          "detail": "Silences the output by setting the level to zero, which is different from muting — the slider moves, so the next volume-up starts from silence."
+        },
+        {
+          "name": "Set volume to 25%",
+          "detail": "Sets the output level to a quarter and releases mute."
+        },
+        {
+          "name": "Set volume to 50%",
+          "detail": "Sets the output level to half and releases mute."
+        },
+        {
+          "name": "Set volume to 75%",
+          "detail": "Sets the output level to three-quarters and releases mute."
+        },
+        {
+          "name": "Set volume to 100%",
+          "detail": "Sets the output level to maximum and releases mute."
         },
         {
           "name": "Change the sound output",
@@ -1124,6 +1284,10 @@
           "detail": "Empties the Trash through Finder, so the usual warnings about locked items still apply."
         },
         {
+          "name": "Open the Trash",
+          "detail": "Opens the Trash in Finder and brings Finder forward."
+        },
+        {
           "name": "Find a file",
           "detail": "Searches file names through Spotlight, so it answers from an index that already exists rather than walking the disk. Choosing a result reveals it in Finder."
         },
@@ -1237,6 +1401,10 @@
           "detail": "Somewhere to put four words before you lose them. Saves as you type, survives a restart, and never asks you to name a file."
         },
         {
+          "name": "QR code",
+          "detail": "Turns a link or a line of text into a QR code, so a phone can pick it up off the screen. Starts from whatever the frontmost browser tab is showing. Encoded on this Mac — nothing is uploaded to draw it."
+        },
+        {
           "name": "Colors",
           "detail": "Pick a colour from anywhere on screen, or type any notation, and get every other notation, its name, its tints and shades, what goes with it, and whether text on it passes WCAG. Pull a palette out of an image too."
         },
@@ -1274,7 +1442,7 @@
         },
         {
           "name": "Check Caduceus's permissions",
-          "detail": "Shows which of Accessibility and Screen Recording Caduceus currently holds, and whether the native helper is installed. Reads the state without prompting."
+          "detail": "See Accessibility and Screen Recording status, open the right Settings panes, and repair stale grants after an update."
         },
         {
           "name": "Clipboard history",

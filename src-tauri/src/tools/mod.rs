@@ -16,6 +16,7 @@ pub mod files;
 pub mod media;
 pub mod native;
 pub mod net;
+pub mod qr;
 pub mod rates;
 pub mod shapes;
 pub mod sorter;

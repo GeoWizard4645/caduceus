@@ -19,7 +19,7 @@ import {
 
 import * as api from "@/shared/api";
 import { PERMISSIONS } from "@/shared/permissions";
-import type { PermissionId, Tab } from "@/shared/tabs";
+import { rememberResume, type PermissionId, type Tab } from "@/shared/tabs";
 import { Button, Spinner, cx } from "@/shared/ui";
 
 const POLL_MS = 1200;
@@ -128,12 +128,15 @@ export function PermissionGate({
           prompted.current = id;
           await api.requestPermission(id);
           await api.openSystemSettings(info.pane);
-          onOpenTab({
-            kind: "permission",
-            permission: id,
-            retryCommandId,
-            title: `${info.title} permission`,
-          });
+          // Deliberately *not* `onOpenTab({ kind: "permission" })`.
+          //
+          // This component already renders the page underneath with a
+          // walkthrough overlay on top of it, which is the behaviour the
+          // permission flow is supposed to have: the tool loads, discovers it
+          // is blocked, and says so in place. Opening a second tab on top of
+          // that moved you off the page you had just asked for and left you to
+          // find your way back — the tool was still open, but you had been
+          // taken somewhere else to read about it.
         }
       } catch (error) {
         setNote(api.errorMessage(error));
@@ -175,10 +178,17 @@ export function PermissionGate({
       wasScreenGranted.current === false &&
       granted === true
     ) {
+      // Write down what to come back to *before* asking the process to end.
+      // The tab autosave is debounced, and `relaunchApp` does not wait for it —
+      // so the thing the user was in the middle of is exactly the thing most
+      // likely to be lost.
+      if (retryCommandId) {
+        rememberResume({ kind: "tool", commandId: retryCommandId });
+      }
       void api.relaunchApp();
     }
     wasScreenGranted.current = granted;
-  }, [blocking, granted]);
+  }, [blocking, granted, retryCommandId]);
 
   const info = blocking ? PERMISSIONS[blocking] : null;
   const highlightStep = info ? Math.min(1, info.steps.length - 1) : 0;
@@ -213,10 +223,10 @@ export function PermissionGate({
 
   return (
     <PermissionGateContext.Provider value={reportMissing}>
-      <div className="relative flex min-h-0 flex-1 flex-col">
+      <div className="relative flex h-full min-h-0 flex-1 flex-col">
         <div
           className={cx(
-            "flex min-h-0 flex-1 flex-col",
+            "flex h-full min-h-0 flex-1 flex-col",
             showOverlay && "pointer-events-none select-none opacity-40",
           )}
           aria-hidden={showOverlay}

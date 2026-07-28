@@ -22,7 +22,7 @@ import { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react"
 
 import * as api from "@/shared/api";
 import { useTauriEvent, useToasts } from "@/shared/hooks";
-import { EVENTS } from "@/shared/types";
+import { EVENTS, type CommandCenterOpenPayload } from "@/shared/types";
 import { Spinner, cx } from "@/shared/ui";
 import { ThemeToggle } from "@/shared/ThemeToggle";
 
@@ -47,6 +47,8 @@ import {
   loadTabs,
   openTab as openTabIn,
   saveTabs,
+  takeResume,
+  tabForMode,
   tabIcon,
   tabLabel,
   type Tab,
@@ -78,6 +80,23 @@ export function CommandCenter() {
   useEffect(() => {
     if (!activeId && tabs[0]) setActiveId(tabs[0].id);
   }, [activeId, tabs]);
+
+  // Granting Screen Recording restarts the app, because macOS only re-reads
+  // that grant at process start. Coming back to a blank palette makes the
+  // restart feel like a crash and quietly loses the thing that was asked for,
+  // so the page that triggered it is reopened and focused here.
+  //
+  // `takeResume` clears as it reads: this must fire once, on the launch that
+  // followed the grant, and never again.
+  useEffect(() => {
+    const resume = takeResume();
+    if (!resume) return;
+    setTabs((current) => {
+      const result = openTabIn(current, resume);
+      setActiveId(result.activeId);
+      return result.tabs;
+    });
+  }, []);
 
   // Write them down as they change. Hiding the window keeps React state alive,
   // so this is really about the times it does not survive — an app restart, an
@@ -174,8 +193,22 @@ export function CommandCenter() {
 
   // Pressing the hotkey focuses the Home tab you left, or makes a new one —
   // the same thing ⌘T does, because that is what "open the launcher" means.
-  useTauriEvent<unknown>(EVENTS.commandCenterOpen, () => {
+  //
+  // Unless the request named a destination. A staff shortcut set to "clipboard
+  // history" calls `open_command_center` with `mode: "clipboard"`, and this
+  // handler used to drop the payload on the floor and force Home regardless —
+  // so that shortcut opened the window and then showed you the palette, which
+  // is why it read as not working.
+  useTauriEvent<CommandCenterOpenPayload>(EVENTS.commandCenterOpen, (payload) => {
+    const destination = tabForMode(payload?.mode);
+
     setTabs((current) => {
+      if (destination) {
+        const result = openTabIn(current, destination);
+        setActiveId(result.activeId);
+        return result.tabs;
+      }
+
       const active = current.find((tab) => tab.id === activeId);
       if (active?.kind === "home") return current;
       const existingHome = current.find((tab) => tab.kind === "home");
