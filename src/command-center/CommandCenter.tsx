@@ -209,34 +209,23 @@ export function CommandCenter() {
     void api.openCommandCenter();
   });
 
-  // Pressing the hotkey focuses the Home tab you left, or makes a new one —
-  // the same thing ⌘T does, because that is what "open the launcher" means.
+  // Reopening keeps the tab you left. The window stays mounted while hidden, so
+  // "open" is show-and-focus, not a reset — jumping back to Home every time made
+  // Settings, chat, and tool pages feel like they vanished the moment you
+  // dismissed the window.
   //
-  // Unless the request named a destination. A staff shortcut set to "clipboard
-  // history" calls `open_command_center` with `mode: "clipboard"`, and this
-  // handler used to drop the payload on the floor and force Home regardless —
-  // so that shortcut opened the window and then showed you the palette, which
-  // is why it read as not working.
+  // A named destination still wins. A staff shortcut set to "clipboard history"
+  // calls `open_command_center` with `mode: "clipboard"`, and that must land on
+  // clipboard rather than whatever was open before. ⌘T is how you ask for a
+  // fresh Home tab deliberately.
   useTauriEvent<CommandCenterOpenPayload>(EVENTS.commandCenterOpen, (payload) => {
     const destination = tabForMode(payload?.mode);
+    if (!destination) return;
 
     setTabs((current) => {
-      if (destination) {
-        const result = openTabIn(current, destination);
-        setActiveId(result.activeId);
-        return result.tabs;
-      }
-
-      const active = current.find((tab) => tab.id === activeId);
-      if (active?.kind === "home") return current;
-      const existingHome = current.find((tab) => tab.kind === "home");
-      if (existingHome) {
-        setActiveId(existingHome.id);
-        return current;
-      }
-      const fresh = homeTab();
-      setActiveId(fresh.id);
-      return current.length >= MAX_TABS ? current : [...current, fresh];
+      const result = openTabIn(current, destination);
+      setActiveId(result.activeId);
+      return result.tabs;
     });
   });
 
