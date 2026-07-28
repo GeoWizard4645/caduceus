@@ -514,16 +514,26 @@ fn detect_provider_error(text: &str) -> Option<String> {
         "No model configured",
         "authentication failed",
         "rate limit",
+        "does not support tools",
     ];
     let lower = trimmed.to_lowercase();
     MARKERS
         .iter()
         .any(|m| lower.contains(&m.to_lowercase()))
         .then(|| {
-            format!(
-                "{trimmed}\n\nThis came from Hermes, not Caduceus. Check its model with \
-                 `hermes status`, or reconnect one with `hermes setup --portal`."
-            )
+            if lower.contains("does not support tools") {
+                format!(
+                    "{trimmed}\n\nHermes needs a model that supports tools. Vision tags \
+                     like qwen2.5vl do not — point Hermes at a chat model instead:\n\
+                     `hermes config set model.default qwen3.5:2b`\n\
+                     Then retry, or use Chat mode with the Ollama backend (not Hermes)."
+                )
+            } else {
+                format!(
+                    "{trimmed}\n\nThis came from Hermes, not Caduceus. Check its model with \
+                     `hermes status`, or reconnect one with `hermes setup --portal`."
+                )
+            }
         })
 }
 
@@ -569,6 +579,17 @@ mod tests {
         let err = detect_provider_error("API call failed after 3 retries: Connection error.");
         assert!(err.is_some());
         assert!(err.unwrap().contains("hermes status"));
+    }
+
+    #[test]
+    fn models_without_tools_get_a_specific_fix() {
+        let err = detect_provider_error(
+            "HTTP 400: registry.ollama.ai/library/qwen2.5vl:7b does not support tools",
+        );
+        assert!(err.is_some());
+        let message = err.unwrap();
+        assert!(message.contains("qwen3.5:2b"));
+        assert!(message.contains("does not support tools"));
     }
 
     #[test]

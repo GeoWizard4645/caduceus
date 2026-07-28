@@ -358,24 +358,73 @@ pub struct FileHit {
 }
 
 /// Spotlight search, via `mdfind`.
+///
+/// Must never run on the UI thread: a short query can make Spotlight emit tens
+/// of thousands of paths, and the old `.output()` wait blocked the whole app
+/// (rainbow wheel) on every palette keystroke. We stream, stop at `limit`,
+/// kill the child, and scope to the home folder so ordinary typing stays light.
 pub fn search_files(query: &str, limit: usize) -> Vec<FileHit> {
-    if query.trim().is_empty() {
+    use std::io::{BufRead, BufReader};
+    use std::process::Stdio;
+
+    let query = query.trim();
+    if query.is_empty() || limit == 0 {
         return Vec::new();
     }
-    let Ok(out) = run("mdfind", &["-name", query.trim()]) else {
+
+    let mut command = Command::new("mdfind");
+    command.arg("-name").arg(query);
+    // Whole-disk Spotlight for a three-letter prefix is how you beachball a
+    // launcher. Home covers what people mean when they type into the palette.
+    if let Some(home) = std::env::var_os("HOME") {
+        command.arg("-onlyin").arg(home);
+    }
+    command.stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::null());
+
+    let mut child = match command.spawn() {
+        Ok(child) => child,
+        Err(_) => return Vec::new(),
+    };
+    let Some(stdout) = child.stdout.take() else {
+        let _ = child.kill();
+        let _ = child.wait();
         return Vec::new();
     };
-    out.lines()
-        .filter(|l| !l.trim().is_empty())
-        .take(limit)
-        .map(|p| FileHit {
-            name: PathBuf::from(p)
+
+    // `lines()` only checks the deadline between rows. If Spotlight stalls
+    // before the first line, kill it from the side so this worker returns.
+    let pid = child.id();
+    std::thread::spawn(move || {
+        std::thread::sleep(Duration::from_secs(2));
+        let _ = Command::new("kill").arg("-9").arg(pid.to_string()).status();
+    });
+
+    let reader = BufReader::new(stdout);
+    let mut hits = Vec::with_capacity(limit.min(64));
+
+    for line in reader.lines() {
+        let Ok(path) = line else { break };
+        let path = path.trim();
+        if path.is_empty() {
+            continue;
+        }
+        hits.push(FileHit {
+            name: PathBuf::from(path)
                 .file_name()
                 .map(|n| n.to_string_lossy().to_string())
-                .unwrap_or_else(|| p.to_string()),
-            path: p.to_string(),
-        })
-        .collect()
+                .unwrap_or_else(|| path.to_string()),
+            path: path.to_string(),
+        });
+        if hits.len() >= limit {
+            break;
+        }
+    }
+
+    // Stop Spotlight as soon as we have enough rows — leaving it to finish a
+    // huge result set is pure wasted work behind a launcher keystroke.
+    let _ = child.kill();
+    let _ = child.wait();
+    hits
 }
 
 // ---------------------------------------------------------------------------

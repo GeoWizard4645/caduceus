@@ -43,7 +43,8 @@ export function GeneralTab({
           </li>
           <li>
             <strong className="font-medium text-ink-soft">Menu bar</strong> — look for the Caduceus
-            icon near the clock; click for the Command Center, right-click for Settings and Quit.
+            icon near the clock; click for the Command Center, right-click for Settings, Restart,
+            and Quit.
           </li>
         </ul>
         <p className="mt-3 text-2xs text-ink-faint">
@@ -253,6 +254,25 @@ export function GeneralTab({
           checked={general.launchAtLogin}
           onChange={(checked) => draft.update((d) => (d.general.launchAtLogin = checked))}
         />
+        <div className="row mt-4 border-t border-line pt-4">
+          <Button
+            onClick={async () => {
+              try {
+                // Persist any edit still inside the settings debounce before
+                // the backend exits; beforeunload cannot await an IPC save.
+                await api.updateSettings(settings);
+                await api.restartApp();
+              } catch (error) {
+                window.alert(api.errorMessage(error));
+              }
+            }}
+          >
+            Restart Caduceus
+          </Button>
+          <span className="text-2xs text-ink-faint">
+            Quit and reopen the app, preserving your settings and open tabs.
+          </span>
+        </div>
       </Section>
 
       <Section

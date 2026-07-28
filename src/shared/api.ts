@@ -265,6 +265,8 @@ export const toggleStaff = () => invoke<boolean>("toggle_staff");
 
 export const relaunchApp = () => invoke<void>("relaunch_app");
 
+export const restartApp = () => invoke<void>("restart_app");
+
 /**
  * Hold the *whole* staff window clickable.
  *

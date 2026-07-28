@@ -317,6 +317,7 @@ pub fn run() {
             commands::extension_shortcuts_run,
             commands::toggle_staff,
             commands::relaunch_app,
+            commands::restart_app,
             commands::save_staff_position,
             commands::refresh_staff_layout,
             commands::collapse_staff_popout,
@@ -525,6 +526,14 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     let manager = SettingsManager::new(loaded.clone());
     app.manage(manager.clone());
 
+    // Create the menu-bar item as soon as its only dependency (Settings) is
+    // available. It is Caduceus's primary navigation, so database maintenance,
+    // widget restoration, agents, and hotkey registration must not delay it or
+    // prevent it from appearing.
+    if let Err(e) = tray::build(&handle) {
+        log::error!("could not create the tray icon: {e}");
+    }
+
     // --- clipboard --------------------------------------------------------
     let data_dir = handle
         .path()
@@ -647,10 +656,6 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         // Surfaced in Settings rather than as a modal at launch: a clashing
         // hotkey is worth knowing about, not worth interrupting for.
         let _ = handle.emit("caduceus://hotkey-problems", &problems);
-    }
-
-    if let Err(e) = tray::build(&handle) {
-        log::error!("could not create the tray icon: {e}");
     }
 
     let update_handle = handle.clone();

@@ -126,7 +126,7 @@ try {
   check("zero is zero", formatValue(0) === "0");
 
   // --- colour -------------------------------------------------------------
-  const { parseColor, rgbToHex, rgbToHsl, hslToRgb, wcag, contrastRatio } = color;
+  const { parseColor, rgbToHex, rgbToHsl, hslToRgb, nearestName, wcag, contrastRatio } = color;
 
   check("hex parses", rgbToHex(parseColor("#3b82f6")) === "#3b82f6");
   check("short hex expands", rgbToHex(parseColor("#abc")) === "#aabbcc");
@@ -136,6 +136,11 @@ try {
   check("a CSS name resolves", rgbToHex(parseColor("rebeccapurple")) === "#663399");
   check("nonsense is null, not black", parseColor("not a colour") === null);
   check("an out-of-range hex is refused", parseColor("#gggggg") === null);
+  check(
+    "a pink-purple swatch is named plum, not an early distant CSS colour",
+    nearestName(parseColor("#e394dc")).name === "plum",
+  );
+  check("an exact CSS colour has zero name distance", nearestName(parseColor("orchid")).distance === 0);
 
   // Round trip through HSL. Rounding to whole degrees and percents loses a
   // little, so this allows a couple of levels per channel rather than exactness.

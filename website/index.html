@@ -1823,7 +1823,8 @@ export default async function (input, ctx) {
   //
   // Every tag lives in this one array so correcting a model name is a one-line
   // change. `role` is what the installer wires the model into: "ai" backs the
-  // `/` prefix, "hermesModel" is the Ollama tag Hermes uses (vision for /c).
+  // `/` prefix; when Hermes is selected the same tools-capable tag is also
+  // passed as `--hermes-model` (vision-only tags cannot take Hermes tools).
   const CADUCEUS_GITHUB = "GeoWizard4645/caduceus";
   // Fallback byte size: Caduceus_3.3.3_universal.dmg on GitHub Releases (replaced live below).
   let caduceusDmgBytes = 12_629_383;
@@ -1951,14 +1952,13 @@ export default async function (input, ctx) {
     // 2b rather than 4b: this is the model behind the everyday `/` prompt —
     // formatting, rewrites, short questions — where answering fast matters more
     // than answering deeply. The bigger one is a choice, not the default.
-    { id: "qwen3.5:2b", kind: "model", role: "ai", name: "qwen3.5:2b", detail: "Caduceus / via localhost API", on: true },
+    { id: "qwen3.5:2b", kind: "model", role: "ai", name: "qwen3.5:2b", detail: "Caduceus / and Hermes tools via localhost API", on: true },
     {
       id: "qwen2.5vl:7b",
       kind: "model",
-      role: "hermesModel",
       name: "qwen2.5vl:7b",
-      detail: "Hermes agent + screen control",
-      on: true,
+      detail: "optional — screen OCR / vision commands (not Hermes; VL has no tools)",
+      on: false,
     },
     { id: "gemma3:4b", kind: "model", name: "gemma3:4b", detail: "optional extra (~131k context)", on: false },
   ];
@@ -2062,23 +2062,21 @@ export default async function (input, ctx) {
       const depsBox = boxFor("deps");
       const depsLabel = optsList.querySelector('label[data-for="deps"]');
 
-      // Model pulls need Ollama; vision /c model needs Hermes — sync checks, never grey out.
+      // Model pulls need Ollama; Hermes needs a tools-capable chat model —
+      // sync those checks, never grey out.
       for (const part of PARTS.filter((p) => p.kind === "model")) {
         const modelBox = boxFor(part.id);
         if (modelBox.checked && !ollamaBox.checked) ollamaBox.checked = true;
-        if (part.role === "hermesModel" && modelBox.checked && !hermesBox.checked) {
-          hermesBox.checked = true;
-        }
+      }
+      // Hermes without a chat model still needs something tools-capable on
+      // Ollama; tick the AI default rather than a vision-only tag.
+      if (hermesBox.checked && ollamaBox.checked) {
+        const aiPart = PARTS.find((p) => p.role === "ai");
+        if (aiPart && !boxFor(aiPart.id).checked) boxFor(aiPart.id).checked = true;
       }
 
       if (!ollamaBox.checked) {
         for (const part of PARTS.filter((p) => p.kind === "model")) {
-          boxFor(part.id).checked = false;
-        }
-      }
-
-      if (!hermesBox.checked) {
-        for (const part of PARTS.filter((p) => p.role === "hermesModel")) {
           boxFor(part.id).checked = false;
         }
       }
@@ -2098,9 +2096,10 @@ export default async function (input, ctx) {
       if (models.length) parts.push("--pull=" + models.map((p) => p.id).join(","));
 
       const ai = models.find((p) => p.role === "ai");
-      const hm = models.find((p) => p.role === "hermesModel");
       if (ai) parts.push("--ai=" + ai.id);
-      if (hm) parts.push("--hermes-model=" + hm.id);
+      // Hermes computer_use needs tools. Point it at the same chat model as `/`
+      // — never a vision-only tag (Ollama returns HTTP 400: does not support tools).
+      if (hermesBox.checked && ai) parts.push("--hermes-model=" + ai.id);
 
       const nothing = !components.length && !models.length;
       bundleCode.innerHTML = '<span class="prompt">$ </span>';
@@ -2138,11 +2137,6 @@ export default async function (input, ctx) {
 
       if (id === "ollama" && !target.checked) {
         for (const part of PARTS.filter((p) => p.kind === "model")) {
-          boxFor(part.id).checked = false;
-        }
-      }
-      if (id === "hermes" && !target.checked) {
-        for (const part of PARTS.filter((p) => p.role === "hermesModel")) {
           boxFor(part.id).checked = false;
         }
       }

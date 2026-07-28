@@ -185,8 +185,10 @@ Model:     qwen3:1.7b</pre>
 
   <h2>Path D — Hybrid</h2>
   <p>
-    Common setup: <code>/</code> → local Ollama (free, private), <code>/c</code> → Hermes with a vision
-    model for screen tasks. You can add multiple backends and switch routing anytime.
+    Common setup: <code>/</code> → local Ollama chat model (free, private), <code>/c</code> → Hermes
+    pointed at the <strong>same tools-capable chat model</strong> (e.g. <code>qwen3.5:2b</code>).
+    Do not set Hermes’ default to a vision-only tag like <code>qwen2.5vl</code> — Ollama rejects
+    tool calls on those with HTTP 400. You can add multiple backends and switch routing anytime.
   </p>
 
   <h2>Verify it works</h2>

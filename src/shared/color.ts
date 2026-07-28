@@ -253,7 +253,8 @@ export function readableOn(background: Rgb): "#000000" | "#ffffff" {
 
 /** The nearest CSS colour name, and how far off it is (0 = exact). */
 export function nearestName(rgb: Rgb): { name: string; distance: number } {
-  let best = { name: "black", distance: Number.POSITIVE_INFINITY };
+  let bestName = "black";
+  let bestDistanceSquared = Number.POSITIVE_INFINITY;
   for (const [name, hex] of Object.entries(CSS_COLORS)) {
     const other = parseHex(hex);
     if (!other) continue;
@@ -262,9 +263,12 @@ export function nearestName(rgb: Rgb): { name: string; distance: number } {
     // how far off it is rather than insisting.
     const distance =
       (rgb.r - other.r) ** 2 + (rgb.g - other.g) ** 2 + (rgb.b - other.b) ** 2;
-    if (distance < best.distance) best = { name, distance: Math.sqrt(distance) };
+    if (distance < bestDistanceSquared) {
+      bestName = name;
+      bestDistanceSquared = distance;
+    }
   }
-  return best;
+  return { name: bestName, distance: Math.sqrt(bestDistanceSquared) };
 }
 
 /** Tints and shades: the same hue at ten lightnesses. */

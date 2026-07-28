@@ -38,6 +38,21 @@ const GROUP_DISCOVER = "Discover models";
 
 const backendId = (providerId: string) => `local-${providerId}`;
 
+/**
+ * Ollama vision tags (…vl, …-vision, …) reject tool schemas with HTTP 400.
+ * Hermes always attaches tools for agent / computer_use turns, so offering
+ * them in the Hermes picker is a trap.
+ */
+function looksLikeVisionOnlyModel(tag: string): boolean {
+  const t = tag.toLowerCase();
+  return (
+    /(^|[:/\-_.])vl([:/\-_.]|$)/.test(t) ||
+    t.includes("vision") ||
+    t.includes("llava") ||
+    t.includes("minicpm-v")
+  );
+}
+
 function backendLabel(b: BackendConfig): string {
   if (b.kind === "hermes") {
     const model = b.model?.trim();
@@ -101,6 +116,7 @@ function hermesModelChoices(scan: LocalAiScan | null, settings: Settings): Model
   }
   for (const model of models) {
     if (model === current) continue; // already the plain Hermes row
+    if (looksLikeVisionOnlyModel(model)) continue;
     rows.push({
       value: `hermes-model:${model}`,
       label: `Hermes · ${model}`,
@@ -196,8 +212,14 @@ export function useChatModels(mode: ChatMode) {
         const next = structuredClone(settings);
         const hermes = next.agents.backends.find((b) => b.id === choice.backendId);
         if (hermes) hermes.model = choice.hermesModel;
-        if (mode === "chat") next.agents.primaryBackendId = choice.backendId;
-        else next.agents.computerUseBackendId = choice.backendId;
+        if (mode === "chat") {
+          next.agents.primaryBackendId = choice.backendId;
+          // Pin so auto-routing cannot silently send micro chat to a different
+          // local backend than the one the user just picked in this dropdown.
+          next.agents.routingOverrideBackendId = choice.backendId;
+        } else {
+          next.agents.computerUseBackendId = choice.backendId;
+        }
         await api.updateSettings(next);
         await reload();
         return;
@@ -226,8 +248,12 @@ export function useChatModels(mode: ChatMode) {
             };
         if (existing) Object.assign(existing, config);
         else next.agents.backends.push(config);
-        if (mode === "chat") next.agents.primaryBackendId = id;
-        else next.agents.computerUseBackendId = id;
+        if (mode === "chat") {
+          next.agents.primaryBackendId = id;
+          next.agents.routingOverrideBackendId = id;
+        } else {
+          next.agents.computerUseBackendId = id;
+        }
         await api.updateSettings(next);
         await reload();
         await refresh();
@@ -235,8 +261,12 @@ export function useChatModels(mode: ChatMode) {
       }
 
       const next = structuredClone(settings);
-      if (mode === "chat") next.agents.primaryBackendId = choice.backendId;
-      else next.agents.computerUseBackendId = choice.backendId;
+      if (mode === "chat") {
+        next.agents.primaryBackendId = choice.backendId;
+        next.agents.routingOverrideBackendId = choice.backendId;
+      } else {
+        next.agents.computerUseBackendId = choice.backendId;
+      }
       await api.updateSettings(next);
       await reload();
     },

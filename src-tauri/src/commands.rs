@@ -388,6 +388,12 @@ pub fn relaunch_app<R: Runtime>(app: AppHandle<R>) {
     app.exit(0);
 }
 
+/// Gracefully restart the running process, preserving Tauri's normal teardown.
+#[tauri::command]
+pub fn restart_app<R: Runtime>(app: AppHandle<R>) {
+    app.request_restart();
+}
+
 /// Called by the staff after a drag ends, to remember where it was left.
 #[tauri::command]
 pub fn save_staff_position<R: Runtime>(
@@ -1107,9 +1113,18 @@ pub fn stay_awake_state(awake: tauri::State<'_, tools::awake::AwakeRuntime>) -> 
     awake.status().active
 }
 
+/// Spotlight (`mdfind`) for the palette's file rows.
+///
+/// Async + `spawn_blocking` on purpose: the sync form ran on the macOS UI
+/// thread, and every ≥2-character keystroke paid for a full `mdfind` wait —
+/// which is exactly the rainbow wheel. Same rule as `list_installed_apps` and
+/// the browser/menu providers.
 #[tauri::command]
-pub fn search_files(query: String, limit: Option<usize>) -> Vec<tools::FileHit> {
-    tools::search_files(&query, limit.unwrap_or(40))
+pub async fn search_files(query: String, limit: Option<usize>) -> Vec<tools::FileHit> {
+    let limit = limit.unwrap_or(40);
+    tauri::async_runtime::spawn_blocking(move || tools::search_files(&query, limit))
+        .await
+        .unwrap_or_default()
 }
 
 /// Which backend a prompt would go to, and why.

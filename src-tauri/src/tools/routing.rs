@@ -536,8 +536,22 @@ pub fn route(
             })
         }
         TaskClass::Micro => {
-            let locals: Vec<&BackendConfig> =
-                usable.iter().copied().filter(|b| is_local_backend(b)).collect();
+            // Prefer a plain local chat endpoint (Ollama, LM Studio, …) over
+            // Hermes. Hermes is an agent that always attaches tools; handing it
+            // a short chat question is how you end up with
+            // "model does not support tools" from a vision tag that was wired
+            // as Hermes' default for /c. Chat stays on OpenAI-compatible
+            // locals; Hermes stays for computer-use unless it is the only local.
+            let chat_locals: Vec<&BackendConfig> = usable
+                .iter()
+                .copied()
+                .filter(|b| is_local_chat_backend(b))
+                .collect();
+            let locals: Vec<&BackendConfig> = if chat_locals.is_empty() {
+                usable.iter().copied().filter(|b| is_local_backend(b)).collect()
+            } else {
+                chat_locals
+            };
 
             let Some(fastest) = fastest_local(&locals, latencies) else {
                 let primary = resolve_primary(ctx)?;
@@ -591,6 +605,15 @@ fn is_local_backend(cfg: &BackendConfig) -> bool {
         BackendKind::Hermes => true,
         BackendKind::OpenAiCompatible => is_loopback_url(&cfg.base_url),
     }
+}
+
+/// Local backends that speak plain chat — no tool schemas attached.
+///
+/// Hermes is local but is an agent: every turn can include tools. Micro chat
+/// must not land there when an Ollama-style endpoint is available, or a
+/// vision-only Hermes default surfaces as a 400 on ordinary questions.
+fn is_local_chat_backend(cfg: &BackendConfig) -> bool {
+    cfg.kind == BackendKind::OpenAiCompatible && is_loopback_url(&cfg.base_url)
 }
 
 fn is_loopback_url(base_url: &str) -> bool {
@@ -1066,11 +1089,30 @@ mod tests {
     }
 
     #[test]
+    fn micro_prompt_prefers_local_chat_over_hermes() {
+        // Installer order puts Hermes first; without this preference a short
+        // chat question would hit Hermes (and its often-vision default) instead
+        // of the Ollama chat backend the UI shows as selected.
+        let backends = vec![hermes("hermes"), local_openai("ollama-chat", 11434)];
+        let ctx = RoutingContext {
+            backends: &backends,
+            primary_backend_id: Some("ollama-chat"),
+            override_backend_id: None,
+            auto_routing_enabled: true,
+        };
+        let d = route("How tall is the empire state building", &ctx, &LatencyTracker::new()).unwrap();
+        assert_eq!(d.backend_id, "ollama-chat");
+        assert_eq!(d.class, TaskClass::Micro);
+    }
+
+    #[test]
     fn hermes_counts_as_local_but_a_cloud_openai_endpoint_does_not() {
         assert!(is_local_backend(&hermes("h")));
         assert!(is_local_backend(&local_openai("l", 11434)));
         assert!(!is_local_backend(&cloud_openai("c")));
         assert!(!is_local_backend(&null_backend()));
+        assert!(is_local_chat_backend(&local_openai("l", 11434)));
+        assert!(!is_local_chat_backend(&hermes("h")));
     }
 
     #[test]

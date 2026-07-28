@@ -499,29 +499,47 @@ export const appLauncherProvider: ResultProvider = {
  * scored to land where that expectation puts it — after Applications, before
  * Commands, and never as its own tab or page.
  *
- * Gated at two characters rather than one: `mdfind` is Spotlight's own index,
- * not a directory walk, so it is fast, but a single letter still matches
- * enough of the disk to be noise on every keystroke.
+ * Gated at three characters: shorter needles make Spotlight return huge sets
+ * for almost no signal, and the Rust side used to wait for that set on the UI
+ * thread (rainbow wheel). Three letters is enough to mean a file, and
+ * `search_files` now streams+kills off-thread so typing stays responsive.
  */
+const FILE_SEARCH_CACHE_MS = 2_000;
+let fileSearchCache: {
+  query: string;
+  at: number;
+  hits: Awaited<ReturnType<typeof api.searchFiles>>;
+} | null = null;
+
 export const fileSearchProvider: ResultProvider = {
   id: "files-inline",
   title: "Files",
   async search({ query, parsed, settings, actions }) {
     if (parsed?.rule) return [];
     const trimmed = query.trim();
-    if (trimmed.length < 2) return [];
+    if (trimmed.length < 3) return [];
 
     // Capped well under the source limit: files are a supporting result here,
     // not the reason the palette is open, and five is enough to catch "the
     // thing I meant" without pushing every command off the visible list.
     const limit = Math.min(5, settings.commandCenter.maxResultsPerSource);
 
+    const now = Date.now();
     let hits: Awaited<ReturnType<typeof api.searchFiles>>;
-    try {
-      hits = await api.searchFiles(trimmed, limit);
-    } catch {
-      // A slow or failing Spotlight index must not empty the palette.
-      return [];
+    if (
+      fileSearchCache &&
+      fileSearchCache.query === trimmed &&
+      now - fileSearchCache.at < FILE_SEARCH_CACHE_MS
+    ) {
+      hits = fileSearchCache.hits;
+    } else {
+      try {
+        hits = await api.searchFiles(trimmed, limit);
+      } catch {
+        // A slow or failing Spotlight index must not empty the palette.
+        return [];
+      }
+      fileSearchCache = { query: trimmed, at: now, hits };
     }
 
     return hits.map((hit, index) => {
@@ -1347,8 +1365,8 @@ export const extensionProvider: ResultProvider = {
 //
 // The shared risk across all five, and the reason this section exists rather
 // than five one-line `invoke` calls, is that every provider's `search` runs on
-// **every keystroke** (see `HomeTab.tsx`'s 45ms debounce — short enough that
-// ordinary typing clears it on nearly every letter). `clipboardProvider`'s own
+// **every keystroke** (see `HomeTab.tsx`'s ~90ms debounce — short enough that
+// ordinary typing still clears it on nearly every letter). `clipboardProvider`'s own
 // comment above tells the story of what happens when that is forgotten: a
 // Keychain + SQLite round trip fired on every keystroke, its answer thrown
 // away unread, because nothing gated it behind the one case where it mattered.
@@ -1389,7 +1407,7 @@ export const extensionProvider: ResultProvider = {
 //   - Semantic search hits a real BM25 + embedding index and its ranking
 //     itself changes as you keep typing, so there is nothing to cache; a
 //     3-character floor is the only gate it needs, matching
-//     `fileSearchProvider`'s two-character floor over plain Spotlight.
+//     `fileSearchProvider`'s three-character floor over plain Spotlight.
 //
 // All five fail silently: a browser that is not running, a missing
 // Automation/Accessibility grant, an unbuilt semantic index, or Contacts.app
@@ -1610,8 +1628,8 @@ export const bookmarksProvider: ResultProvider = {
  * — see `api.ts`'s note on `semanticSearch`, written back when
  * `semantic_search` was built and tested but not yet registered over IPC.
  *
- * Unlike `fileSearchProvider` (Spotlight, effectively instant and gated at
- * two characters) this is real work server-side and its *ranking* changes as
+ * Unlike `fileSearchProvider` (Spotlight, off-thread and gated at three
+ * characters) this is real work server-side and its *ranking* changes as
  * you keep typing — there is nothing stable to cache between keystrokes the
  * way tabs/bookmarks/menu items have, so the only gate is the length floor.
  */

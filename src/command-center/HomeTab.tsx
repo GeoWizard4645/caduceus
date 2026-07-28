@@ -85,10 +85,15 @@ export function HomeTab({
   // switch and leaving the user to remember what they were doing.
   const lastRun = useRef<string | undefined>(undefined);
 
-  // 45ms, not 90: every provider behind this was measured in the tens of
-  // microseconds (parse 0.1ms, calculator 0.3ms, app list cached in-process),
-  // so the debounce was costing more than the work it was protecting.
-  const debouncedInput = useDebounced(input, 45);
+  // 90ms: short enough to feel instant, long enough that a fast typist does
+  // not fire Spotlight / semantic / bookmark passes on every single letter.
+  // (An older 45ms figure assumed every provider was tens of microseconds —
+  // that stopped being true once file and system search joined the list.)
+  const debouncedInput = useDebounced(input, 90);
+  // Tab titles do not need to track the caret. Updating them on every
+  // keystroke re-rendered every mounted page (Settings, chat, …) because the
+  // shell keeps tabs alive behind CSS `hidden`.
+  const debouncedTitle = useDebounced(input, 200);
 
   // --- palette actions handed to providers --------------------------------
   const actions = useMemo<PaletteActions>(
@@ -164,11 +169,11 @@ export function HomeTab({
 
   // Label the tab with the query, truncated. An untouched palette stays "Search".
   useEffect(() => {
-    const trimmed = input.trim();
+    const trimmed = debouncedTitle.trim();
     onSetTitle(
       trimmed ? (trimmed.length > 20 ? `${trimmed.slice(0, 19)}…` : trimmed) : undefined,
     );
-  }, [input, onSetTitle]);
+  }, [debouncedTitle, onSetTitle]);
 
   // Ranking reads these synchronously inside `search()`, so they have to be in
   // memory before the first result pass rather than awaited during it.

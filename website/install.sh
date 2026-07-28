@@ -12,7 +12,7 @@
 #
 #   ... | bash -s -- --with=caduceus,hermes,ollama \
 #                    --pull=qwen3.5:2b,qwen2.5vl:7b \
-#                    --ai=qwen3.5:2b --hermes-model=qwen2.5vl:7b
+#                    --ai=qwen3.5:2b --hermes-model=qwen3.5:2b
 #
 #   --with=a,b,c          components: deps, caduceus, hermes, ollama
 #                         "deps" = Xcode Command Line Tools + python3, and is
@@ -20,7 +20,10 @@
 #                         for, since neither works without them
 #   --pull=x,y            Ollama models to pull (implies ollama)
 #   --ai=MODEL            wire MODEL to Caduceus `/` via localhost:11434/v1
-#   --hermes-model=MODEL  point Hermes at MODEL on Ollama, enable computer_use,
+#   --hermes-model=MODEL  point Hermes at MODEL on Ollama, enable computer_use.
+#                         MODEL must support tools (chat tags like qwen3.5:2b).
+#                         Vision-only tags (qwen2.5vl, …) make Ollama return
+#                         HTTP 400 "does not support tools".
 #                         set Caduceus `/c` to Hermes (implies hermes)
 #   --computer-use=MODEL  legacy: wire MODEL to `/c` as a vision backend (no Hermes)
 #   --from-source         compile Caduceus here instead of downloading it. Slow

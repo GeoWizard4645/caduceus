@@ -16,12 +16,16 @@ const ID_TOGGLE_ORB: &str = "toggle-staff";
 const ID_CLIPBOARD: &str = "clipboard";
 const ID_SETTINGS: &str = "settings";
 const ID_STOP_AGENTS: &str = "stop-agents";
+const ID_RESTART: &str = "restart";
 const ID_QUIT: &str = "quit";
 
 pub fn build<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
     let menu = build_menu(app)?;
 
     let mut builder = TrayIconBuilder::with_id("caduceus-tray")
+        // Keep a visible, unmistakable status item even if macOS fails to tint
+        // the template image after an update or display-layout change.
+        .title("Caduceus")
         .tooltip("Caduceus")
         .menu(&menu)
         // On macOS the left click opens the Command Center and the right click
@@ -86,6 +90,7 @@ fn build_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
             &MenuItem::with_id(app, ID_SETTINGS, "Settings\u{2026}", true, Some("CmdOrCtrl+,"))?,
             &MenuItem::with_id(app, ID_STOP_AGENTS, "Stop All Agents", true, None::<&str>)?,
             &PredefinedMenuItem::separator(app)?,
+            &MenuItem::with_id(app, ID_RESTART, "Restart Caduceus", true, None::<&str>)?,
             &MenuItem::with_id(app, ID_QUIT, "Quit Caduceus", true, Some("CmdOrCtrl+Q"))?,
         ],
     )
@@ -103,6 +108,12 @@ fn accelerator_hint<R: Runtime>(app: &AppHandle<R>) -> String {
 /// Rebuild the menu so the Show/Hide label matches reality.
 pub fn refresh<R: Runtime>(app: &AppHandle<R>) {
     let Some(tray) = app.tray_by_id("caduceus-tray") else {
+        // The status item is the app's primary navigation on macOS. If the OS
+        // or an interrupted startup dropped it, any settings/hotkey refresh is
+        // an opportunity to put it back instead of silently doing nothing.
+        if let Err(e) = build(app) {
+            log::error!("could not restore the tray icon: {e}");
+        }
         return;
     };
     match build_menu(app) {
@@ -146,6 +157,9 @@ fn handle_menu_event<R: Runtime>(app: &AppHandle<R>, event: MenuEvent) {
             if let Some(runtime) = app.try_state::<crate::agent::AgentRuntime>() {
                 runtime.stop_all();
             }
+        }
+        ID_RESTART => {
+            crate::commands::restart_app(app.clone());
         }
         ID_QUIT => {
             // `exit` raises `ExitRequested`, which is where the teardown is
