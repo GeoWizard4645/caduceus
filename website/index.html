@@ -45,8 +45,8 @@
       "applicationSubCategory": "Productivity",
       "operatingSystem": "macOS 11.0 or later",
       "processorRequirements": "Apple Silicon or Intel",
-      "softwareVersion": "3.3.3",
-      "fileSize": "12MB",
+      "softwareVersion": "4.0.2",
+      "fileSize": "13MB",
       "downloadUrl": "https://github.com/GeoWizard4645/caduceus/releases/latest",
       "installUrl": "https://caduceus.vivaanshahani.com/",
       "softwareHelp": {
@@ -1199,7 +1199,7 @@
       <span class="badge">macOS 11+</span>
       <span class="badge">Apple Silicon &amp; Intel</span>
       <span class="badge">GPL-3.0 licensed</span>
-      <span class="badge">~10 MB</span>
+      <span class="badge" id="footprint-badge">~12 MB download</span>
     </div>
 
     <div class="hero-intro">
@@ -1259,8 +1259,9 @@
           <button class="copy" id="copy" type="button">Copy</button>
         </div>
         <p class="cmd-meta" id="cmd-meta">
-          <strong>~10 MB</strong> download · <strong>~10 s</strong> on a fast connection ·
-          <strong>Idempotent</strong> — safe to run again; re-running just reinstalls the latest release.
+          <strong>~12 MB</strong> universal .dmg · <strong>~13 MB</strong> in /Applications ·
+          <strong>~10–20 s</strong> on a fast connection ·
+          <strong>Idempotent</strong> — safe to run again; re-running installs the latest release.
         </p>
 
         <details class="install-brew">
@@ -1658,7 +1659,7 @@
             <td>Always there.</td>
             <td>Light when idle; grows with workflows.</td>
             <td>Heavier; background services for sync and extensions.</td>
-            <td class="col-caduceus"><strong>~10 MB</strong> menu-bar app; local-first core.</td>
+            <td class="col-caduceus" id="footprint-compare"><strong>~13 MB</strong> installed (~12 MB .dmg); universal Apple Silicon + Intel.</td>
           </tr>
         </tbody>
       </table>
@@ -1823,17 +1824,87 @@ export default async function (input, ctx) {
   // Every tag lives in this one array so correcting a model name is a one-line
   // change. `role` is what the installer wires the model into: "ai" backs the
   // `/` prefix, "hermesModel" is the Ollama tag Hermes uses (vision for /c).
+  const CADUCEUS_GITHUB = "GeoWizard4645/caduceus";
+  // Fallback byte size: Caduceus_3.3.3_universal.dmg on GitHub Releases (replaced live below).
+  let caduceusDmgBytes = 12_629_383;
+
+  function formatDmgLabel(bytes) {
+    const mb = bytes / (1024 * 1024);
+    const rounded = mb >= 10 ? Math.round(mb) : Math.round(mb * 10) / 10;
+    return `~${rounded} MB`;
+  }
+
+  function formatInstalledLabel(bytes) {
+    const mb = (bytes / (1024 * 1024)) * 1.08;
+    const rounded = mb >= 10 ? Math.round(mb) : Math.round(mb * 10) / 10;
+    return `~${rounded} MB`;
+  }
+
+  function applyCaduceusFootprint(bytes, version) {
+    caduceusDmgBytes = bytes;
+    const dmg = formatDmgLabel(bytes);
+    const installed = formatInstalledLabel(bytes);
+    const verNote = version ? ` · v${version}` : "";
+
+    DOWNLOAD_EST.caduceus = {
+      sizeMB: Math.max(1, Math.round(bytes / (1024 * 1024))),
+      size: dmg,
+      time: "~10–20 s",
+    };
+
+    const badge = document.getElementById("footprint-badge");
+    if (badge) badge.textContent = `${dmg} download`;
+
+    const meta = document.getElementById("cmd-meta");
+    if (meta) {
+      meta.innerHTML =
+        `<strong>${dmg}</strong> universal .dmg${verNote} · <strong>${installed}</strong> in /Applications · ` +
+        `<strong>~10–20 s</strong> on a fast connection · ` +
+        `<strong>Idempotent</strong> — safe to run again; re-running installs the latest release.`;
+    }
+
+    const compare = document.getElementById("footprint-compare");
+    if (compare) {
+      compare.innerHTML =
+        `<strong>${installed}</strong> installed (${dmg} .dmg); universal Apple Silicon + Intel.`;
+    }
+
+    const caduceusInfo = document.getElementById("caduceus-part-info");
+    if (caduceusInfo) {
+      caduceusInfo.textContent =
+        `One universal .dmg from the latest GitHub release (${dmg} download, ${installed} installed). ` +
+        "Apple Silicon and Intel in one binary — no toolchain, no build. The installer clears the " +
+        "quarantine flag for you, since Caduceus is not signed with an Apple Developer certificate.";
+    }
+
+    if (typeof window.__renderBundleInstall === "function") window.__renderBundleInstall();
+  }
+
+  async function fetchCaduceusFootprint() {
+    try {
+      const res = await fetch(`https://api.github.com/repos/${CADUCEUS_GITHUB}/releases/latest`);
+      if (!res.ok) return;
+      const rel = await res.json();
+      const version = (rel.tag_name || "").replace(/^v/, "");
+      const asset = (rel.assets || []).find(
+        (a) => typeof a.name === "string" && a.name.includes("universal") && a.name.endsWith(".dmg"),
+      );
+      if (asset?.size) applyCaduceusFootprint(asset.size, version);
+    } catch {
+      /* offline or rate-limited — keep fallback */
+    }
+  }
+
   const DOWNLOAD_EST = {
     // The Command Line Tools are ~1.5 GB, but nearly every machine that gets
     // this far already has them, so counting them in the total would overstate
     // it for almost everyone. Called out in the checkbox's own info line instead.
     deps: { sizeMB: 0, size: "~0 MB*", time: "~0–10 min" },
-    // The universal .dmg carries both slices, so it is roughly twice the size
-    // of the app you end up running.
-    caduceus: { sizeMB: 10, size: "~10 MB", time: "~10 s" },
+    // Universal .dmg (both architectures). `applyCaduceusFootprint` refreshes from GitHub.
+    caduceus: { sizeMB: 12, size: "~12 MB", time: "~10–20 s" },
     hermes: { sizeMB: 150, size: "~150 MB", time: "~2–5 min" },
     ollama: { sizeMB: 80, size: "~80 MB", time: "~1 min" },
-    "qwen3.5:1.7b": { sizeMB: 1400, size: "~1.4 GB", time: "~3–10 min" },
+    "qwen3.5:2b": { sizeMB: 1700, size: "~1.7 GB", time: "~3–10 min" },
     "qwen2.5vl:7b": { sizeMB: 6000, size: "~6 GB", time: "~10–35 min" },
     "gemma3:4b": { sizeMB: 3300, size: "~3.3 GB", time: "~5–20 min" },
   };
@@ -1854,11 +1925,11 @@ export default async function (input, ctx) {
       id: "caduceus",
       kind: "component",
       name: "Caduceus",
-      detail: "the app itself",
+      detail: "universal .dmg (see sizes above)",
       info:
-        "One universal .dmg from the latest release — Apple Silicon and Intel, no toolchain, no " +
-        "build. The installer clears the quarantine flag for you, since Caduceus is not signed " +
-        "with an Apple Developer certificate.",
+        "One universal .dmg from the latest GitHub release. Apple Silicon and Intel in one binary — " +
+        "no toolchain, no build. The installer clears the quarantine flag for you, since Caduceus is " +
+        "not signed with an Apple Developer certificate.",
       on: true,
     },
     {
@@ -1877,10 +1948,10 @@ export default async function (input, ctx) {
       docUrl: "https://ollama.com/",
       on: true,
     },
-    // 1.7b rather than 4b: this is the model behind the everyday `/` prompt —
+    // 2b rather than 4b: this is the model behind the everyday `/` prompt —
     // formatting, rewrites, short questions — where answering fast matters more
     // than answering deeply. The bigger one is a choice, not the default.
-    { id: "qwen3.5:1.7b", kind: "model", role: "ai", name: "qwen3.5:1.7b", detail: "Caduceus / via localhost API", on: true },
+    { id: "qwen3.5:2b", kind: "model", role: "ai", name: "qwen3.5:2b", detail: "Caduceus / via localhost API", on: true },
     {
       id: "qwen2.5vl:7b",
       kind: "model",
@@ -1946,6 +2017,7 @@ export default async function (input, ctx) {
         const infoEl = document.createElement("span");
         infoEl.className = "info";
         infoEl.textContent = part.info;
+        if (part.id === "caduceus") infoEl.id = "caduceus-part-info";
         label.append(box, rowMain, infoEl);
       } else {
         label.append(box, rowMain);
@@ -2074,6 +2146,7 @@ export default async function (input, ctx) {
       }
       render();
     });
+    window.__renderBundleInstall = render;
     render();
 
     if (customizeDialog && customizeOpen) {
@@ -2084,6 +2157,9 @@ export default async function (input, ctx) {
       customizeDialog.addEventListener("close", () => customizeOpen.focus());
     }
   }
+
+  applyCaduceusFootprint(caduceusDmgBytes, "");
+  void fetchCaduceusFootprint();
 
   // Copy buttons. The command text is read from the DOM rather than duplicated
   // in JS, so there is only one place to change it.
