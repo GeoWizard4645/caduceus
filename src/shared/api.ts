@@ -1505,18 +1505,15 @@ export const expanderProofread = (text: string) =>
 // Mirrors `src-tauri/src/tools/routing.rs`: a pure, deterministic classifier
 // (24 tests) that decides whether a prompt is "micro" (fast local model) or
 // "complex" (the configured primary backend), plus a policy that honours an
-// on/off switch and a user pin. Unlike the expander above, **none of this is
-// wired into a Tauri command yet** — `routing.rs` exposes `classify`/`route`
-// as plain Rust functions, not `#[tauri::command]`s, and `AgentSettings` does
-// not yet carry the two fields the policy needs (`autoRoutingEnabled`,
-// `routingOverrideBackendId`). This wrapper is written against the command
-// this feature will need — `routing_preview`, taking a prompt and returning
-// the decision the classifier would make right now — so that the moment a
-// backend command by that name exists, the Routing settings tab starts
-// working with no frontend change. Until then, calling it rejects with a
-// "command not found" style error, which the tab catches and explains rather
-// than treating as a crash. See that tab for the exact fields/command this
-// needs on the Rust side.
+// on/off switch and a user pin. `routing_preview` is a registered
+// `#[tauri::command]` (see `src-tauri/src/commands.rs`) that runs the same
+// `tools::routing::route` used for real chat traffic — through
+// `agent::chat_with_history` → `resolve_chat_backend` — against a prompt you
+// type, without sending anything to a model. `AgentSettings` (see
+// `src/shared/types.ts`) carries the two fields the policy needs,
+// `autoRoutingEnabled` and `routingOverrideBackendId`, which the Routing
+// settings tab reads and writes through `draft.update(...)` like any other
+// setting.
 export interface RoutingDecision {
   backendId: string;
   class: "micro" | "complex";
