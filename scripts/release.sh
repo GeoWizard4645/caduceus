@@ -307,7 +307,33 @@ if [[ -n "${CADUCEUS_SIGNING_IDENTITY:-}" ]]; then
   run bash "$ROOT/scripts/notarize.sh" "$UNIVERSAL" "$DMG"
 else
   step "Not notarizing"
-  note "ad-hoc signed — set CADUCEUS_SIGNING_IDENTITY to notarize"
+  # A one-line note here used to be the only trace of this. It is easy to miss
+  # between a hundred lines of build output, and the consequence — a stranger's
+  # Mac calling this app malware — is not a one-line problem. See it now, not
+  # when someone forwards you a screenshot of the warning.
+  printf '\n    %s%s⚠ this build is ad-hoc signed, not notarized.%s\n' "$BOLD" "$RED" "$OFF"
+  note "Gatekeeper will warn on it. The installer and the Homebrew cask both work"
+  note "around that for people who use them (they clear the quarantine flag on"
+  note "this specific, checksum-verified download). Anyone who grabs the DMG"
+  note "straight off the Releases page and opens it by hand still sees:"
+  note "  \"Apple could not verify ... is free of malware\""
+  note "set CADUCEUS_SIGNING_IDENTITY to notarize instead — RELEASE.md § Notarization"
+fi
+
+# --- checksum -----------------------------------------------------------
+
+# Computed after notarization, not before: notarize.sh repacks the DMG around
+# the stapled app, which changes its bytes. Hashing here, once, is the only
+# way the published checksum ever matches what a user actually downloads.
+# website/install.sh fetches "<asset>.sha256" and refuses to clear quarantine
+# on a mismatch — this is the file that makes that check possible.
+step "Checksumming the DMG"
+SHA_FILE="${DMG}.sha256"
+if ! (( DRY_RUN )); then
+  printf '%s  %s\n' "$(shasum -a 256 "$DMG" | cut -d' ' -f1)" "$(basename "$DMG")" > "$SHA_FILE"
+  note "$(cat "$SHA_FILE")"
+else
+  note "would write: $SHA_FILE"
 fi
 
 # --- notes -----------------------------------------------------------------
@@ -357,7 +383,7 @@ note "pushed $BRANCH and $TAG"
 
 step "Creating the GitHub release"
 
-GH_ARGS=(release create "$TAG" "$DMG" --repo "$REPO" --title "$TAG" --notes "$NOTES")
+GH_ARGS=(release create "$TAG" "$DMG" "$SHA_FILE" --repo "$REPO" --title "$TAG" --notes "$NOTES")
 if (( DRAFT )); then
   GH_ARGS+=(--draft)
   note "as a draft — it will not become /releases/latest until you publish it"
@@ -401,6 +427,7 @@ fi
 if (( DRAFT )); then
   step "Draft ready"
   note "https://github.com/$REPO/releases/tag/$TAG"
+  [[ -z "${CADUCEUS_SIGNING_IDENTITY:-}" ]] && note "unsigned — see RELEASE.md § Notarization before you publish it"
   exit 0
 fi
 
@@ -425,3 +452,9 @@ step "Released $TAG"
 note "https://github.com/$REPO/releases/tag/$TAG"
 note "curl -fsSL https://raw.githubusercontent.com/GeoWizard4645/caduceus/main/website/install.sh | bash"
 (( SKIP_CASK )) || note "brew install --cask geowizard4645/caduceus/caduceus"
+
+if [[ -z "${CADUCEUS_SIGNING_IDENTITY:-}" ]]; then
+  printf '\n%s%s⚠ unsigned release.%s Gatekeeper will call this app unverified for anyone\n' "$BOLD" "$RED" "$OFF"
+  printf '  who does not install it through the two paths above. That is a Developer ID\n'
+  printf '  and $99/year away from going away entirely — see RELEASE.md %s§ Notarization%s.\n' "$DIM" "$OFF"
+fi

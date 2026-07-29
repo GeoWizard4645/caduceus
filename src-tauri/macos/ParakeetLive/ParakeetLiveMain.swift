@@ -15,16 +15,32 @@ import Foundation
 //   preparing <message> | ready | partial <text> | final <text> | wav <path>
 // stdin: pause | resume | stop
 //
-// Everything executable lives in `run()` rather than in top-level statements.
-// Top-level code in a Swift 6 script is implicitly @MainActor, and closures
-// formed there inherit that isolation — including the AVAudioEngine tap block,
-// which CoreAudio then invokes on its realtime thread. The runtime's dynamic
-// isolation check kills the process with SIGTRAP the moment the first audio
-// buffer arrives, which the app sees as "Broken pipe" on the next stdin write.
-// The same inheritance parked the preview Task on a main actor that was
-// blocked in readLine, so partials never came out either. A nonisolated
-// `run()` gives the tap, the preview loop and the stdin loop plain
-// backgrounds to live on.
+// This file used to be `main.swift` with `run()` invoked from top-level code.
+// That does not do what the previous comment here claimed: `Package.swift` is
+// `swift-tools-version: 6.0`, and top-level *code* in a file named main.swift
+// is implicitly @MainActor in Swift 6 — the isolation attaches to the
+// enclosing top-level context and every closure formed lexically inside it,
+// including `run()` itself and the AVAudioEngine tap block, regardless of the
+// `async`/`private` keywords on `run()`. CoreAudio invokes the tap on its own
+// realtime thread; the runtime's dynamic isolation check then kills the
+// process with SIGTRAP the moment the first audio buffer arrives, which the
+// app sees as "Broken pipe" on the next stdin write. The same inheritance
+// parked the preview Task on the main actor behind a blocked readLine, so no
+// partials ever came out either.
+//
+// The fix is structural, not a keyword: `main.swift`'s implicit-@MainActor
+// rule only applies to *that specific top-level-code file*. Moving the entry
+// point to an ordinary file with an explicit `@main` type sidesteps it
+// entirely — declarations here get Swift's normal default (nonisolated)
+// unless something says otherwise. `run()` is marked `nonisolated` anyway,
+// and the tap closure `@Sendable`, so the isolation is enforced twice over
+// rather than relying on "this file merely isn't main.swift".
+@main
+struct ParakeetLiveMain {
+    static func main() async {
+        await run()
+    }
+}
 
 private enum Out {
     static let lock = NSLock()
@@ -162,25 +178,54 @@ private func mono16k(_ buffer: AVAudioPCMBuffer) -> [Float] {
     }
 }
 
+// Writes the WAV header and samples as raw bytes rather than going through
+// AVAudioFile/AVAudioPCMBuffer. That pair route the write through an
+// AudioConverter even when the buffer and file formats already match, and
+// with fixing the actor-isolation crash below this became reachable: a
+// realtime-thread CAAssertRtn now killed the process with SIGTRAP right
+// after `final`, on the very first call that ever got this far. The manual
+// byte layout is what caduceus-stt-live already uses for the same reason.
 private func writeWav(_ samples: [Float]) -> URL {
     let url = FileManager.default.temporaryDirectory
         .appendingPathComponent("caduceus-parakeet-\(UUID().uuidString).wav")
-    let format = AVAudioFormat(
-        commonFormat: .pcmFormatInt16, sampleRate: 16_000, channels: 1, interleaved: true)!
-    let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(samples.count))!
-    buffer.frameLength = AVAudioFrameCount(samples.count)
-    if let output = buffer.int16ChannelData?[0] {
-        for i in samples.indices {
-            output[i] = Int16(max(-1, min(1, samples[i])) * Float(Int16.max))
-        }
+    let sampleRate = 16_000
+    let byteRate = sampleRate * 2
+    let dataSize = samples.count * 2
+    var data = Data()
+    data.append(contentsOf: "RIFF".utf8)
+    data.append(contentsOf: uint32LE(UInt32(36 + dataSize)))
+    data.append(contentsOf: "WAVE".utf8)
+    data.append(contentsOf: "fmt ".utf8)
+    data.append(contentsOf: uint32LE(16))
+    data.append(contentsOf: uint16LE(1))
+    data.append(contentsOf: uint16LE(1))
+    data.append(contentsOf: uint32LE(UInt32(sampleRate)))
+    data.append(contentsOf: uint32LE(UInt32(byteRate)))
+    data.append(contentsOf: uint16LE(2))
+    data.append(contentsOf: uint16LE(16))
+    data.append(contentsOf: "data".utf8)
+    data.append(contentsOf: uint32LE(UInt32(dataSize)))
+    for sample in samples {
+        let clamped = max(-1, min(1, sample))
+        data.append(contentsOf: int16LE(Int16(clamped * Float(Int16.max))))
     }
-    if let file = try? AVAudioFile(forWriting: url, settings: format.settings) {
-        try? file.write(from: buffer)
-    }
+    try? data.write(to: url)
     return url
 }
 
-private func run() async {
+private func uint16LE(_ v: UInt16) -> [UInt8] { [UInt8(v & 0xff), UInt8(v >> 8)] }
+private func uint32LE(_ v: UInt32) -> [UInt8] {
+    [UInt8(v & 0xff), UInt8((v >> 8) & 0xff), UInt8((v >> 16) & 0xff), UInt8(v >> 24)]
+}
+private func int16LE(_ v: Int16) -> [UInt8] { uint16LE(UInt16(bitPattern: v)) }
+
+// `nonisolated` on top of the file no longer being main.swift: belt and
+// braces against the exact regression this file's header describes. Every
+// closure formed lexically inside `run()` — the tap, the two `Task { }`
+// blocks, the stdin loops — inherits this function's isolation, and
+// `nonisolated` is what makes that inheritance "no actor" instead of
+// "whatever the caller happened to be running on".
+nonisolated private func run() async {
     let pcmStdinMode = CommandLine.arguments.contains("--stdin-pcm16")
     let modelStatusMode = CommandLine.arguments.contains("--model-ready")
     let prepareModelMode = CommandLine.arguments.contains("--prepare-model")
@@ -221,9 +266,16 @@ private func run() async {
         // Feeding outputFormat back into the tap can be rejected at start with
         // kAudioUnitErr_FormatNotSupported (-10868) after route changes or for
         // virtual/Bluetooth input devices.
-        input.installTap(onBus: 0, bufferSize: 2048, format: nil) { buffer, _ in
+        //
+        // @Sendable is explicit here (AVAudioNodeTapBlock is already Sendable,
+        // so this is redundant with the API, not with the compiler) and the
+        // only capture is `store`, an `@unchecked Sendable` with its own lock —
+        // no actor, no `self`, no captured `Task`. CoreAudio calls this on a
+        // realtime thread; anything actor-isolated here is the crash.
+        let tap: @Sendable (AVAudioPCMBuffer, AVAudioTime) -> Void = { buffer, _ in
             store.append(mono16k(buffer))
         }
+        input.installTap(onBus: 0, bufferSize: 2048, format: nil, block: tap)
         do {
             try engine.start()
         } catch {
@@ -321,5 +373,3 @@ private func run() async {
     let wav = writeWav(samples)
     emit("wav", wav.path)
 }
-
-await run()

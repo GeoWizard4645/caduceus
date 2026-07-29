@@ -295,8 +295,16 @@ pub async fn open_external_url(
 
 /// Send the user to a named System Settings pane. See
 /// [`shortcuts::exec::open_settings_pane`] for why `pane` is a key and not a URL.
+///
+/// Marks a permission flow as active first: bringing System Settings forward
+/// takes focus away from the Command Center exactly like switching to any other
+/// app, and without the mark the palette's blur handler would hide it on the
+/// spot — see [`window::PermissionFlowActive`].
 #[tauri::command]
-pub async fn open_system_settings(pane: String) -> ExecOutcome {
+pub async fn open_system_settings<R: Runtime>(app: AppHandle<R>, pane: String) -> ExecOutcome {
+    if let Some(state) = app.try_state::<window::PermissionFlowActive>() {
+        state.mark_active();
+    }
     shortcuts::exec::open_settings_pane(&pane).await
 }
 
@@ -2190,8 +2198,17 @@ pub async fn repair_permission(grant: window::grants::Grant) -> Res<window::gran
 }
 
 /// Ask macOS for a privacy grant without clearing an existing TCC entry.
+///
+/// Marks a permission flow as active first, for the same reason as
+/// [`open_system_settings`]: the TCC sheet this triggers steals focus from the
+/// Command Center just as effectively as switching to another app would, and
+/// the blur handler cannot otherwise tell the two apart. See
+/// [`window::PermissionFlowActive`].
 #[tauri::command]
-pub fn request_permission(grant: window::grants::Grant) -> bool {
+pub fn request_permission<R: Runtime>(app: AppHandle<R>, grant: window::grants::Grant) -> bool {
+    if let Some(state) = app.try_state::<window::PermissionFlowActive>() {
+        state.mark_active();
+    }
     window::grants::request(grant)
 }
 

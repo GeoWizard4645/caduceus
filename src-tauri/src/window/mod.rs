@@ -109,18 +109,100 @@ impl PaletteFloating {
     }
 }
 
+/// Whether the Command Center is mid permission-flow: System Settings was just
+/// sent to the front, or a TCC prompt was just triggered, on the user's behalf.
+///
+/// Either of those steals focus the moment it appears, which is indistinguishable
+/// from "the user clicked away" to the blur handler below — without this, asking
+/// for a permission was enough to make the palette vanish out from under the
+/// person who asked for it, taking with it whatever they had typed and the tab
+/// they were on. Unlike [`PaletteFloating::just_shown`], which only needs to
+/// survive a single-frame focus hiccup, this has to survive the user actually
+/// leaving the app: finding the right toggle in System Settings, or answering a
+/// TCC sheet, can take anywhere from a couple of seconds to a couple of minutes.
+/// A bare "ignore the next blur" flag would either fire too early and lose the
+/// race, or never get cleared and permanently disable click-away dismissal — so
+/// this is a timestamp, re-armed on every permission-related action and treated
+/// as expired once it is stale enough that "still mid-flow" is no longer the
+/// likely explanation.
+#[derive(Debug)]
+pub struct PermissionFlowActive {
+    marked_at: parking_lot::Mutex<std::time::Instant>,
+}
+
+/// How long a permission flow is assumed to still be in progress after the last
+/// time it was touched.
+///
+/// Generous on purpose: System Settings is not fast to navigate, and a user
+/// hunting for, say, Accessibility inside Privacy & Security can easily spend a
+/// minute or two on it. Too short and the palette is right back to closing
+/// itself mid-flow; too long only matters if the user quietly gives up on the
+/// permission and later clicks away expecting the palette to dismiss, in which
+/// case they simply get one stale grace window rather than a broken feature.
+const PERMISSION_FLOW_WINDOW: std::time::Duration = std::time::Duration::from_secs(180);
+
+impl Default for PermissionFlowActive {
+    fn default() -> Self {
+        Self {
+            // Start already expired, mirroring `PaletteFloating`'s default —
+            // nothing has asked for a permission yet.
+            marked_at: parking_lot::Mutex::new(
+                std::time::Instant::now() - PERMISSION_FLOW_WINDOW * 2,
+            ),
+        }
+    }
+}
+
+impl PermissionFlowActive {
+    /// Record that a permission flow (System Settings, or a TCC prompt) just
+    /// started or is still ongoing.
+    pub fn mark_active(&self) {
+        *self.marked_at.lock() = std::time::Instant::now();
+    }
+
+    /// Whether a permission flow is still assumed to be in progress.
+    pub fn is_active(&self) -> bool {
+        self.marked_at.lock().elapsed() < PERMISSION_FLOW_WINDOW
+    }
+
+    /// Clear the flag outright, so a deliberate dismissal (Escape, an explicit
+    /// hide) is never blocked by a permission flow the user has since abandoned.
+    pub fn clear(&self) {
+        *self.marked_at.lock() = std::time::Instant::now() - PERMISSION_FLOW_WINDOW * 2;
+    }
+}
+
 /// Emitted to the staff window as the pointer moves in and out.
 pub const STAFF_HOVER_EVENT: &str = "caduceus://staff-hover";
 /// Asks the Command Center to open in a particular mode.
 pub const COMMAND_CENTER_OPEN_EVENT: &str = "caduceus://command-center-open";
 
 /// Height the walkthrough card needs for its longest step, plus its own padding.
-const ONBOARDING_CARD_HEIGHT: f64 = 210.0;
+///
+/// Raised from 210 when the walkthrough grew a permissions phase and became a
+/// proper centred modal rather than a small strip. The card asks for 560px of
+/// width and self-limits to `calc(100% - 32px)`, so a window that is too small
+/// does not clip it — it quietly squeezes it instead, which is how the old
+/// walkthrough ended up feeling cramped. Sizing the window from a realistic card
+/// height keeps the modal at its intended width and leaves the longest step
+/// (three permissions, each with its own numbered instructions) room to breathe.
+const ONBOARDING_CARD_HEIGHT: f64 = 260.0;
 /// Gap between the top of the window and the card, and between card and mark.
 const ONBOARDING_CARD_GAP: f64 = 16.0;
 
+/// Clearance between the outermost pop-out icon and the edge of the window.
+///
+/// This used to be 24px, which was enough when an icon was the last thing drawn
+/// on the arc. Each shortcut now carries a caption underneath naming where it
+/// goes, and a caption is both taller than the gap below the icon and wider than
+/// the icon itself — at the default appearance settings that left roughly two
+/// pixels before the window's edge, so the captions on the left and right of the
+/// ring were cut off. The window is click-through everywhere except the mark, so
+/// the only cost of the extra margin is a slightly larger invisible square.
+const POPOUT_EDGE_MARGIN: f64 = 50.0;
+
 /// Side length of the staff window. Grows with staff size and pop-out reach so
-/// icons are never clipped; clamped to a sane range.
+/// icons and their captions are never clipped; clamped to a sane range.
 ///
 /// While the first-run walkthrough is unfinished the window also has to hold its
 /// card, which is drawn in the top half so the mark at the centre stays visible
@@ -131,7 +213,7 @@ const ONBOARDING_CARD_GAP: f64 = 16.0;
 pub fn staff_window_side(settings: &Settings) -> f64 {
     let a = &settings.appearance;
     let mark = a.staff_size as f64;
-    let reach = a.popout_radius as f64 + a.popout_icon_size as f64 / 2.0 + 24.0;
+    let reach = a.popout_radius as f64 + a.popout_icon_size as f64 / 2.0 + POPOUT_EDGE_MARGIN;
     let base = (reach * 2.0).max(mark * 2.2).clamp(280.0, 480.0);
 
     if settings.general.onboarding_done {
@@ -805,6 +887,15 @@ pub fn open_command_center<R: Runtime>(
 }
 
 pub fn hide_command_center<R: Runtime>(app: &AppHandle<R>) -> Result<(), String> {
+    // This is the explicit-dismissal path — Escape, clicking the close affordance,
+    // `toggle_command_center` while visible — as opposed to the automatic hide in
+    // `handle_window_event`'s blur handler. A deliberate "go away" from the user
+    // should always win, even mid permission-flow: otherwise someone who opens
+    // System Settings, changes their mind, and Escapes back to the palette would
+    // find it refuses to take the hint for up to three minutes.
+    if let Some(state) = app.try_state::<PermissionFlowActive>() {
+        state.clear();
+    }
     if let Some(window) = command_center(app) {
         window.hide().map_err(|e| e.to_string())?;
     }
@@ -1014,6 +1105,43 @@ pub fn apply_vibrancy<R: Runtime>(window: &WebviewWindow<R>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn permission_flow_is_inactive_until_marked() {
+        // Mirrors `PaletteFloating`'s default: nothing has happened yet, so there
+        // is no flow to protect and a stray blur should hide the palette as usual.
+        let flow = PermissionFlowActive::default();
+        assert!(!flow.is_active());
+    }
+
+    #[test]
+    fn permission_flow_stays_active_right_after_marking() {
+        let flow = PermissionFlowActive::default();
+        flow.mark_active();
+        assert!(flow.is_active());
+    }
+
+    #[test]
+    fn permission_flow_expires_on_its_own() {
+        // Never latches forever — a flag that only gets set and never times out
+        // would leave the palette refusing to dismiss on blur indefinitely if the
+        // user simply abandoned the permission prompt.
+        let flow = PermissionFlowActive::default();
+        *flow.marked_at.lock() =
+            std::time::Instant::now() - PERMISSION_FLOW_WINDOW - std::time::Duration::from_secs(1);
+        assert!(!flow.is_active());
+    }
+
+    #[test]
+    fn clearing_a_freshly_marked_flow_deactivates_it() {
+        // The explicit-dismissal escape hatch: `hide_command_center` calls this
+        // so Escape always wins, even seconds after a permission was requested.
+        let flow = PermissionFlowActive::default();
+        flow.mark_active();
+        assert!(flow.is_active());
+        flow.clear();
+        assert!(!flow.is_active());
+    }
 
     #[test]
     fn polls_fast_while_the_pointer_is_engaged() {

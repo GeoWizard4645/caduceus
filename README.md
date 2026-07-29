@@ -50,9 +50,10 @@ the source of before you run it — that is what this is.
 curl -fsSL https://raw.githubusercontent.com/GeoWizard4645/caduceus/main/website/install.sh | bash
 ```
 
-That downloads the universal `.dmg` from the latest release, mounts it, copies
-the app to `/Applications`, removes the quarantine flag, and launches it. About
-10 MB and ten seconds, with no toolchain and nothing to configure.
+That downloads the universal `.dmg` from the latest release, checks it against
+the published checksum, mounts it, copies the app to `/Applications`, removes
+the quarantine flag, and launches it. About 10 MB and ten seconds, with no
+toolchain and nothing to configure.
 
 Or with Homebrew:
 
@@ -77,16 +78,37 @@ xattr -dr com.apple.quarantine /Applications/Caduceus.app
 ```
 
 <details>
-<summary><strong>Why that last command is needed</strong></summary>
+<summary><strong>Why that last command is needed, and about the "malware" warning</strong></summary>
 
-Caduceus is not signed with an Apple Developer certificate yet, so macOS marks
-it as quarantined and refuses to open it. `xattr -dr com.apple.quarantine`
-clears that flag — it is the same thing the right-click → Open dance does, more
-directly. You are telling macOS you trust this specific app, which you should
-only do because you can read the source in this repo and build it yourself.
+Caduceus is not signed with an Apple Developer certificate — that costs $99/year
+and this project does not have one yet — so anything that downloads it gets
+tagged "quarantined" by macOS, and opening a quarantined, unsigned app is what
+produces **"Apple could not verify that Caduceus is free of malware..."**. That
+message is not specific to this app or this download; it is what macOS says
+about *any* app from outside the App Store that lacks a paid developer
+signature. `xattr -dr com.apple.quarantine` removes the tag — it is the same
+thing the right-click → Open dance does, only in one command instead of a
+guided tour of dialog boxes. You are telling macOS you trust this specific
+app, which is a reasonable thing to decide for yourself given the source is
+right here in this repo.
 
-The installer runs that command for you, so the one-liner above needs no
-follow-up.
+**The one-liner above and the Homebrew cask both run that command for you**,
+after first checking the download against a published SHA-256 checksum — so
+neither path should ever show you the warning. If you see it anyway, or you
+downloaded the `.dmg` by hand instead:
+
+- **macOS 14 and earlier:** right-click `Caduceus.app` in Finder → **Open** →
+  **Open** in the dialog that follows. Once is enough — it does not ask again.
+- **macOS 15 (Sequoia) and later:** open the app once (it will refuse), then go
+  to **System Settings → Privacy & Security**, scroll to the bottom, and click
+  **Open Anyway** next to the mention of Caduceus.
+- Or run the one command yourself: `xattr -dr com.apple.quarantine /Applications/Caduceus.app`
+
+None of this is a workaround for something being wrong with the download —
+it is the one-time cost of "no paid certificate," and it goes away entirely
+the day this project has a Developer ID. See
+[RELEASE.md § Notarization](./RELEASE.md#notarization) for exactly what that
+takes and how close it is to done in code.
 
 </details>
 

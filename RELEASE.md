@@ -142,7 +142,9 @@ VERSION=2.0.0
 TAG="v${VERSION}"
 DMG="src-tauri/target/release/bundle/dmg/Caduceus_${VERSION}_universal.dmg"
 
-gh release create "$TAG" "$DMG" \
+printf '%s  %s\n' "$(shasum -a 256 "$DMG" | cut -d' ' -f1)" "$(basename "$DMG")" > "$DMG.sha256"
+
+gh release create "$TAG" "$DMG" "$DMG.sha256" \
   --repo GeoWizard4645/caduceus \
   --title "$TAG" \
   --latest \
@@ -164,6 +166,7 @@ EOF
 
 - **`--latest`** makes this build show up as `/releases/latest` (what the installer uses).
 - Do **not** mark stable releases as pre-release unless you intend betas to stay on the fallback API path.
+- **The `.sha256` sidecar is not optional.** `website/install.sh` fetches `<asset>.sha256` for the DMG it just downloaded and refuses to clear the quarantine flag if the hash does not match — a release published without it just means that specific check is skipped (older releases predate it), not that anything fails. `npm run release` writes and attaches it for you; see the note below on why it is generated after notarization, not before.
 
 Release page: `https://github.com/GeoWizard4645/caduceus/releases/tag/v<version>`
 
@@ -194,11 +197,19 @@ brew uninstall --zap --cask caduceus                  # app plus everything it s
 curl -fsSL "https://api.github.com/repos/GeoWizard4645/caduceus/releases/latest" \
   | grep -E '"tag_name"|Caduceus_.*\.dmg'
 
+# The sidecar the installer checks against
+curl -fsSL "https://github.com/GeoWizard4645/caduceus/releases/latest/download/Caduceus_${VERSION}_universal.dmg.sha256"
+
 # End-to-end install (optional)
 curl -fsSL https://raw.githubusercontent.com/GeoWizard4645/caduceus/main/website/install.sh | bash
 ```
 
-Confirm the log line shows **`Caduceus_<version>_universal.dmg`**, then open the app from `/Applications/Caduceus.app`.
+Confirm the log line shows **`Caduceus_<version>_universal.dmg`**, then open the app from `/Applications/Caduceus.app`. The installer should print "Checksum verified." rather than the "no published checksum" warning — if it prints the warning, the `.sha256` asset did not attach; re-run `scripts/publish-cask.sh` won't fix that, it is a `gh release upload` away:
+
+```bash
+printf '%s  %s\n' "$(shasum -a 256 "$DMG" | cut -d' ' -f1)" "$(basename "$DMG")" > "$DMG.sha256"
+gh release upload "v${VERSION}" "$DMG.sha256" --repo GeoWizard4645/caduceus
+```
 
 ## Checklist
 
@@ -208,13 +219,13 @@ Only for a hand-rolled release — `npm run release` enforces all of it.
 - [ ] Changes committed on `main`
 - [ ] `npm run typecheck` (and tests if you touched Rust)
 - [ ] Universal `.dmg` built and `file` shows arm64 + x86_64 on main binary
-- [ ] `gh release create` with `Caduceus_<version>_universal.dmg` and `--latest`
+- [ ] `gh release create` with `Caduceus_<version>_universal.dmg`, its `.sha256` sidecar, and `--latest`
 - [ ] Homebrew tap updated (`scripts/publish-cask.sh <version>`)
 - [ ] Installer or API check confirms `/releases/latest` is the new tag
 
 ## Notarization
 
-Caduceus ships **ad-hoc signed** today, and nothing below is required to cut a release. This section is what it would take to ship a signed, notarized build instead, and how to actually run it once you have the credentials. The plumbing already exists: [`scripts/notarize.sh`](./scripts/notarize.sh), called automatically by `npm run release` when `CADUCEUS_SIGNING_IDENTITY` is set and skipped with a one-line log when it is not.
+Caduceus ships **ad-hoc signed** today, and nothing below is required to cut a release. This section is what it would take to ship a signed, notarized build instead, and how to actually run it once you have the credentials. The plumbing already exists: [`scripts/notarize.sh`](./scripts/notarize.sh), called automatically by `npm run release` when `CADUCEUS_SIGNING_IDENTITY` is set, and skipped with a loud warning — not just a log line — when it is not, because "someone's Mac called this app malware" is not a detail that should be easy to scroll past.
 
 ### Why bother
 
@@ -312,8 +323,9 @@ xcrun notarytool history --key … --key-id … --issuer …
 
 ## Related docs
 
-- [README.md](./README.md) — development build and local install
-- [website/install.sh](./website/install.sh) — what users run (canonical URL is the GitHub raw link in the script header; redeploy the Worker when the script changes)
+- [README.md](./README.md) — development build and local install, including the Gatekeeper explainer for anyone who hit the warning
+- [website/install.sh](./website/install.sh) — what users run (canonical URL is the GitHub raw link in the script header; redeploy the Worker when the script changes). Downloads the DMG, checks it against the `.sha256` sidecar this document tells you to publish, then clears quarantine.
+- [website/docs.html](./website/docs.html) — the in-app and on-site docs; has the same first-run explanation for people who never touch a terminal
 
 ### Install script and Cloudflare
 

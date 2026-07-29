@@ -317,6 +317,31 @@ Compile it yourself instead — same command, one extra flag:
   say "Downloading $(basename "$dmg_url")…"
   curl -fSL --progress-bar "$dmg_url" -o "$dmg"
 
+  # Every DMG a release publishes has a same-named ".sha256" sidecar sitting
+  # next to it (release.sh writes one; publish-cask.sh's own check is
+  # separate and downloads-and-hashes independently). Checking it here is
+  # what makes the quarantine removal below a decision backed by "this is
+  # provably the file GitHub's release page says it is" rather than "curl
+  # said 200 OK, good enough". A release cut before this existed has no
+  # sidecar, and an old release should still install — so a missing sidecar
+  # is a warning, not a hard stop; a *wrong* hash always is.
+  say "Verifying the download…"
+  local sha_url="${dmg_url}.sha256" sha_file="$tmp_dir/caduceus.dmg.sha256"
+  if curl -fsSL "$sha_url" -o "$sha_file" 2>/dev/null && [ -s "$sha_file" ]; then
+    local expected actual
+    expected=$(awk '{print $1}' "$sha_file")
+    actual=$(shasum -a 256 "$dmg" | awk '{print $1}')
+    if [ "$expected" != "$actual" ]; then
+      die "Checksum mismatch for $(basename "$dmg_url") — the download does not match what was published.
+  expected: $expected
+  got:      $actual
+This can mean a bad download (try again) or a tampered one (do not open the app). If it keeps happening, please report it: https://github.com/${REPO}/issues"
+    fi
+    say "Checksum verified."
+  else
+    warn "No published checksum for this release yet — installing without that check. The download itself is still over HTTPS from GitHub, which is the same trust you'd have opening it in a browser."
+  fi
+
   say "Mounting…"
   mkdir -p "$mount_point"
   hdiutil attach "$dmg" -nobrowse -quiet -mountpoint "$mount_point"
@@ -328,11 +353,24 @@ Compile it yourself instead — same command, one extra flag:
 
   # Caduceus is not notarised, so macOS would otherwise refuse to open it. This
   # is the one place the missing Developer ID costs anything, and clearing the
-  # flag is exactly what the right-click-Open dance does more slowly.
+  # flag is exactly what the right-click-Open dance does more slowly — the
+  # checksum check above is what makes doing that on this specific file, sight
+  # unseen, a reasonable thing for a script to do on your behalf. See
+  # RELEASE.md § Notarization for what actually removes the need for this.
   say "Clearing the quarantine flag…"
-  xattr -dr com.apple.quarantine "${INSTALL_DIR}/${APP_NAME}.app" 2>/dev/null || \
-    sudo xattr -dr com.apple.quarantine "${INSTALL_DIR}/${APP_NAME}.app" 2>/dev/null || \
-    warn "Could not clear quarantine. Run: xattr -dr com.apple.quarantine \"${INSTALL_DIR}/${APP_NAME}.app\""
+  if xattr -dr com.apple.quarantine "${INSTALL_DIR}/${APP_NAME}.app" 2>/dev/null || \
+     sudo xattr -dr com.apple.quarantine "${INSTALL_DIR}/${APP_NAME}.app" 2>/dev/null; then
+    :
+  else
+    warn "Could not clear the quarantine flag automatically, so macOS will show a
+warning the first time you open ${APP_NAME} ('Apple could not verify...').
+That is expected for an app without a paid Apple Developer certificate behind
+it — it is not a sign anything is wrong with this specific download. Either:
+
+  Run this once:  xattr -dr com.apple.quarantine \"${INSTALL_DIR}/${APP_NAME}.app\"
+  Or in Finder:   right-click ${APP_NAME} in Applications → Open → Open (once is enough)
+  On macOS 15+:   System Settings → Privacy & Security → scroll down → Open Anyway"
+  fi
 }
 
 # --- Caduceus: the --from-source path ---------------------------------------

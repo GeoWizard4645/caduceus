@@ -1,5 +1,10 @@
 /**
- * Three-question quiz before the staff walkthrough.
+ * Three-question quiz before the staff walkthrough — the first of the three
+ * phases in the first-run flow (survey → permissions → tour). The other two
+ * live in `Onboarding.tsx`; this component only owns the survey, and hands
+ * off by writing `onboardingQuizDone` and letting `Staff.tsx` mount
+ * `Onboarding` in its place. See `Onboarding.tsx`'s doc comment for why the
+ * permission step is not a fourth flag here rather than a phase over there.
  *
  * Answers are saved locally and used to seed favorites plus ranking nudges in
  * the Command Center — nothing is sent off the machine.
@@ -24,7 +29,12 @@ import { seedUsageCache } from "@/shared/usage";
 const STEPS = ["About you", "Daily habit", "What excited you"] as const;
 
 export function OnboardingQuiz({
-  staffSize,
+  // Accepted but no longer read: the card used to be parked clear of the
+  // staff mark and sized off this, but it now matches the centred, full-size
+  // shell the rest of the flow uses (see the return statement below). Kept in
+  // the prop type because `Staff.tsx` — out of scope for this change — still
+  // passes it, and dropping it here would make that call site fail to type-check.
+  staffSize: _staffSize,
   settings,
   onComplete,
 }: {
@@ -39,7 +49,6 @@ export function OnboardingQuiz({
   const [busy, setBusy] = useState(false);
 
   const cardRef = useRef<HTMLDivElement>(null);
-  const staffClearance = Math.round(staffSize / 2) + 16;
 
   useEffect(() => {
     const el = cardRef.current;
@@ -132,17 +141,21 @@ export function OnboardingQuiz({
   };
 
   return (
+    // Sized and positioned to match the permission step and tutorial that
+    // follow it — `Onboarding.tsx`'s "big card" — so the survey does not read
+    // as a smaller, separate screen bolted onto the front of the real
+    // walkthrough. Nothing here needs the staff mark reachable underneath (no
+    // step asks you to touch it), so, like the later phases, it is free to
+    // sit centred at a size that does not force its content into a scrollbar.
     <div className="pointer-events-none absolute inset-0 z-50">
       <div
         ref={cardRef}
         className={cx(
-          "pointer-events-auto absolute inset-x-2 top-2 mx-auto w-[min(320px,calc(100%-16px))]",
-          "overflow-y-auto animate-fade-rise rounded-cad px-4 py-3.5",
-          "glass shadow-float",
+          "pointer-events-auto absolute inset-x-4 top-1/2 mx-auto -translate-y-1/2",
+          "w-[min(560px,calc(100%-32px))] overflow-y-auto rounded-cad-lg",
+          "glass px-8 py-7 shadow-float animate-fade-rise",
         )}
-        style={{
-          maxHeight: step === 2 ? `calc(78% - ${staffClearance}px)` : `calc(58% - ${staffClearance}px)`,
-        }}
+        style={{ maxHeight: "calc(100% - 32px)" }}
       >
         <div className="row justify-between">
           <span className="text-2xs font-medium uppercase tracking-[0.1em] text-accent">
@@ -278,23 +291,23 @@ export function OnboardingQuiz({
           </>
         )}
 
-        <div className="row mt-4 justify-between gap-2">
+        <div className="row mt-6 justify-between gap-2">
           <Button
             tone="ghost"
-            size="sm"
+            size="md"
             disabled={step === 0 || busy}
             onClick={() => setStep((s) => Math.max(0, s - 1))}
           >
             Back
           </Button>
           {step < STEPS.length - 1 ? (
-            <Button tone="primary" size="sm" disabled={!canNext || busy} onClick={() => setStep((s) => s + 1)}>
+            <Button tone="primary" size="md" disabled={!canNext || busy} onClick={() => setStep((s) => s + 1)}>
               Next
             </Button>
           ) : (
             <Button
               tone="primary"
-              size="sm"
+              size="md"
               disabled={!canNext || busy}
               onClick={() => void finish(false)}
             >

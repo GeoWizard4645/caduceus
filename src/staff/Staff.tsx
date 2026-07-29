@@ -338,55 +338,94 @@ export function Staff() {
           const { x, y } = arcPosition(index, staffShortcuts.length, arcSide, arcRadius);
           const isBusy = busyId === shortcut.id;
           const visible = expanded && !fadingOut;
+          const caption = shortcutCaption(shortcut);
 
           return (
-            <button
+            // The arc transform used to live on the button itself, centred by a
+            // `-50%` that is relative to the button's own box. It now lives on
+            // this wrapper instead, so the caption rides along with the icon as
+            // it flies in and out — but the wrapper is taller than the button
+            // (it holds the caption too), so the same `-50%` trick would centre
+            // the *stack* on the arc point and leave every icon sitting visibly
+            // high, half a caption's height above its intended spot. Positioning
+            // by an explicit pixel offset instead — the arc point minus half the
+            // icon's own size — puts the wrapper's top-left exactly where the
+            // button's top-left used to land, so the icon is pixel-identical to
+            // before and the caption simply hangs beneath it. The wrapper never
+            // takes pointer events — only the button re-enables them, and only
+            // while expanded — so wrapping it can never widen the staff's
+            // click-through hole beyond what the cursor tracker in
+            // `src-tauri/src/window/mod.rs` already carves out for it.
+            <div
               key={shortcut.id}
-              type="button"
-              title={`${shortcut.label}${shortcut.description ? ` — ${shortcut.description}` : ""}`}
-              aria-label={shortcut.label}
-              onClick={() => void runShortcut(shortcut)}
-              onPointerEnter={() => setNamedId(shortcut.id)}
-              onPointerLeave={() => setNamedId((current) => (current === shortcut.id ? null : current))}
-              onTransitionEnd={(e) => {
-                if (fadingOut && e.propertyName === "opacity") releaseArcLayout();
-              }}
               style={{
-                width: popoutIconSize,
-                height: popoutIconSize,
                 transform: onArc
-                  ? `translate(calc(-50% + ${x}px), calc(-50% + ${y}px))`
-                  : "translate(-50%, -50%) scale(0.5)",
+                  ? `translate(${x - popoutIconSize / 2}px, ${y - popoutIconSize / 2}px)`
+                  : `translate(${-popoutIconSize / 2}px, ${-popoutIconSize / 2}px) scale(0.5)`,
                 opacity: visible ? 1 : 0,
                 transitionProperty: fadingOut ? "opacity" : "transform, opacity",
                 transitionDuration: fadingOut
                   ? `${POPOUT_FADE_MS}ms`
                   : `${POPOUT_EXPAND_MS}ms`,
                 transitionDelay: expanded && !fadingOut ? `${index * POPOUT_STAGGER_MS}ms` : "0ms",
-                pointerEvents: expanded ? "auto" : "none",
+                pointerEvents: "none",
               }}
-              className={cx(
-                "group absolute left-0 top-0 flex items-center justify-center rounded-full",
-                "staff-popout shadow-float",
-                "text-[15px] leading-none text-ink ease-cad",
-                "focus-visible:ring-2 focus-visible:ring-accent",
-                isBusy && "animate-pulse",
-              )}
+              className="absolute left-0 top-0 flex flex-col items-center ease-cad"
+              onTransitionEnd={(e) => {
+                if (fadingOut && e.propertyName === "opacity") releaseArcLayout();
+              }}
             >
-              <span
+              <button
+                type="button"
+                title={`${shortcut.label}${shortcut.description ? ` — ${shortcut.description}` : ""}`}
+                aria-label={shortcut.label}
+                onClick={() => void runShortcut(shortcut)}
+                onPointerEnter={() => setNamedId(shortcut.id)}
+                onPointerLeave={() => setNamedId((current) => (current === shortcut.id ? null : current))}
+                style={{
+                  width: popoutIconSize,
+                  height: popoutIconSize,
+                  pointerEvents: expanded ? "auto" : "none",
+                }}
                 className={cx(
-                  "pointer-events-none flex h-[62%] w-[62%] select-none items-center justify-center",
-                  expanded && "transition-transform duration-150 ease-cad group-hover:scale-110",
+                  "group flex shrink-0 items-center justify-center rounded-full",
+                  "staff-popout shadow-float",
+                  "text-[15px] leading-none text-ink ease-cad",
+                  "focus-visible:ring-2 focus-visible:ring-accent",
+                  isBusy && "animate-pulse",
                 )}
               >
-                <ShortcutIcon
-                  icon={shortcut.icon}
-                  label={shortcut.label}
-                  className="h-full w-full text-[15px]"
-                  imgClassName="rounded-sm"
-                />
+                <span
+                  className={cx(
+                    "pointer-events-none flex h-[62%] w-[62%] select-none items-center justify-center",
+                    expanded && "transition-transform duration-150 ease-cad group-hover:scale-110",
+                  )}
+                >
+                  <ShortcutIcon
+                    icon={shortcut.icon}
+                    label={shortcut.label}
+                    className="h-full w-full text-[15px]"
+                    imgClassName="rounded-sm"
+                  />
+                </span>
+              </button>
+
+              {/* --- destination caption ------------------------------------
+                  What clicking this button actually does, in the fewest honest
+                  characters: a URL's host, an app's name, or the shortcut's own
+                  label for everything else (see `shortcutCaption` below). Kept
+                  small and muted on purpose — it is a caption reporting a fact,
+                  not a second label competing with the icon above it — and
+                  truncated rather than wrapped so a long one can never widen
+                  the ring or push a neighbour off its spot on the arc. */}
+              <span
+                aria-hidden="true"
+                title={caption}
+                className="pointer-events-none mt-1 max-w-[84px] truncate text-center text-2xs font-normal leading-none text-ink-mute"
+              >
+                {caption}
               </span>
-            </button>
+            </div>
           );
         })}
 
@@ -546,4 +585,77 @@ export function arcPosition(
     x: Math.cos(radians) * radius,
     y: Math.sin(radians) * radius,
   };
+}
+
+/** A shortcut's own name, falling back to its Command Center subtitle, falling
+ * back to a neutral placeholder for the one case both can be blank: a
+ * hand-edited shortcut whose fields were never filled in. */
+function shortcutNameOrDescription(shortcut: Shortcut): string {
+  return shortcut.label.trim() || shortcut.description.trim() || "Shortcut";
+}
+
+/**
+ * The host a URL shortcut opens, with the scheme and any path dropped.
+ *
+ * `target` is not always a well-formed absolute URL by itself — a search
+ * shortcut's target is a template like `https://google.com/search?q={query}`,
+ * and a handful of legacy shortcuts store a bare host with no scheme at all —
+ * so a missing scheme is assumed to be `https://` before parsing, and a
+ * `target` the URL parser still rejects (empty, or not URL-shaped) yields
+ * `null` rather than throwing, so the caller can fall back to something honest.
+ */
+function hostnameFromUrl(target: string): string | null {
+  const trimmed = target.trim();
+  if (!trimmed) return null;
+  const withScheme = /^[a-z][a-z0-9+.-]*:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+  try {
+    return new URL(withScheme).hostname || null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The application name a launch shortcut's `target` implies, or `null` when
+ * the target does not carry one a client can read honestly.
+ *
+ * A filesystem path ending `.app` names itself (`/Applications/Google
+ * Chrome.app` → `Google Chrome`), and so does a bare executable
+ * (`google-chrome`, `chrome.exe`). A macOS bundle id (`com.google.Chrome`)
+ * does not — resolving one to "Google Chrome" needs Launch Services, which
+ * means a round trip to Rust for every shortcut on every render, and this is
+ * a caption, not worth the cost. `null` here means "ask the caller's fallback
+ * instead", which is the shortcut's own label — already the human name
+ * someone chose when they made the shortcut.
+ */
+function appNameFromTarget(target: string): string | null {
+  const trimmed = target.trim();
+  if (!trimmed) return null;
+  const appBundle = trimmed.match(/([^/\\]+)\.app[/\\]?$/i);
+  if (appBundle) return appBundle[1];
+  const looksLikeBundleId = trimmed.includes(".") && !trimmed.includes("/") && !trimmed.includes("\\");
+  if (looksLikeBundleId) return null;
+  const base = trimmed.split(/[/\\]/).pop() ?? trimmed;
+  return base.replace(/\.exe$/i, "");
+}
+
+/**
+ * The small caption drawn under each pop-out icon: what the button actually
+ * links to, not what it is called.
+ *
+ * A URL shortcut names its host (`gemini.google.com`), an app shortcut names
+ * the application, and everything else — a shell command, an AppleScript, a
+ * built-in feature page — falls back to the shortcut's own label or its
+ * Command Center subtitle, both of which are already short and written by a
+ * person for exactly this purpose.
+ */
+export function shortcutCaption(shortcut: Shortcut): string {
+  switch (shortcut.kind) {
+    case "open_url":
+      return hostnameFromUrl(shortcut.target) ?? shortcutNameOrDescription(shortcut);
+    case "open_app":
+      return appNameFromTarget(shortcut.target) ?? shortcutNameOrDescription(shortcut);
+    default:
+      return shortcutNameOrDescription(shortcut);
+  }
 }

@@ -43,7 +43,7 @@ import { hotkeyLabel } from "@/shared/hotkeyLabel";
 import { Kbd, Spinner, cx } from "@/shared/ui";
 import { ShortcutIcon } from "@/shared/ShortcutIcon";
 import { loadUsage, recordUsage } from "@/shared/usage";
-import type { CommandOutput } from "@/shared/commands";
+import { COMMANDS, COMMAND_GROUPS, type CommandGroupId, type CommandOutput } from "@/shared/commands";
 
 import { AgentPanel } from "./AgentPanel";
 import { tabForMode, type Tab } from "@/shared/tabs";
@@ -79,7 +79,20 @@ export function HomeTab({
   );
 
   const inputRef = useRef<HTMLInputElement>(null);
-  const listRef = useRef<HTMLDivElement>(null);
+  // A state setter used as a ref callback, not `useRef`, because the list only
+  // exists in the DOM while neither `output` nor `session` is showing — a
+  // plain `useRef` set once on mount would stay pointed at nothing if the
+  // list was not the first thing rendered, and never notice it appearing
+  // later. `setListEl` fires every time the node is attached or detached, so
+  // the ResizeObserver effect below always has the right node to observe.
+  const [listEl, setListEl] = useState<HTMLDivElement | null>(null);
+  // The two numbers the hand-rolled virtualiser below needs to work out which
+  // rows are actually on screen. See the "virtualised list" section for why
+  // there is one at all: with the full command catalogue in view (see
+  // `groupEmptyState`), mounting every row as a real DOM node is the kind of
+  // thing that makes typing feel sluggish for no reason a user could name.
+  const [scrollTop, setScrollTop] = useState(0);
+  const [viewportHeight, setViewportHeight] = useState(0);
   // Which command produced the message currently being handled, so a permission
   // wall can offer to re-run the thing that hit it rather than just naming the
   // switch and leaving the user to remember what they were doing.
@@ -519,12 +532,22 @@ export function HomeTab({
     return () => document.removeEventListener("keydown", listener);
   }, [active]);
 
-  // Keep the highlighted row visible.
+  // Track the list's own rendered height, so the virtualiser knows how many
+  // rows actually fit on screen. A `ResizeObserver` rather than a one-off
+  // measurement on mount: the Command Center window is user-resizable (see
+  // `ResizeGrip` in CommandCenter.tsx), and a stale height would make the
+  // window taller than what got rendered — an empty stripe at the bottom that
+  // no amount of scrolling fills in.
   useEffect(() => {
-    listRef.current
-      ?.querySelector<HTMLElement>(`[data-index="${selected}"]`)
-      ?.scrollIntoView({ block: "nearest" });
-  }, [selected]);
+    if (!listEl) return;
+    const observer = new ResizeObserver((entries) => {
+      const height = entries[0]?.contentRect.height;
+      if (height !== undefined) setViewportHeight(height);
+    });
+    observer.observe(listEl);
+    setViewportHeight(listEl.clientHeight);
+    return () => observer.disconnect();
+  }, [listEl]);
 
   // Grouped once per `results` change rather than on every render of this
   // component (which happens on every keystroke, since `input` lives here) —
@@ -535,11 +558,62 @@ export function HomeTab({
   // built-in commands, and indexOf-per-row turns "render the list" into an
   // O(n²) pass over it on every keystroke for no reason — the index is known
   // the moment `results` is built.
+  //
+  // `emptyQuery` reads `debouncedInput`, not `input`: it has to agree with
+  // what `results` was actually computed from (see `displayQuery` further
+  // down for the same reasoning), or the empty-query grouping below would
+  // flash on for a query that already has an answer.
+  const emptyQuery = !debouncedInput.trim();
+
   const { grouped, indexById } = useMemo(() => {
     const byId = new Map<string, number>();
     results.forEach((item, index) => byId.set(item.id, index));
-    return { grouped: groupResults(results), indexById: byId };
-  }, [results]);
+    return {
+      grouped: emptyQuery ? groupEmptyState(results) : groupResults(results),
+      indexById: byId,
+    };
+  }, [results, emptyQuery]);
+
+  // Flatten the grouped rows into one array with a known pixel offset each,
+  // which is the only thing `visibleRows` below and the keyboard-scroll
+  // effect after it actually need. See "Virtualised list" near the bottom of
+  // this file for the reasoning.
+  const { rows: flatRows, totalHeight, offsetByResultIndex } = useMemo(
+    () => buildFlatRows(grouped, indexById),
+    [grouped, indexById],
+  );
+
+  // The slice of `flatRows` currently within (or just outside) the viewport.
+  // Recomputed on scroll and on layout, not on every keystroke — `flatRows`
+  // itself only changes when `results` does, same as `grouped` above.
+  const visibleRows = useMemo(() => {
+    if (viewportHeight === 0) {
+      // Before the first `ResizeObserver` callback lands, render a first
+      // screenful using a generous guess rather than nothing at all — an
+      // empty palette for one frame reads as broken, not as loading.
+      return flatRows.filter((row) => row.top < 640);
+    }
+    const start = Math.max(0, scrollTop - VIRTUAL_OVERSCAN_PX);
+    const end = scrollTop + viewportHeight + VIRTUAL_OVERSCAN_PX;
+    return flatRows.filter((row) => row.top + row.height >= start && row.top <= end);
+  }, [flatRows, scrollTop, viewportHeight]);
+
+  // Keep the highlighted row on screen as the arrow keys move it — the
+  // virtualised equivalent of `scrollIntoView`, which needs a mounted DOM
+  // node to find and the highlighted row is not always one. `offsetByResultIndex`
+  // already knows every row's pixel position without a DOM query.
+  useEffect(() => {
+    if (!listEl) return;
+    const bounds = offsetByResultIndex.get(selected);
+    if (!bounds) return;
+    const viewTop = listEl.scrollTop;
+    const viewBottom = viewTop + listEl.clientHeight;
+    if (bounds.top < viewTop) {
+      listEl.scrollTop = bounds.top;
+    } else if (bounds.top + bounds.height > viewBottom) {
+      listEl.scrollTop = bounds.top + bounds.height - listEl.clientHeight;
+    }
+  }, [selected, listEl, offsetByResultIndex]);
 
   if (!settings) return null;
 
@@ -720,31 +794,47 @@ export function HomeTab({
           onClose={() => setSession(null)}
         />
       ) : (
-        <div ref={listRef} className="min-h-0 flex-1 overflow-y-auto px-2 py-2">
+        <div
+          ref={setListEl}
+          onScroll={(event) => setScrollTop(event.currentTarget.scrollTop)}
+          className="min-h-0 flex-1 overflow-y-auto px-2 py-2"
+        >
           {results.length === 0 ? (
             <p className="px-3 py-8 text-center text-2xs text-ink-faint">
               {input.trim() ? "Press ↵ to run this anyway" : "Type to search"}
             </p>
           ) : (
-            grouped.map(([group, items]) => (
-              <div key={group} className="mb-1">
-                <p className="eyebrow px-3 pb-1 pt-2">{group}</p>
-                {items.map((item) => {
-                  const index = indexById.get(item.id) ?? 0;
-                  return (
+            // The scrollable area is given its full, un-virtualised height so
+            // the scrollbar and scroll position behave exactly as they would
+            // for a plain list — only the *rows inside it* are windowed, each
+            // pinned to the pixel offset `buildFlatRows` already worked out.
+            <div style={{ position: "relative", height: totalHeight }}>
+              {visibleRows.map((row) =>
+                row.kind === "header" ? (
+                  <p
+                    key={row.key}
+                    style={{ position: "absolute", top: row.top, left: 0, right: 0, height: row.height }}
+                    className="eyebrow px-3 pb-1 pt-3"
+                  >
+                    {row.label}
+                  </p>
+                ) : (
+                  <div
+                    key={row.key}
+                    style={{ position: "absolute", top: row.top, left: 0, right: 0, height: row.height }}
+                  >
                     <ResultRow
-                      key={item.id}
-                      item={item}
-                      index={index}
-                      active={index === selected}
+                      item={row.item}
+                      index={row.resultIndex}
+                      active={row.resultIndex === selected}
                       query={displayQuery}
                       onHover={setSelected}
                       onRun={runItem}
                     />
-                  );
-                })}
-              </div>
-            ))
+                  </div>
+                ),
+              )}
+            </div>
           )}
         </div>
       )}
@@ -1003,6 +1093,200 @@ function groupResults(items: ResultItem[]): [string, ResultItem[]][] {
     else groups.set(item.group, [item]);
   }
   return [...groups.entries()];
+}
+
+// ---------------------------------------------------------------------------
+// Empty-query grouping
+// ---------------------------------------------------------------------------
+//
+// This is the whole change the task is about, so it is worth spelling out
+// what it is and is not doing.
+//
+// `commandProvider`'s empty-query branch (`shared/providers.ts`) already
+// answers "what should the palette show before you have typed anything?"
+// with *every* command in the registry — nothing here, or anywhere in this
+// file, slices that list down. It ranks the full catalogue by usage,
+// personalisation and each command's shipped weight, in that order of
+// precedence, and hands the result back as one group called "All commands".
+// That ranking is exactly the "survey should decide the order" behaviour the
+// brief asks to keep, so it is left alone.
+//
+// What was wrong with showing it as a single "All commands" section is
+// readability, not completeness: several hundred rows under one heading is a
+// wall, not a catalogue. `groupEmptyState` only relabels that one bucket —
+// the first `RECOMMENDED_COUNT` rows (already the top of the ranked order)
+// become "Recommended for you", and everything after them is re-sorted into
+// its real category using each command's own `group` field from
+// `commands.ts`, in the fixed, sensible order `COMMAND_GROUPS` already
+// declares for the Settings → Features catalogue. Every other provider's
+// rows — Favorites, Shortcuts, Prefixes — pass straight through unchanged,
+// keeping their own heading and their own place in the ranking.
+
+/** How many of the top-ranked commands lead the empty state, before the rest
+ * fan out into their categories. Small enough to read at a glance, large
+ * enough that it is not just restating what "Favorites" already shows. */
+const RECOMMENDED_COUNT = 8;
+
+const RECOMMENDED_GROUP = "Recommended for you";
+
+/**
+ * The group label `commandProvider`'s empty-query branch (`shared/providers.ts`)
+ * gives the full command catalogue. Matched by string rather than importing a
+ * shared constant because `ResultItem.group` is typed as a plain `string` —
+ * every provider invents its own heading text. If that literal ever changes
+ * there, this needs to change with it, or the catalogue would fall back to
+ * being treated as an ordinary provider group (see the `default:` case in
+ * `groupEmptyState`, which still shows it — just without the split into
+ * "Recommended" and per-category sections).
+ */
+const CATALOGUE_GROUP = "All commands";
+
+/** Every command's category, looked up once — `COMMANDS` does not change at
+ * runtime, so there is nothing to gain from rebuilding this per render (or,
+ * worse, per keystroke). */
+const COMMAND_GROUP_BY_ID: ReadonlyMap<string, CommandGroupId> = new Map(
+  COMMANDS.map((command) => [command.id, command.group]),
+);
+
+/**
+ * Split the empty-query result list into "Recommended for you", the rest of
+ * the catalogue bucketed by category, and every other provider's rows
+ * untouched.
+ *
+ * Rows arrive already sorted by score (`collectResults` in `providers.ts`),
+ * and nothing here re-sorts them — a `Map` remembers first-appearance order
+ * for the non-catalogue groups, and each category's rows keep the relative
+ * order they arrived in, so a command a user runs often still sits above one
+ * they never touch *within* its own section.
+ */
+function groupEmptyState(items: ResultItem[]): [string, ResultItem[]][] {
+  const groups = new Map<string, ResultItem[]>();
+  const byCategory = new Map<CommandGroupId, ResultItem[]>();
+  let recommendedRemaining = RECOMMENDED_COUNT;
+
+  for (const item of items) {
+    if (item.group !== CATALOGUE_GROUP) {
+      const bucket = groups.get(item.group);
+      if (bucket) bucket.push(item);
+      else groups.set(item.group, [item]);
+      continue;
+    }
+
+    if (recommendedRemaining > 0) {
+      const bucket = groups.get(RECOMMENDED_GROUP);
+      if (bucket) bucket.push(item);
+      else groups.set(RECOMMENDED_GROUP, [item]);
+      recommendedRemaining -= 1;
+      continue;
+    }
+
+    const commandId = item.id.startsWith("command:") ? item.id.slice("command:".length) : "";
+    const categoryId = COMMAND_GROUP_BY_ID.get(commandId) ?? "utilities";
+    const bucket = byCategory.get(categoryId);
+    if (bucket) bucket.push(item);
+    else byCategory.set(categoryId, [item]);
+  }
+
+  const sections = [...groups.entries()];
+  // Categories are appended in `COMMAND_GROUPS`'s own fixed order rather than
+  // first-appearance order — the point of splitting the catalogue up at all
+  // is a browsable, predictable shape, and "whichever category happened to
+  // contain the highest-ranked leftover command" is not that.
+  for (const { id, title } of COMMAND_GROUPS) {
+    const rows = byCategory.get(id);
+    if (rows && rows.length > 0) sections.push([title, rows]);
+  }
+  return sections;
+}
+
+// ---------------------------------------------------------------------------
+// Virtualised list
+// ---------------------------------------------------------------------------
+//
+// The empty-query state above is the reason this exists: with `RECOMMENDED_COUNT`
+// plus every category, the full catalogue plus Favorites, Shortcuts and
+// Prefixes routinely comes to several hundred rows. Mounting all of them as
+// real DOM nodes is not the thing that made typing slow before `ResultRow`
+// was memoised — that was every row *re-rendering* on every keystroke — but
+// it is still hundreds of nodes for the browser to lay out and paint on the
+// very first frame the palette opens, and hundreds more to keep alive for a
+// session where the query rarely gets long enough to filter them out. Only
+// rendering the rows actually inside (or just outside) the visible area
+// keeps that cost roughly constant no matter how large the catalogue grows.
+//
+// No dependency: the whole thing is fixed-height rows and header rows, which
+// is what makes hand-rolling it tractable — a variable-height virtualiser
+// earns its keep from a library; this one does not need to.
+
+/** Rendered height of one `ResultRow`, in pixels: the 28px icon badge plus
+ * `py-2`'s 8px top and bottom padding. If `ResultRow`'s own layout changes,
+ * this has to change with it — there is no way to measure it without
+ * defeating the point of not mounting every row. */
+const VIRTUAL_ROW_HEIGHT = 44;
+
+/** Rendered height of a section heading (`eyebrow`, `pt-3 pb-1`, one line of
+ * small caps text) — a few pixels taller than the padding alone accounts for,
+ * which is deliberate: it stands in for the `mb-1` gap the old, non-virtualised
+ * `<div className="mb-1">` per group used to add between sections. */
+const VIRTUAL_HEADER_HEIGHT = 32;
+
+/** How far past the visible edges to keep rows mounted. Large enough that a
+ * fast scroll or a `PageDown`-sized keyboard jump does not show a flash of
+ * blank space while new rows mount; small enough that it is still a sliver
+ * of the full list rather than most of it. */
+const VIRTUAL_OVERSCAN_PX = 320;
+
+interface FlatHeaderRow {
+  kind: "header";
+  key: string;
+  top: number;
+  height: number;
+  label: string;
+}
+
+interface FlatItemRow {
+  kind: "item";
+  key: string;
+  top: number;
+  height: number;
+  item: ResultItem;
+  resultIndex: number;
+}
+
+type FlatRow = FlatHeaderRow | FlatItemRow;
+
+/**
+ * Turn the grouped sections into one array with a known pixel offset per row.
+ *
+ * This is the only layout the virtualiser needs: given a scroll position and
+ * a viewport height, "which rows are visible" and "where is row N" are both
+ * answered by a single pass over fixed-height rows, no measurement required.
+ */
+function buildFlatRows(
+  grouped: [string, ResultItem[]][],
+  indexById: Map<string, number>,
+): {
+  rows: FlatRow[];
+  totalHeight: number;
+  offsetByResultIndex: Map<number, { top: number; height: number }>;
+} {
+  const rows: FlatRow[] = [];
+  const offsetByResultIndex = new Map<number, { top: number; height: number }>();
+  let top = 0;
+
+  for (const [group, items] of grouped) {
+    rows.push({ kind: "header", key: `header:${group}`, top, height: VIRTUAL_HEADER_HEIGHT, label: group });
+    top += VIRTUAL_HEADER_HEIGHT;
+
+    for (const item of items) {
+      const resultIndex = indexById.get(item.id) ?? 0;
+      rows.push({ kind: "item", key: item.id, top, height: VIRTUAL_ROW_HEIGHT, item, resultIndex });
+      offsetByResultIndex.set(resultIndex, { top, height: VIRTUAL_ROW_HEIGHT });
+      top += VIRTUAL_ROW_HEIGHT;
+    }
+  }
+
+  return { rows, totalHeight: top, offsetByResultIndex };
 }
 
 /** The prefix that reproduces a voice route as typed input. */

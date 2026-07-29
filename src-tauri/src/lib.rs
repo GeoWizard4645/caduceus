@@ -584,6 +584,7 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     app.manage(tools::rates::RateCache::new());
     app.manage(tools::sorter::Session::new());
     app.manage(window::PaletteFloating::default());
+    app.manage(window::PermissionFlowActive::default());
 
     // --- agents and voice -------------------------------------------------
     app.manage(agent::AgentRuntime::new());
@@ -723,6 +724,22 @@ fn handle_window_event(window: &tauri::Window, event: &WindowEvent) {
                 if app
                     .try_state::<voice::VoiceRuntime>()
                     .is_some_and(|r| r.is_recording())
+                {
+                    return;
+                }
+                // Sending System Settings to the front, or triggering a TCC
+                // prompt, costs the palette key status exactly like clicking
+                // another app does — there is no way to tell "the user asked for
+                // a permission" from "the user clicked away" at the WindowEvent
+                // level. Without this the Command Center used to vanish the
+                // instant a permission was requested, dropping the user mid-flow
+                // with no way back to what they were doing. See
+                // `PermissionFlowActive` for why this is a timed window rather
+                // than a plain flag, and `hide_command_center` for how a
+                // deliberate dismissal still gets through it.
+                if app
+                    .try_state::<window::PermissionFlowActive>()
+                    .is_some_and(|s| s.is_active())
                 {
                     return;
                 }

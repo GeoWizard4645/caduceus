@@ -104,6 +104,18 @@ impl VoiceRuntime {
         Ok(())
     }
 
+    /// Pick a way to capture audio, falling back through everything Caduceus
+    /// has before giving up.
+    ///
+    /// This used to pick exactly one live helper (whichever
+    /// `live_helper_path` preferred) and either use it or fail outright. That
+    /// meant a single broken binary — one Swift actor-isolation bug — took
+    /// dictation down completely, on every machine that preferred it, with no
+    /// way back short of a rebuild. Walking every live candidate in order,
+    /// and falling further back to batch capture if every one of them fails,
+    /// means a broken helper costs *quality* (a worse recogniser, or no live
+    /// partials) rather than the whole feature. See `live_macos::mark_helper_failed`
+    /// for why a helper that fails once is not retried again this run.
     fn open_session<F>(
         &self,
         settings: &SettingsManager,
@@ -119,9 +131,32 @@ impl VoiceRuntime {
         #[cfg(target_os = "macos")]
         if use_live {
             let language = settings.with(|s| s.voice.stt_language.clone());
-            let session = live_macos::LiveSession::start(&language, move |text| on_partial(text))
-                .map_err(|e: String| e)?;
-            return Ok(ActiveRecording::Live(session));
+            let on_partial = Arc::new(on_partial);
+            let candidates = live_macos::live_helper_candidates();
+            let mut last_error: Option<String> = None;
+
+            for candidate in &candidates {
+                let partial = on_partial.clone();
+                match live_macos::LiveSession::start(candidate, &language, move |text| partial(text))
+                {
+                    Ok(session) => return Ok(ActiveRecording::Live(session)),
+                    Err(e) => {
+                        log::warn!("voice: {} failed to start: {e}", candidate.label());
+                        live_macos::mark_helper_failed(candidate.kind);
+                        last_error = Some(e);
+                    }
+                }
+            }
+
+            // Every live helper either does not exist or just failed. Batch
+            // capture below is the last line: it needs nothing but a
+            // microphone and whichever STT backend is configured, so it is
+            // the one path a broken speech helper cannot take down.
+            if let Some(e) = last_error {
+                log::warn!("voice: falling back to batch capture after live dictation failed: {e}");
+            } else {
+                log::warn!("voice: no live dictation helper is available; falling back to batch capture");
+            }
         }
 
         let max_secs = settings.with(|s| s.voice.max_recording_secs);
