@@ -344,17 +344,19 @@ export function Staff() {
             // The arc transform used to live on the button itself, centred by a
             // `-50%` that is relative to the button's own box. It now lives on
             // this wrapper instead, so the caption rides along with the icon as
-            // it flies in and out — but the wrapper is taller than the button
-            // (it holds the caption too), so the same `-50%` trick would centre
-            // the *stack* on the arc point and leave every icon sitting visibly
-            // high, half a caption's height above its intended spot. Positioning
-            // by an explicit pixel offset instead — the arc point minus half the
+            // it flies in and out. Positioning by an explicit pixel offset
+            // instead of a `-50%` transform — the arc point minus half the
             // icon's own size — puts the wrapper's top-left exactly where the
             // button's top-left used to land, so the icon is pixel-identical to
-            // before and the caption simply hangs beneath it. The wrapper never
-            // takes pointer events — only the button re-enables them, and only
-            // while expanded — so wrapping it can never widen the staff's
-            // click-through hole beyond what the cursor tracker in
+            // before. That still matters even though the caption chip below is
+            // no longer a flow sibling: the wrapper is deliberately left sized
+            // to the button alone (the chip is `absolute`, so it does not add to
+            // the wrapper's box), which means a `-50%` transform here would once
+            // again be safe today — but pixel maths costs nothing extra and
+            // stays correct even if a future flow child changes that. The
+            // wrapper never takes pointer events — only the button re-enables
+            // them, and only while expanded — so wrapping it can never widen the
+            // staff's click-through hole beyond what the cursor tracker in
             // `src-tauri/src/window/mod.rs` already carves out for it.
             <div
               key={shortcut.id}
@@ -370,7 +372,7 @@ export function Staff() {
                 transitionDelay: expanded && !fadingOut ? `${index * POPOUT_STAGGER_MS}ms` : "0ms",
                 pointerEvents: "none",
               }}
-              className="absolute left-0 top-0 flex flex-col items-center ease-cad"
+              className="absolute left-0 top-0 ease-cad"
               onTransitionEnd={(e) => {
                 if (fadingOut && e.propertyName === "opacity") releaseArcLayout();
               }}
@@ -413,15 +415,36 @@ export function Staff() {
               {/* --- destination caption ------------------------------------
                   What clicking this button actually does, in the fewest honest
                   characters: a URL's host, an app's name, or the shortcut's own
-                  label for everything else (see `shortcutCaption` below). Kept
-                  small and muted on purpose — it is a caption reporting a fact,
-                  not a second label competing with the icon above it — and
-                  truncated rather than wrapped so a long one can never widen
-                  the ring or push a neighbour off its spot on the arc. */}
+                  label for everything else (see `shortcutCaption` below).
+                  This window is transparent and click-through, so bare text
+                  drawn in normal flow renders straight over the user's
+                  wallpaper — muted grey on an arbitrary desktop is unreadable
+                  no matter the weight or size. The fix is to give it its own
+                  opaque surface: the same `.staff-popout` chip material the
+                  button itself is drawn in, so the two read as one object
+                  rather than a label floating separately underneath.
+                  Absolutely positioned rather than a flow sibling — with the
+                  button as the wrapper's only flow child, the wrapper's box is
+                  exactly the button's box, so this can hang its top a few
+                  pixels above the button's bottom edge and read as "set into"
+                  the ring instead of hovering below it. `pointer-events-none`
+                  keeps it from ever intercepting a click meant for the button
+                  underneath — the button re-enables its own pointer events
+                  independently — and the wider `max-w` (roughly a hostname's
+                  worth) still truncates rather than wraps, so a long one can
+                  never widen the ring or push a neighbour off its spot on the
+                  arc. `POPOUT_EDGE_MARGIN` in
+                  `src-tauri/src/window/mod.rs::staff_window_side` reserves
+                  enough window to keep this chip from clipping at the edge. */}
               <span
                 aria-hidden="true"
                 title={caption}
-                className="pointer-events-none mt-1 max-w-[84px] truncate text-center text-2xs font-normal leading-none text-ink-mute"
+                style={{ top: popoutIconSize - 8 }}
+                className={cx(
+                  "staff-popout shadow-float pointer-events-none absolute left-1/2 z-10",
+                  "-translate-x-1/2 max-w-[116px] truncate rounded-full px-2 py-0.5",
+                  "text-center text-xs font-medium leading-none text-ink",
+                )}
               >
                 {caption}
               </span>

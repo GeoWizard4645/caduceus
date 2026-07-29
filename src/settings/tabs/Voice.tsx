@@ -311,17 +311,39 @@ export function VoiceTab({ draft, info }: { draft: Draft; info: RuntimeInfo | nu
         <div className="mt-5 border-t border-line pt-4">
           <Field
             label="When nothing matches"
-            hint="Where a transcript goes if none of the groups above claim it."
+            hint="Where a transcript goes if none of the groups above claim it. Automatic searches the web when no AI is set up, and otherwise just fills the Command Center, exactly as typing would."
           >
+            {/*
+              The empty string stands in for `null` because a `<select>` has no
+              way to carry one — every option value is a string. It is mapped
+              back on the way out, so "Automatic" round-trips as the absence of
+              a choice rather than as a route that happens to be spelled "".
+            */}
             <Select
-              value={voice.fallbackRoute}
-              onChange={(v) => draft.update((d) => (d.voice.fallbackRoute = v as RouteTarget))}
-              options={(Object.keys(ROUTE_LABELS) as RouteTarget[]).map((route) => ({
-                value: route,
-                label: ROUTE_LABELS[route],
-              }))}
+              value={voice.fallbackRoute ?? ""}
+              onChange={(v) =>
+                draft.update((d) => (d.voice.fallbackRoute = v === "" ? null : (v as RouteTarget)))
+              }
+              options={[
+                { value: "", label: "Automatic" },
+                ...(Object.keys(ROUTE_LABELS) as RouteTarget[]).map((route) => ({
+                  value: route,
+                  label: ROUTE_LABELS[route],
+                })),
+              ]}
             />
           </Field>
+
+          <div className="mt-4">
+            <Toggle
+              label="Open an obvious match on its own"
+              hint="Say a single name — “Terminal” — and pause, and Caduceus opens it. Only fires on an exact, unambiguous match, and always counts down first so you can stop it."
+              checked={voice.autoOpenShortUtterance}
+              onChange={(checked) =>
+                draft.update((d) => (d.voice.autoOpenShortUtterance = checked))
+              }
+            />
+          </div>
         </div>
       </Section>
     </>

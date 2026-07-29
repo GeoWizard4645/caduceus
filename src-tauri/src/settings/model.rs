@@ -31,6 +31,7 @@ pub struct Settings {
     pub agents: AgentSettings,
     pub clipboard: ClipboardSettings,
     pub appearance: AppearanceSettings,
+    pub update: UpdateSettings,
 }
 
 impl Settings {
@@ -53,6 +54,7 @@ impl Default for Settings {
             agents: AgentSettings::default(),
             clipboard: ClipboardSettings::default(),
             appearance: AppearanceSettings::default(),
+            update: UpdateSettings::default(),
         }
     }
 }
@@ -387,13 +389,40 @@ pub struct VoiceSettings {
     pub stt_language: String,
     /// Keyword groups evaluated top-to-bottom against the transcript.
     pub keyword_groups: Vec<KeywordGroup>,
-    /// Where a transcript goes when no keyword group matches.
-    pub fallback_route: RouteTarget,
+    /// Where a transcript goes when no keyword group matches, if the user has
+    /// deliberately chosen somewhere.
+    ///
+    /// `None` — the default — means "decide automatically": an unmatched
+    /// transcript goes to [`RouteTarget::WebSearch`] when no usable AI backend
+    /// is configured, and to [`RouteTarget::InsertOnly`] (plain Command Center
+    /// search, exactly as if it had been typed) when one is.
+    ///
+    /// The `Option` is doing real work here. This used to be a bare
+    /// `RouteTarget` defaulting to `PrimaryAi`, which made "the user never
+    /// chose" and "the user chose the AI" the same value — so there was no way
+    /// to vary the default by whether the AI was configured without also
+    /// overriding people who had genuinely picked it. `Some(_)` is now a
+    /// deliberate choice and always wins outright, including
+    /// `Some(RouteTarget::PrimaryAi)`, which `None` can never mean.
+    ///
+    /// See `voice::router::effective_fallback` for how the two compose.
+    pub fallback_route: Option<RouteTarget>,
     /// Hard cap on a single recording, so a stuck key can't fill the disk.
     pub max_recording_secs: u32,
     /// Automatically dispatch the routed action, or just fill the input and
     /// let the user press Enter. `false` is the safer default.
     pub auto_submit: bool,
+    /// Open an unambiguous Command Center result on its own, once a short
+    /// spoken utterance has settled — saying "Terminal" and stopping launches
+    /// Terminal.
+    ///
+    /// This is the off switch, and it is the only part of the behaviour that is
+    /// configurable. The guards around it — how short is short, how long the
+    /// recogniser must be quiet, and how certain the match has to be — are
+    /// deliberately not user-tunable, because loosening any one of them turns a
+    /// convenience into launching the wrong application off a mis-transcription.
+    /// `HomeTab.tsx`'s auto-open effect documents each guard.
+    pub auto_open_short_utterance: bool,
 }
 
 impl Default for VoiceSettings {
@@ -408,9 +437,10 @@ impl Default for VoiceSettings {
             stt_model: "whisper-1".into(),
             stt_language: String::new(),
             keyword_groups: default_keyword_groups(),
-            fallback_route: RouteTarget::PrimaryAi,
+            fallback_route: None,
             max_recording_secs: 60,
             auto_submit: false,
+            auto_open_short_utterance: true,
         }
     }
 }
@@ -492,10 +522,19 @@ pub enum RouteTarget {
 
 /// What a spoken phrase does, before anyone has configured anything.
 ///
-/// The shape of it: **saying something is asking the AI**, because that is what
-/// most sentences are. The two exceptions announce themselves in the first
-/// words — a phrase that opens with a search verb wants the web, and one that
-/// opens with a control verb wants the machine driven.
+/// The shape of it: **saying something puts it in the Command Center**, exactly
+/// as if it had been typed, and three kinds of phrase announce a destination in
+/// their first words — a search verb wants the web, a control verb wants the
+/// machine driven, and an "ask" verb wants the AI.
+///
+/// Dictation types into the Command Center's search bar and the search bar
+/// decides what the text means, so the useful default is the one that behaves
+/// like typing rather than one that guesses. That is why the AI is a group here
+/// rather than the catch-all it used to be: routing every unmatched sentence to
+/// a model meant an unconfigured Caduceus sent everything nowhere, and a
+/// configured one turned "invoices 2026" into a conversation. What happens when
+/// nothing matches now depends on whether an AI backend is actually usable —
+/// see [`VoiceSettings::fallback_route`].
 ///
 /// Keywords are stripped when they lead, so "search the best pasta in Rome"
 /// searches for *the best pasta in Rome* rather than including the instruction
@@ -542,6 +581,26 @@ pub fn default_keyword_groups() -> Vec<KeywordGroup> {
                 "search my mac".into(),
             ],
             route: RouteTarget::ComputerUse,
+            match_mode: KeywordMatch::LeadingWords,
+            enabled: true,
+        },
+        // The bare "ask" is last in its own list on purpose. Longest match wins
+        // across every group, so "ask" cannot shadow "ask ai" here, nor
+        // "search my mac" over in computer use — but it is still the loosest
+        // keyword Caduceus ships, and reading it last is how anyone editing
+        // this list finds that out.
+        KeywordGroup {
+            id: "kw-ai".into(),
+            name: "Ask AI".into(),
+            keywords: vec![
+                "ask ai".into(),
+                "ask claude".into(),
+                "ask chat".into(),
+                "hey caduceus".into(),
+                "hey ai".into(),
+                "ask".into(),
+            ],
+            route: RouteTarget::PrimaryAi,
             match_mode: KeywordMatch::LeadingWords,
             enabled: true,
         },
@@ -869,4 +928,76 @@ pub enum Theme {
     Dark,
     Light,
     System,
+}
+
+// ---------------------------------------------------------------------------
+// Updates
+// ---------------------------------------------------------------------------
+
+/// How Caduceus's background updater is allowed to behave. See
+/// `crate::update::spawn_update_watcher`, which is the only thing that reads
+/// this.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum UpdateMode {
+    /// Never check. The Settings → Update panel still has a manual "Check for
+    /// updates" button for anyone who wants to look themselves.
+    Off,
+    /// Check on a schedule; if something newer is out, say so once (a macOS
+    /// notification plus a card in Settings) and wait for a click before
+    /// touching anything on disk.
+    #[default]
+    Notify,
+    /// Check on a schedule and install without asking, unless the copy is
+    /// Homebrew-managed (Homebrew's own `upgrade` is the correct path there,
+    /// and Caduceus must not fight it) or something that looks like active use
+    /// — a recording — is in progress, in which case it falls back to
+    /// `Notify`'s behaviour for that cycle and tries again next time.
+    Auto,
+}
+
+/// Settings for the background updater, plus the two pieces of state it needs
+/// to remember between launches.
+///
+/// The state fields (`last_checked_at`, `last_announced_version`) live beside
+/// `mode` rather than in a separate file for the same reason
+/// `last_launched_version` lives on `GeneralSettings`: it is one more thing
+/// that already gets loaded, saved and broadcast on every settings change, so
+/// there is no second persistence path to keep in sync with the first.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(default, rename_all = "camelCase")]
+pub struct UpdateSettings {
+    pub mode: UpdateMode,
+    /// Unix seconds of the last time the watcher actually asked GitHub,
+    /// successful or not. `None` means "never" — true of a fresh install and
+    /// of an upgrade from before this field existed, both of which should get
+    /// their first check on the usual launch delay rather than waiting out a
+    /// full interval.
+    ///
+    /// This is what stops a user who restarts Caduceus ten times in a minute
+    /// from spending ten of GitHub's sixty-per-hour unauthenticated requests
+    /// doing it: the watcher checks this before it checks the network.
+    pub last_checked_at: Option<i64>,
+    /// The newest version a `Notify` popup has already been shown for.
+    /// Matching the latest release means "already said this one out loud, stay
+    /// quiet" — the difference between one useful nudge per release and a
+    /// notification every twelve hours for the same update, which is exactly
+    /// the kind of thing this app already gets complained about elsewhere.
+    pub last_announced_version: Option<String>,
+}
+
+impl Default for UpdateSettings {
+    fn default() -> Self {
+        Self {
+            // Checks automatically and asks before installing. `Auto` is more
+            // convenient but Caduceus replaces itself in place and is not
+            // notarised, so the safer default is the one that puts a human in
+            // the loop the first time; `Off` is available but should be a
+            // choice, not the out-of-the-box behaviour for a launcher that is
+            // otherwise entirely automatic about everything else it does.
+            mode: UpdateMode::Notify,
+            last_checked_at: None,
+            last_announced_version: None,
+        }
+    }
 }

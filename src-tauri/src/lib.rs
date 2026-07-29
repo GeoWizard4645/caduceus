@@ -580,7 +580,20 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     // Loaded before the windows so the palette's first render already has it.
     app.manage(usage::UsageStore::open(data_dir.join(usage::USAGE_FILE)));
     app.manage(tools::awake::AwakeRuntime::new());
-    app.manage(tools::timekeeping::TimekeepingRuntime::new());
+
+    // A running pomodoro must never be invisible: wire the runtime's "state
+    // changed" callback straight to a tray rebuild before anything can start
+    // a session, so the tray always reflects the very first one. See
+    // `TimekeepingRuntime::on_pomodoro_change` and `tray::build_menu` for why
+    // this is the fix for stray pomodoro notifications — a session with a
+    // visible, one-click "Stop pomodoro" item is never the "random" alert it
+    // felt like when the only way to find it was the Time page.
+    let timekeeping = tools::timekeeping::TimekeepingRuntime::new();
+    {
+        let handle = handle.clone();
+        timekeeping.set_on_pomodoro_change(move || tray::refresh(&handle));
+    }
+    app.manage(timekeeping);
     app.manage(tools::rates::RateCache::new());
     app.manage(tools::sorter::Session::new());
     app.manage(window::PaletteFloating::default());
@@ -666,13 +679,12 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         let _ = handle.emit("caduceus://hotkey-problems", &problems);
     }
 
-    let update_handle = handle.clone();
-    tauri::async_runtime::spawn(async move {
-        let check = crate::update::check().await;
-        if check.update_available {
-            let _ = update_handle.emit(window::UPDATE_AVAILABLE_EVENT, &check);
-        }
-    });
+    // One check at launch used to be the whole of it, which meant a build that
+    // never got restarted never learned about anything newer. The watcher keeps
+    // the same launch check — after a delay, so it never competes with start-up —
+    // and then keeps looking on a schedule, announcing a version at most once and
+    // honouring whatever the user chose in Settings → Updates.
+    update::spawn_update_watcher(handle.clone());
 
     autostart::sync_with_settings(&handle, loaded.general.launch_at_login);
 

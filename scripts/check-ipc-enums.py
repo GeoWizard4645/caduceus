@@ -33,6 +33,7 @@ CHECKS = [
     ("TargetModel", "src-tauri/src/tools/promptopt.rs", "TargetModel"),
     ("OptimizeLevel", "src-tauri/src/tools/promptopt.rs", "OptimizeLevel"),
     ("ExtraToolId", "src-tauri/src/tools/devextra.rs", "ExtraToolId"),
+    ("UpdateMode", "src-tauri/src/settings/model.rs", "UpdateMode"),
 ]
 
 

@@ -9,6 +9,7 @@ use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent}
 use tauri::{AppHandle, Manager, Runtime};
 
 use crate::settings::SettingsManager;
+use crate::tools::timekeeping::{Phase, TimekeepingRuntime};
 use crate::window;
 
 const ID_COMMAND_CENTER: &str = "command-center";
@@ -16,6 +17,8 @@ const ID_TOGGLE_ORB: &str = "toggle-staff";
 const ID_CLIPBOARD: &str = "clipboard";
 const ID_SETTINGS: &str = "settings";
 const ID_STOP_AGENTS: &str = "stop-agents";
+const ID_POMODORO_STATUS: &str = "pomodoro-status";
+const ID_STOP_POMODORO: &str = "stop-pomodoro";
 const ID_RESTART: &str = "restart";
 const ID_QUIT: &str = "quit";
 
@@ -32,15 +35,24 @@ pub fn build<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
         // opens the menu, which is what a menu-bar utility is expected to do.
         .show_menu_on_left_click(false)
         .on_menu_event(handle_menu_event)
-        .on_tray_icon_event(|tray, event| {
-            if let TrayIconEvent::Click {
+        .on_tray_icon_event(|tray, event| match event {
+            TrayIconEvent::Click {
                 button: MouseButton::Left,
                 button_state: MouseButtonState::Up,
                 ..
-            } = event
-            {
+            } => {
                 let _ = window::toggle_command_center(tray.app_handle(), "tray");
             }
+            // The menu itself is native (AppKit's own `NSMenu`, opened
+            // outside this process's control on right-click), so there is no
+            // "about to show" hook to refresh it from. The cursor entering
+            // the icon's bounds is the closest thing to one: it fires right
+            // before a click, on every platform, whichever button is used —
+            // so a pomodoro's remaining time is at most a mouse-move stale
+            // rather than stale since whenever the last phase transition
+            // happened to be (which, for a 90-minute long break, is a while).
+            TrayIconEvent::Enter { .. } => refresh(tray.app_handle()),
+            _ => {}
         });
 
     // A monochrome template image so macOS tints it for light/dark menu bars.
@@ -70,48 +82,120 @@ fn build_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
         .and_then(|w| w.is_visible().ok())
         .unwrap_or(true);
 
-    Menu::with_items(
+    // Built with `Menu::new` + `.append()` one item at a time, rather than
+    // the `Menu::with_items` array literal this used to be, because the
+    // pomodoro section below is conditional — present only while a session
+    // is running — and a fixed-size array can't express "N items, or N+2".
+    let menu = Menu::new(app)?;
+    menu.append(&MenuItem::with_id(
         app,
-        &[
-            &MenuItem::with_id(
-                app,
-                ID_COMMAND_CENTER,
-                "Open Command Center",
-                true,
-                Some(accelerator_hint(app)),
-            )?,
-            &MenuItem::with_id(
-                app,
-                ID_TOGGLE_ORB,
-                if staff_visible {
-                    "Hide Staff"
-                } else {
-                    "Show Staff"
-                },
-                true,
-                None::<&str>,
-            )?,
-            &MenuItem::with_id(
-                app,
-                ID_CLIPBOARD,
-                "Clipboard History\u{2026}",
-                true,
-                None::<&str>,
-            )?,
-            &PredefinedMenuItem::separator(app)?,
-            &MenuItem::with_id(
-                app,
-                ID_SETTINGS,
-                "Settings\u{2026}",
-                true,
-                Some("CmdOrCtrl+,"),
-            )?,
-            &MenuItem::with_id(app, ID_STOP_AGENTS, "Stop All Agents", true, None::<&str>)?,
-            &PredefinedMenuItem::separator(app)?,
-            &MenuItem::with_id(app, ID_RESTART, "Restart Caduceus", true, None::<&str>)?,
-            &MenuItem::with_id(app, ID_QUIT, "Quit Caduceus", true, Some("CmdOrCtrl+Q"))?,
-        ],
-    )
+        ID_COMMAND_CENTER,
+        "Open Command Center",
+        true,
+        Some(accelerator_hint(app)),
+    )?)?;
+    menu.append(&MenuItem::with_id(
+        app,
+        ID_TOGGLE_ORB,
+        if staff_visible {
+            "Hide Staff"
+        } else {
+            "Show Staff"
+        },
+        true,
+        None::<&str>,
+    )?)?;
+    menu.append(&MenuItem::with_id(
+        app,
+        ID_CLIPBOARD,
+        "Clipboard History\u{2026}",
+        true,
+        None::<&str>,
+    )?)?;
+
+    // A running pomodoro is otherwise invisible outside the Time page — this
+    // section is the actual fix for stray notifications, not decoration.
+    // Anyone who can see the tray icon can see a session is live and end it
+    // in one click, instead of having to remember Time → Pomodoro exists.
+    if let Some(status) = pomodoro_status_label(app) {
+        menu.append(&PredefinedMenuItem::separator(app)?)?;
+        // Disabled: this line is a status readout, not a button. `enabled:
+        // false` guarantees a click does nothing, rather than relying on the
+        // event handler to ignore an id it does not recognise.
+        menu.append(&MenuItem::with_id(
+            app,
+            ID_POMODORO_STATUS,
+            status,
+            false,
+            None::<&str>,
+        )?)?;
+        menu.append(&MenuItem::with_id(
+            app,
+            ID_STOP_POMODORO,
+            "Stop Pomodoro",
+            true,
+            None::<&str>,
+        )?)?;
+    }
+
+    menu.append(&PredefinedMenuItem::separator(app)?)?;
+    menu.append(&MenuItem::with_id(
+        app,
+        ID_SETTINGS,
+        "Settings\u{2026}",
+        true,
+        Some("CmdOrCtrl+,"),
+    )?)?;
+    menu.append(&MenuItem::with_id(
+        app,
+        ID_STOP_AGENTS,
+        "Stop All Agents",
+        true,
+        None::<&str>,
+    )?)?;
+    menu.append(&PredefinedMenuItem::separator(app)?)?;
+    menu.append(&MenuItem::with_id(
+        app,
+        ID_RESTART,
+        "Restart Caduceus",
+        true,
+        None::<&str>,
+    )?)?;
+    menu.append(&MenuItem::with_id(
+        app,
+        ID_QUIT,
+        "Quit Caduceus",
+        true,
+        Some("CmdOrCtrl+Q"),
+    )?)?;
+
+    Ok(menu)
+}
+
+/// The label for the running-pomodoro status line — phase and time
+/// remaining — or `None` when nothing is running (or the runtime is not
+/// registered yet, which should not happen after `setup` but is not worth a
+/// panic if it somehow did). Callers add the whole pomodoro section only
+/// when this returns something, so "no pomodoro" means no trace of one in
+/// the menu at all.
+fn pomodoro_status_label<R: Runtime>(app: &AppHandle<R>) -> Option<String> {
+    let runtime = app.try_state::<TimekeepingRuntime>()?;
+    let status = runtime.pomodoro_status();
+    if !status.running {
+        return None;
+    }
+
+    let phase_label = match status.phase {
+        Some(Phase::Work) => "Work",
+        Some(Phase::ShortBreak) => "Short break",
+        Some(Phase::LongBreak) => "Long break",
+        None => "Pomodoro",
+    };
+    let minutes = status.remaining_secs / 60;
+    let seconds = status.remaining_secs % 60;
+    Some(format!(
+        "Pomodoro — {phase_label} \u{b7} {minutes}:{seconds:02} left"
+    ))
 }
 
 /// Show the user's actual Command Center hotkey in the menu, so the menu never
@@ -174,6 +258,15 @@ fn handle_menu_event<R: Runtime>(app: &AppHandle<R>, event: MenuEvent) {
         ID_STOP_AGENTS => {
             if let Some(runtime) = app.try_state::<crate::agent::AgentRuntime>() {
                 runtime.stop_all();
+            }
+        }
+        ID_STOP_POMODORO => {
+            if let Some(runtime) = app.try_state::<TimekeepingRuntime>() {
+                // `pomodoro_stop` already calls the `on_pomodoro_change`
+                // callback wired up in `lib.rs`, which is what actually
+                // rebuilds this menu — no explicit `refresh(app)` needed
+                // here, and adding one would just rebuild it twice.
+                runtime.pomodoro_stop();
             }
         }
         ID_RESTART => {

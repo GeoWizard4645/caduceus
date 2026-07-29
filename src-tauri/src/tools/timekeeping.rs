@@ -635,10 +635,31 @@ pub struct PomodoroConfig {
     /// every `cycles_before_long_break`th work session instead of a short one.
     /// `0` means "never", i.e. always a short break.
     pub cycles_before_long_break: u32,
-    /// Total work sessions for the whole run. `0` means "until stopped by
-    /// hand" — an all-afternoon session with no fixed end.
+    /// Total work sessions for the whole run. The frontend no longer offers
+    /// `0` — see `MAX_TOTAL_CYCLES` for why — but a `0` arriving here anyway
+    /// (an older client, a script) is not treated as "run forever": it is
+    /// clamped to `MAX_TOTAL_CYCLES` by [`TimekeepingRuntime::pomodoro_start`]
+    /// before a session is ever created. `advance`, below, still implements
+    /// the literal "0 means no fixed end" rule as a pure function, because
+    /// that is the simplest thing to unit-test — the runtime is what makes
+    /// sure a live session never actually sees a `0` it would act on.
     pub total_cycles: u32,
 }
+
+/// Hard ceiling on work sessions in a single pomodoro run, applied by
+/// [`TimekeepingRuntime::pomodoro_start`] regardless of what was requested.
+///
+/// This exists because "random notifications" turned out to mean exactly one
+/// thing: a session started with `total_cycles == 0` ("run until stopped by
+/// hand") that nobody remembered to stop, quietly alerting at every phase
+/// boundary for as long as Caduceus stayed running. Sixteen work sessions, at
+/// even the shortest sensible cadence (25 minutes work, 5 minutes break), is
+/// already well over six hours of active-plus-break time — a full working day
+/// — and past that point "just one more session" stops being something a
+/// person deliberately chose and starts being a session they forgot about.
+/// The tray's "Stop pomodoro" item (see `tray.rs`) is the real safety net for
+/// day-to-day use; this ceiling is the backstop for when nobody is looking.
+const MAX_TOTAL_CYCLES: u32 = 16;
 
 fn phase_minutes(config: &PomodoroConfig, phase: Phase) -> u32 {
     match phase {
@@ -651,14 +672,14 @@ fn phase_minutes(config: &PomodoroConfig, phase: Phase) -> u32 {
 fn phase_message(phase: Phase, cycle: u32) -> String {
     match phase {
         Phase::Work => format!(
-            "Pomodoro — break's over; work session {cycle} starting. Stop it in Caduceus → Time → Pomodoro."
+            "Pomodoro — break's over; work session {cycle} starting. Stop it from the tray or Caduceus → Time → Pomodoro."
         ),
         Phase::ShortBreak => {
-            "Pomodoro — work session done. Take a short break. Stop it in Caduceus → Time → Pomodoro."
+            "Pomodoro — work session done. Take a short break. Stop it from the tray or Caduceus → Time → Pomodoro."
                 .to_string()
         }
         Phase::LongBreak => {
-            "Pomodoro — nice streak; take a long break. Stop it in Caduceus → Time → Pomodoro."
+            "Pomodoro — nice streak; take a long break. Stop it from the tray or Caduceus → Time → Pomodoro."
                 .to_string()
         }
     }
@@ -757,6 +778,16 @@ pub struct TimekeepingRuntime {
     stopwatch: Arc<Mutex<Stopwatch>>,
     pomodoro: Arc<Mutex<Option<PomodoroSession>>>,
     next_pomodoro_generation: AtomicU64,
+    /// Fired after every pomodoro start, stop, and phase transition. `lib.rs`
+    /// wires this up to `tray::refresh` so a running session — and its "Stop
+    /// pomodoro" item — is never more than a menu-bar click away, which is
+    /// what actually prevents a forgotten session from feeling like it is
+    /// sending "random" notifications. Deliberately just a callback rather
+    /// than this module reaching for `tauri::AppHandle` directly: everything
+    /// above stays a plain, clock-free unit that tests without any Tauri
+    /// runtime at all, and tests can plug in their own callback to observe
+    /// exactly when a change happens (see the reaper tests below).
+    on_pomodoro_change: Mutex<Option<Arc<dyn Fn() + Send + Sync>>>,
 }
 
 impl TimekeepingRuntime {
@@ -886,7 +917,20 @@ impl TimekeepingRuntime {
 
     // --- pomodoro --------------------------------------------------------------
 
-    pub fn pomodoro_start(&self, config: PomodoroConfig) -> Result<PomodoroStatus, String> {
+    /// Wire up a callback for "the pomodoro state changed" — see the field
+    /// doc comment on `on_pomodoro_change` for why this exists as a callback
+    /// rather than a direct `tray::refresh` call from in here.
+    pub fn set_on_pomodoro_change(&self, callback: impl Fn() + Send + Sync + 'static) {
+        *self.on_pomodoro_change.lock() = Some(Arc::new(callback));
+    }
+
+    fn notify_pomodoro_change(&self) {
+        if let Some(callback) = self.on_pomodoro_change.lock().as_ref() {
+            callback();
+        }
+    }
+
+    pub fn pomodoro_start(&self, mut config: PomodoroConfig) -> Result<PomodoroStatus, String> {
         if config.work_minutes == 0 || config.short_break_minutes == 0 {
             return Err("Work and short-break lengths must be at least a minute.".into());
         }
@@ -898,6 +942,18 @@ impl TimekeepingRuntime {
             || config.long_break_minutes > 180
         {
             return Err("Three hours is the longest a single phase can run.".into());
+        }
+        if config.total_cycles > MAX_TOTAL_CYCLES {
+            return Err(format!(
+                "{MAX_TOTAL_CYCLES} work sessions is the longest a single run can be — that's already a full day."
+            ));
+        }
+        // `0` ("run until stopped by hand") is still accepted for
+        // compatibility, but never actually honoured as unbounded — see
+        // `MAX_TOTAL_CYCLES` for why this is where an "infinite" request
+        // actually stops.
+        if config.total_cycles == 0 {
+            config.total_cycles = MAX_TOTAL_CYCLES;
         }
 
         let generation = self.next_pomodoro_generation.fetch_add(1, Ordering::SeqCst);
@@ -913,17 +969,23 @@ impl TimekeepingRuntime {
             generation,
         });
 
-        Self::spawn_pomodoro_reaper(Arc::clone(&self.pomodoro), generation, duration);
+        Self::spawn_pomodoro_reaper(
+            Arc::clone(&self.pomodoro),
+            generation,
+            duration,
+            self.on_pomodoro_change.lock().clone(),
+        );
 
         // Announce the start: a session that only notifies at phase boundaries
         // is easy to forget you began — and then every break alert feels random.
         notify(
             "Caduceus",
             &format!(
-                "Pomodoro started — {mins} min work session 1. Stop it anytime in Time → Pomodoro.",
+                "Pomodoro started — {mins} min work session 1. Stop it anytime from the tray or Time → Pomodoro.",
                 mins = config.work_minutes
             ),
         );
+        self.notify_pomodoro_change();
 
         Ok(self.pomodoro_status())
     }
@@ -933,6 +995,7 @@ impl TimekeepingRuntime {
         // reaper checks: its generation simply will not match whatever runs
         // next, so it fires its notification-less no-op and stops there.
         *self.pomodoro.lock() = None;
+        self.notify_pomodoro_change();
         self.pomodoro_status()
     }
 
@@ -945,10 +1008,19 @@ impl TimekeepingRuntime {
     /// with a loop in it, so a `pomodoro_stop` between two phases has nothing
     /// to cancel: the next iteration simply finds no session, or the wrong
     /// generation, and stops quietly.
+    ///
+    /// This is the choke point every pomodoro notification passes through —
+    /// there is no other path from "phase ended" to `notify()`. A session
+    /// that has been stopped (`guard.as_mut()` is `None`) or superseded by a
+    /// later one (`session.generation != generation`) returns before either
+    /// `notify` or `on_change` runs, which is what makes "a stopped session
+    /// can still ping you" structurally impossible rather than just unlikely.
+    /// See the `a_stopped_session_…` / `a_superseded_session_…` tests below.
     fn spawn_pomodoro_reaper(
         pomodoro: Arc<Mutex<Option<PomodoroSession>>>,
         generation: u64,
         wait: Duration,
+        on_change: Option<Arc<dyn Fn() + Send + Sync>>,
     ) {
         tauri::async_runtime::spawn(async move {
             tokio::time::sleep(wait).await;
@@ -984,8 +1056,11 @@ impl TimekeepingRuntime {
 
             if let Some((message, next_wait)) = outcome {
                 notify("Caduceus", &message);
+                if let Some(callback) = &on_change {
+                    callback();
+                }
                 if let Some(wait) = next_wait {
-                    Self::spawn_pomodoro_reaper(pomodoro, generation, wait);
+                    Self::spawn_pomodoro_reaper(pomodoro, generation, wait, on_change);
                 }
             }
         });
@@ -1492,5 +1567,110 @@ mod tests {
         let status = runtime.pomodoro_status();
         assert!(!status.running);
         assert_eq!(status.remaining_secs, 0);
+    }
+
+    #[test]
+    fn a_request_for_zero_total_cycles_is_clamped_rather_than_run_forever() {
+        // `0` is still accepted — old callers may still send it — but a live
+        // session must never actually be unbounded. This is the regression
+        // test for the bug report itself: "0 = run until stopped by hand"
+        // used to mean exactly that.
+        let runtime = TimekeepingRuntime::new();
+        let status = runtime.pomodoro_start(config(25, 5, 15, 4, 0)).unwrap();
+        assert_eq!(status.total_cycles, MAX_TOTAL_CYCLES);
+    }
+
+    #[test]
+    fn a_total_cycles_request_above_the_ceiling_is_refused_outright() {
+        let runtime = TimekeepingRuntime::new();
+        assert!(runtime
+            .pomodoro_start(config(25, 5, 15, 4, MAX_TOTAL_CYCLES + 1))
+            .is_err());
+    }
+
+    #[test]
+    fn a_total_cycles_request_at_the_ceiling_is_accepted() {
+        let runtime = TimekeepingRuntime::new();
+        let status = runtime
+            .pomodoro_start(config(25, 5, 15, 4, MAX_TOTAL_CYCLES))
+            .unwrap();
+        assert_eq!(status.total_cycles, MAX_TOTAL_CYCLES);
+    }
+
+    #[test]
+    fn a_stopped_sessions_pending_reaper_notifies_and_refreshes_nothing() {
+        // Models a reaper whose `tokio::time::sleep` was still pending when
+        // `pomodoro_stop` ran — the exact race the generation guard exists
+        // for. Calling `spawn_pomodoro_reaper` directly (rather than waiting
+        // out a real phase) is what makes this expressible without a clock.
+        let runtime = TimekeepingRuntime::new();
+        let calls = Arc::new(AtomicU64::new(0));
+        {
+            let calls = Arc::clone(&calls);
+            runtime.set_on_pomodoro_change(move || {
+                calls.fetch_add(1, Ordering::SeqCst);
+            });
+        }
+
+        runtime.pomodoro_start(config(25, 5, 15, 4, 0)).unwrap();
+        runtime.pomodoro_stop();
+        let after_start_and_stop = calls.load(Ordering::SeqCst);
+        assert_eq!(after_start_and_stop, 2, "start and stop should each fire once");
+
+        // The session is gone; a reaper for it — any generation — must find
+        // nothing and quietly return before notifying or calling back.
+        TimekeepingRuntime::spawn_pomodoro_reaper(
+            Arc::clone(&runtime.pomodoro),
+            0,
+            Duration::from_millis(5),
+            runtime.on_pomodoro_change.lock().clone(),
+        );
+        std::thread::sleep(Duration::from_millis(50));
+
+        assert_eq!(
+            calls.load(Ordering::SeqCst),
+            after_start_and_stop,
+            "a reaper for an already-stopped session must not fire the change callback"
+        );
+    }
+
+    #[test]
+    fn a_superseded_sessions_pending_reaper_leaves_the_live_session_untouched() {
+        // Same race, but for a restart rather than a stop: the old session's
+        // reaper wakes up after a *new* session has already replaced it.
+        let runtime = TimekeepingRuntime::new();
+        let calls = Arc::new(AtomicU64::new(0));
+        {
+            let calls = Arc::clone(&calls);
+            runtime.set_on_pomodoro_change(move || {
+                calls.fetch_add(1, Ordering::SeqCst);
+            });
+        }
+
+        runtime.pomodoro_start(config(25, 5, 15, 4, 0)).unwrap();
+        let live = runtime.pomodoro_start(config(50, 10, 20, 4, 0)).unwrap();
+        let after_two_starts = calls.load(Ordering::SeqCst);
+        assert_eq!(after_two_starts, 2);
+
+        // `u64::MAX` stands in for "the first session's generation" — the
+        // exact value does not matter, only that it cannot match whatever
+        // generation the live (second) session actually has.
+        TimekeepingRuntime::spawn_pomodoro_reaper(
+            Arc::clone(&runtime.pomodoro),
+            u64::MAX,
+            Duration::from_millis(5),
+            runtime.on_pomodoro_change.lock().clone(),
+        );
+        std::thread::sleep(Duration::from_millis(50));
+
+        assert_eq!(
+            calls.load(Ordering::SeqCst),
+            after_two_starts,
+            "a superseded reaper must not fire the change callback"
+        );
+        // And the live session's own state must be exactly as it started.
+        let status = runtime.pomodoro_status();
+        assert_eq!(status.total_secs, live.total_secs);
+        assert_eq!(status.cycle, 1);
     }
 }

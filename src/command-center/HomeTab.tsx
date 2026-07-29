@@ -33,6 +33,7 @@ import {
 import type {
   ClipboardEntry,
   CommandCenterOpenPayload,
+  KeywordGroup,
   ParsedInput,
   VoiceOutcome,
   VoiceState,
@@ -47,6 +48,136 @@ import { COMMANDS, COMMAND_GROUPS, type CommandGroupId, type CommandOutput } fro
 
 import { AgentPanel } from "./AgentPanel";
 import { tabForMode, type Tab } from "@/shared/tabs";
+
+// ---------------------------------------------------------------------------
+// Voice: short-utterance auto-open (voice routing rule 6)
+// ---------------------------------------------------------------------------
+//
+// Saying a short, exact thing — "Terminal" — and then pausing should open it,
+// without waiting for the mic to be released and the transcript finalised.
+// This is deliberately the most conservative piece of voice routing: launching
+// the wrong thing off a mis-transcription is far worse than doing nothing, so
+// every one of the constants and guards below exists to keep false positives
+// as close to zero as the feature can afford. See the effect built from these
+// inside `HomeTab` for how they compose, and `router.rs`'s module doc for
+// rules 1-5, which this sits alongside.
+
+/** "A word or two" — long enough for "Visual Studio Code" or "System
+ * Settings", short enough that an actual sentence never qualifies. */
+const AUTO_OPEN_MAX_WORDS = 3;
+
+/** How long the live partial transcript must stop changing before this even
+ * starts considering a candidate — the "recogniser has settled" half of rule
+ * 6. Comfortably inside the spec's 1-2s window; short pauses mid-sentence are
+ * common while thinking, and firing on those would make the feature feel like
+ * it is racing the speaker rather than waiting for them. */
+const AUTO_OPEN_SETTLE_MS = 1400;
+
+/** How long the visible countdown runs *after* settling, before anything
+ * actually happens. This is what makes the feature "visibly counting down
+ * rather than firing out of nowhere" — long enough to read the row and hit
+ * Cancel, short enough that saying a name and pausing still feels immediate. */
+const AUTO_OPEN_COUNTDOWN_MS = 1100;
+
+/**
+ * Result groups worth auto-opening. Deliberately an allowlist, not a
+ * denylist: a group this list has never heard of is excluded by default
+ * rather than included, which is the direction "when in doubt, leave the text
+ * in the input" points. Search/AI/calculator/conversion/clipboard rows are
+ * left out on purpose — those are answers *about* the text, not things a name
+ * launches, and an exact-title match against one of them (a web-search row
+ * literally titled after the query) would defeat the whole point of the gate.
+ */
+const AUTO_OPEN_GROUPS = new Set([
+  "Applications",
+  "Shortcuts",
+  "Commands",
+  "Favorites",
+  "Files",
+  "Extensions",
+  "Containers",
+  "Bookmarks",
+  "Repositories",
+  "SSH hosts",
+  "Menu bar",
+  "Contacts",
+  "Browser tabs",
+]);
+
+/** Lowercase, trim, collapse whitespace and drop one trailing sentence-ending
+ * mark — enough to match "Terminal" against a row titled "Terminal" even when
+ * the recogniser appended a period, without being a general fuzzy matcher. */
+function normalizeForAutoOpen(text: string): string {
+  return text
+    .toLowerCase()
+    .trim()
+    .replace(/[.!?,;:]+$/, "")
+    .replace(/\s+/g, " ");
+}
+
+function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * A light client-side mirror of `voice::router`'s leading/anywhere matching —
+ * not the authoritative implementation, which stays server-side and runs once
+ * the transcript is actually finalised. This exists purely to gate auto-open:
+ * "no keyword group matched" is one of rule 6's four conditions, and an
+ * explicit instruction ("search Terminal") must always beat a guess about
+ * what to launch.
+ */
+function matchesAnyKeywordGroup(transcript: string, groups: KeywordGroup[]): boolean {
+  const haystack = normalizeForAutoOpen(transcript);
+  if (!haystack) return false;
+  return groups.some((group) => {
+    if (!group.enabled) return false;
+    return group.keywords.some((raw) => {
+      const needle = normalizeForAutoOpen(raw);
+      if (!needle) return false;
+      if (group.matchMode === "anywhere") {
+        return new RegExp(`(^|\\s)${escapeRegExp(needle)}(\\s|$)`).test(haystack);
+      }
+      return haystack === needle || haystack.startsWith(`${needle} `);
+    });
+  });
+}
+
+/**
+ * Whether `results[0]` is a safe auto-open candidate for `transcript`.
+ *
+ * Every condition is a hard "no", not a score threshold: a short transcript,
+ * an exact (or near-exact, modulo trailing punctuation) title match in a
+ * launchable group, nothing tied with it, and no keyword group already
+ * claiming the text. "The best of a weak field" is explicitly not good
+ * enough — see the spec note this implements — so this reuses the ranking
+ * `results` already carries rather than scoring anything itself.
+ */
+function pickAutoOpenCandidate(
+  results: ResultItem[],
+  transcript: string,
+  keywordGroups: KeywordGroup[],
+): ResultItem | null {
+  const words = transcript.trim().split(/\s+/).filter(Boolean);
+  if (words.length === 0 || words.length > AUTO_OPEN_MAX_WORDS) return null;
+  if (matchesAnyKeywordGroup(transcript, keywordGroups)) return null;
+
+  const top = results[0];
+  // No group this feature does not recognise, and never a row that would
+  // otherwise ask for confirmation — auto-open is for opening things, not for
+  // silently arming a "Shut Down"-style prompt nobody asked for.
+  if (!top || !AUTO_OPEN_GROUPS.has(top.group) || top.confirm) return null;
+
+  const query = normalizeForAutoOpen(transcript);
+  if (!query || normalizeForAutoOpen(top.title) !== query) return null;
+
+  // A runner-up with the same exact title (two apps of the same name in
+  // different locations, say) makes the pick ambiguous, not confident.
+  const second = results[1];
+  if (second && normalizeForAutoOpen(second.title) === query) return null;
+
+  return top;
+}
 
 export function HomeTab({
   active,
@@ -208,6 +339,9 @@ export function HomeTab({
 
   useTauriEvent<VoiceOutcome>(EVENTS.voiceResult, (outcome) => {
     if (!active) return;
+    // A final transcript supersedes any guess auto-open was still counting
+    // down on for the same utterance — the two must never both act.
+    cancelAutoOpen();
     if (!outcome.ok) {
       // Through `actions.notify`, not the raw toast: a missing microphone or
       // speech grant opens its permission page with Repair one click away,
@@ -397,6 +531,105 @@ export function HomeTab({
     [pendingConfirm, notify],
   );
 
+  // --- voice: auto-open a short, settled, unambiguous utterance -----------
+  //
+  // Rule 6 from the voice routing spec. This runs entirely off the *partial*
+  // stream — `EVENTS.voicePartial` above already keeps `input` live while
+  // dictating — so a short name can open before the mic is ever stopped.
+  // `EVENTS.voiceResult`'s handler still owns everything else voice does
+  // (keyword routing, auto-submit) and cancels this outright the moment a
+  // final transcript lands, so the two never race for the same utterance.
+  //
+  // The countdown is the visible, cancellable half of the feature: arming it
+  // never runs anything by itself, and any further speech, any keystroke, or
+  // leaving the "recording" state tears it down before it can.
+
+  const [autoOpen, setAutoOpen] = useState<{ item: ResultItem; armedAt: number } | null>(null);
+  const settleTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const fireTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+
+  // The timers below fire well after the render that scheduled them and need
+  // whatever `results`/`settings`/`voice` are current *then* — not what they
+  // were at schedule time — so they read through this ref instead of closing
+  // over the values directly. Kept in sync on every render rather than inside
+  // an effect: there is nothing to run when these change, only a snapshot to
+  // have ready if a pending timer asks.
+  const autoOpenSnapshot = useRef({ results, settings, voice, runItem });
+  autoOpenSnapshot.current = { results, settings, voice, runItem };
+
+  // `settings` can briefly be `null` on the very first render (see the guard
+  // near the bottom of this component). Nothing auto-opens until they load —
+  // the guards this feature relies on all live in settings, so acting before
+  // they arrive would be acting without them.
+  const autoOpenEnabled = settings?.voice.autoOpenShortUtterance ?? false;
+
+  const clearAutoOpenTimers = useCallback(() => {
+    if (settleTimer.current) clearTimeout(settleTimer.current);
+    if (fireTimer.current) clearTimeout(fireTimer.current);
+    settleTimer.current = undefined;
+    fireTimer.current = undefined;
+  }, []);
+
+  /** Any explicit action — Escape, a keystroke, clicking Cancel — beats a
+   * guess about what to launch. Idempotent, so it is safe to call whether or
+   * not anything is actually armed. */
+  const cancelAutoOpen = useCallback(() => {
+    clearAutoOpenTimers();
+    setAutoOpen(null);
+  }, [clearAutoOpenTimers]);
+
+  useEffect(() => {
+    // Reaching this effect at all — a new partial, or the user typing over
+    // one — means speech has not (yet) settled. Tear down whatever was
+    // pending and start the settle clock fresh from here.
+    clearAutoOpenTimers();
+    setAutoOpen(null);
+    if (voice !== "recording" || !autoOpenEnabled) return;
+
+    const transcriptAtSettle = input;
+
+    settleTimer.current = setTimeout(() => {
+      const snap = autoOpenSnapshot.current;
+      // Still recording, and nothing has changed `input` since — this effect
+      // would have re-run and cleared this timer otherwise.
+      if (snap.voice !== "recording" || !snap.settings) return;
+
+      const candidate = pickAutoOpenCandidate(
+        snap.results,
+        transcriptAtSettle,
+        snap.settings.voice.keywordGroups,
+      );
+      if (!candidate) return;
+
+      setAutoOpen({ item: candidate, armedAt: Date.now() });
+      fireTimer.current = setTimeout(() => {
+        setAutoOpen(null);
+        const latest = autoOpenSnapshot.current;
+        if (latest.voice !== "recording") return;
+        // Re-validate right before acting — belt and braces against a race
+        // with a final transcript or fresh speech landing in between.
+        const stillCandidate = pickAutoOpenCandidate(
+          latest.results,
+          transcriptAtSettle,
+          latest.settings?.voice.keywordGroups ?? [],
+        );
+        if (!stillCandidate || stillCandidate.id !== candidate.id) return;
+        // Close the mic before acting rather than after: the item's own
+        // action may itself take a moment, and a live recording sitting
+        // behind it would keep listening for no reason. `voice_cancel` does
+        // not itself emit `VOICE_STATE_EVENT` (see the recorder HUD, which
+        // gets away with that only because it closes its whole window on
+        // cancel) — this tab has to drop out of "recording" itself, or the
+        // mic indicator would show a recording that has already stopped.
+        void api.voiceCancel().catch(() => {});
+        setVoice("idle");
+        void latest.runItem(stillCandidate);
+      }, AUTO_OPEN_COUNTDOWN_MS);
+    }, AUTO_OPEN_SETTLE_MS);
+
+    return clearAutoOpenTimers;
+  }, [input, voice, autoOpenEnabled, clearAutoOpenTimers]);
+
   // --- keyboard -----------------------------------------------------------
   //
   // On `window`, not on the `<input>`.
@@ -430,8 +663,16 @@ export function HomeTab({
    * window, taking every other open tab with it, which directly contradicts
    * what `CommandCenter` says it does ("with pages open it closes the page in
    * front"). Declining here is what lets the shell decide.
+   *
+   * Auto-open's countdown is checked first, ahead of even the confirmation
+   * prompt — of everything Escape might need to cancel, an app about to
+   * launch itself is the most surprising one to leave hanging.
    */
   const handleEscape = (): boolean => {
+    if (autoOpen) {
+      cancelAutoOpen();
+      return true;
+    }
     if (pendingConfirm) {
       setPendingConfirm(null);
       return true;
@@ -457,6 +698,11 @@ export function HomeTab({
   const onPaletteKey = (event: KeyboardEvent) => {
     // ⌘-anything belongs to the tab shell: new tab, close tab, switch tab.
     if (event.metaKey || event.ctrlKey || event.defaultPrevented) return;
+
+    // Any deliberate keypress beats a guess about what to launch — cancel
+    // first, then let the key do whatever it would normally do (Escape's own
+    // handling of this is above; every other key just falls through).
+    if (autoOpen && event.key !== "Escape") cancelAutoOpen();
 
     const count = results.length;
 
@@ -741,11 +987,38 @@ export function HomeTab({
         )}
       </div>
 
-      {voice === "recording" && input.trim() && (
+      {voice === "recording" && input.trim() && !autoOpen && (
         <div className="shrink-0 px-5 pb-2">
           <p className="rounded-lg border border-accent/25 bg-accent/8 px-3 py-2 text-[15px] leading-snug text-ink">
             {input}
           </p>
+        </div>
+      )}
+
+      {/* Auto-open's countdown: rule 6's "visibly counting down rather than
+          firing out of nowhere" requirement. Replaces the plain transcript
+          preview above rather than sitting alongside it — the whole point is
+          that this state announces the *decision*, not just the words. */}
+      {autoOpen && (
+        <div className="shrink-0 px-5 pb-2">
+          <div className="row items-center gap-2 rounded-lg border border-accent/30 bg-accent/10 px-3 py-2">
+            <ShortcutIcon
+              icon={autoOpen.item.icon}
+              label={autoOpen.item.title}
+              className="h-4 w-4 shrink-0"
+            />
+            <p className="min-w-0 flex-1 truncate text-[15px] leading-snug text-ink">
+              Opening <span className="font-semibold">{autoOpen.item.title}</span>…
+            </p>
+            <button
+              type="button"
+              onClick={cancelAutoOpen}
+              className="no-drag shrink-0 rounded-md border border-line bg-raised px-2 py-1 text-2xs font-medium text-ink-soft transition-colors hover:bg-overlay hover:text-ink"
+            >
+              Cancel
+            </button>
+          </div>
+          <AutoOpenCountdownBar armedAt={autoOpen.armedAt} durationMs={AUTO_OPEN_COUNTDOWN_MS} />
         </div>
       )}
 
@@ -1013,6 +1286,41 @@ const ResultRow = memo(function ResultRow({
     </div>
   );
 });
+
+/**
+ * The visible clock on auto-open's countdown — a thin bar that drains from
+ * full to empty over `durationMs`, driven by a CSS transition rather than a
+ * polling interval. `armedAt` is only read as a React key: a fresh timestamp
+ * remounts the bar (and so restarts the animation) every time a new
+ * candidate is armed, which a plain prop change would not reliably do once
+ * the width is already mid-transition.
+ */
+function AutoOpenCountdownBar({ armedAt, durationMs }: { armedAt: number; durationMs: number }) {
+  return (
+    <div className="mt-1.5 h-0.5 overflow-hidden rounded-full bg-accent/15">
+      <AutoOpenCountdownFill key={armedAt} durationMs={durationMs} />
+    </div>
+  );
+}
+
+function AutoOpenCountdownFill({ durationMs }: { durationMs: number }) {
+  const barRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = barRef.current;
+    if (!el) return;
+    // Start full with no transition, force a reflow so the browser treats
+    // the next style change as a fresh transition rather than coalescing it
+    // with the one just set, then animate to empty.
+    el.style.transition = "none";
+    el.style.width = "100%";
+    void el.offsetWidth;
+    el.style.transition = `width ${durationMs}ms linear`;
+    el.style.width = "0%";
+  }, [durationMs]);
+
+  return <div ref={barRef} className="h-full bg-accent" />;
+}
 
 /**
  * Text a command produced, shown in the palette rather than in a toast.

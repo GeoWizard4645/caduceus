@@ -170,9 +170,17 @@ export interface VoiceSettings {
   sttModel: string;
   sttLanguage: string;
   keywordGroups: KeywordGroup[];
-  fallbackRoute: RouteTarget;
+  /**
+   * Where an unmatched transcript goes, or `null` for "decide automatically" —
+   * a web search when no AI backend is configured, plain Command Center search
+   * when one is. `null` is the default; anything else is a deliberate choice
+   * and is honoured as-is. See `voice::router::effective_fallback`.
+   */
+  fallbackRoute: RouteTarget | null;
   maxRecordingSecs: number;
   autoSubmit: boolean;
+  /** Open an unambiguous result on its own after a short utterance settles. */
+  autoOpenShortUtterance: boolean;
 }
 
 export type BackendKind = "null" | "openai_compatible" | "hermes";
@@ -245,6 +253,22 @@ export interface AppearanceSettings {
   uiScale: number;
 }
 
+/**
+ * `off` never checks. `notify` (the default) checks automatically and asks
+ * before installing. `auto` checks and installs without asking, except when
+ * the copy is Homebrew-managed or Caduceus is busy with a recording — see
+ * `UpdateSettings` and the caveat text in `UpdateSection.tsx`.
+ */
+export type UpdateMode = "off" | "notify" | "auto";
+
+export interface UpdateSettings {
+  mode: UpdateMode;
+  /** Unix seconds; `null` if the background watcher has never checked. */
+  lastCheckedAt: number | null;
+  /** The latest version a "Notify" popup has already been shown for. */
+  lastAnnouncedVersion: string | null;
+}
+
 export interface Settings {
   version: number;
   general: GeneralSettings;
@@ -254,6 +278,7 @@ export interface Settings {
   agents: AgentSettings;
   clipboard: ClipboardSettings;
   appearance: AppearanceSettings;
+  update: UpdateSettings;
 }
 
 // ---------------------------------------------------------------------------
@@ -355,6 +380,9 @@ export interface UpdateCheck {
   latestVersion: string | null;
   releaseUrl: string | null;
   downloadUrl: string | null;
+  /** True when this copy was installed via `brew install --cask` — the curl
+   *  installer must not touch it, `brew upgrade --cask caduceus` should. */
+  homebrewManaged: boolean;
 }
 
 export interface RuntimeInfo {

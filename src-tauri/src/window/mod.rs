@@ -193,13 +193,21 @@ const ONBOARDING_CARD_GAP: f64 = 16.0;
 /// Clearance between the outermost pop-out icon and the edge of the window.
 ///
 /// This used to be 24px, which was enough when an icon was the last thing drawn
-/// on the arc. Each shortcut now carries a caption underneath naming where it
-/// goes, and a caption is both taller than the gap below the icon and wider than
-/// the icon itself — at the default appearance settings that left roughly two
-/// pixels before the window's edge, so the captions on the left and right of the
-/// ring were cut off. The window is click-through everywhere except the mark, so
-/// the only cost of the extra margin is a slightly larger invisible square.
-const POPOUT_EDGE_MARGIN: f64 = 50.0;
+/// on the arc. Each shortcut now carries a caption chip overlapping its bottom
+/// edge, naming where it goes. The caption used to be a plain word sitting in
+/// flow beneath the icon (narrow, and adding only to the vertical extent); it is
+/// now a pill roughly a hostname wide — up to 116px, centred on the icon rather
+/// than constrained by it — so the icon's own radius is no longer a useful proxy
+/// for how far the visuals reach. The binding case is the smallest icon size
+/// (24px, see `popout_icon_size`'s clamp in `settings::mod::sanitize`) paired
+/// with the widest caption: the chip's half-width extends roughly 45–60px
+/// beyond what `popout_icon_size / 2` alone accounts for, in every direction,
+/// since the arc can place an icon anywhere around the ring. 50px was sized for
+/// the old in-flow caption and left the new chip clipped at the window edge on
+/// the left- and right-most icons. The window is click-through everywhere
+/// except the mark, so the only cost of the extra margin is a slightly larger
+/// invisible square.
+const POPOUT_EDGE_MARGIN: f64 = 64.0;
 
 /// Side length of the staff window. Grows with staff size and pop-out reach so
 /// icons and their captions are never clipped; clamped to a sane range.

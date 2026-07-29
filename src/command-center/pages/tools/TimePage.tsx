@@ -716,8 +716,17 @@ function PomodoroTab({
             <Field label="Cycles before a long break" hint="0 = always a short break">
               <NumberInput value={cyclesBeforeLongBreak} onChange={setCyclesBeforeLongBreak} min={0} max={20} />
             </Field>
-            <Field label="Total work sessions" hint="0 = run until stopped by hand" wide>
-              <NumberInput value={totalCycles} onChange={setTotalCycles} min={0} max={64} />
+            <Field label="Total work sessions" wide>
+              {/* No "0 = run until stopped by hand" option any more — that
+                  was the actual source of "random" pomodoro notifications:
+                  an unbounded run notifies at every phase boundary until
+                  someone remembers it exists and stops it by hand, which for
+                  a background utility can be never. 16 sessions, even at the
+                  shortest sensible cadence, is already a full working day —
+                  see `MAX_TOTAL_CYCLES` in timekeeping.rs, which enforces the
+                  same ceiling server-side regardless of what this input
+                  allows. */}
+              <NumberInput value={totalCycles} onChange={setTotalCycles} min={1} max={16} />
             </Field>
           </div>
           <div className="row mt-3 gap-2">

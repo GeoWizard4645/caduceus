@@ -11,7 +11,7 @@ pub mod stt;
 #[cfg(target_os = "macos")]
 pub mod live_macos;
 
-pub use router::{route, RoutedText};
+pub use router::{ai_is_configured, route, RoutedText};
 pub use stt::{SttAvailability, SttBackend, SttError};
 
 use parking_lot::Mutex;
@@ -241,16 +241,21 @@ pub async fn transcribe_and_route(
     wav: Vec<u8>,
     settings: &SettingsManager,
 ) -> Result<RoutedText, String> {
-    let voice = settings.with(|s| s.voice.clone());
+    // Both read together under one lock so routing sees a consistent snapshot
+    // of voice settings and agent settings, rather than risking a settings
+    // change landing between the two reads.
+    let (voice, ai_configured) =
+        settings.with(|s| (s.voice.clone(), ai_is_configured(&s.agents)));
     let backend = stt::backend_for(voice.stt_backend);
     let transcript = backend
         .transcribe(wav, &voice)
         .await
         .map_err(|e| e.to_string())?;
-    Ok(route(&transcript, &voice))
+    Ok(route(&transcript, &voice, ai_configured))
 }
 
 pub fn route_transcript(transcript: &str, settings: &SettingsManager) -> RoutedText {
-    let voice = settings.with(|s| s.voice.clone());
-    route(transcript, &voice)
+    let (voice, ai_configured) =
+        settings.with(|s| (s.voice.clone(), ai_is_configured(&s.agents)));
+    route(transcript, &voice, ai_configured)
 }
