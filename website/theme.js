@@ -1,7 +1,4 @@
 (function () {
-  var BETA_TICKER =
-    "In beta · Bugs expected · Rough edges · August 1 launch · In beta · Bugs expected · ";
-
   function mountBetaBanner() {
     if (document.getElementById("beta-banner") || !document.body) return;
 
@@ -11,23 +8,10 @@
     bar.setAttribute("role", "status");
     bar.setAttribute("aria-live", "polite");
 
-    var repeat = "";
-    for (var i = 0; i < 6; i++) repeat += BETA_TICKER;
-
     bar.innerHTML =
-      '<div class="beta-banner__ticker-wrap" aria-hidden="true">' +
-      '<div class="beta-banner__ticker">' +
-      '<div class="beta-banner__ticker-group">' +
-      repeat +
-      "</div>" +
-      '<div class="beta-banner__ticker-group">' +
-      repeat +
-      "</div>" +
-      "</div></div>" +
       '<p class="beta-banner__message">' +
-      "<strong>Caduceus is in public beta.</strong> Expect bugs, missing polish, and things that break. " +
-      "A proper launch is planned for <strong>August 1, 2026</strong>. " +
-      'Found something wrong? <a href="https://github.com/GeoWizard4645/caduceus/issues">Report it on GitHub</a>.' +
+      "<strong>Public beta</strong> — bugs and rough edges expected. Launch <strong>August 1, 2026</strong>. " +
+      '<a href="https://github.com/GeoWizard4645/caduceus/issues">Report issues</a>.' +
       "</p>";
 
     document.body.insertBefore(bar, document.body.firstChild);
