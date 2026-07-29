@@ -776,6 +776,29 @@ pub fn voice_is_recording(runtime: tauri::State<'_, voice::VoiceRuntime>) -> boo
     runtime.is_recording()
 }
 
+/// Type text into whatever app currently has keyboard focus.
+///
+/// The voice-typing page's "type it where my cursor is". The Command Center is
+/// a non-activating panel, so the app behind it never lost keyboard focus and
+/// System Events' `keystroke` lands exactly where the caret already is. Same
+/// mechanism as the text expander, for the same reason it uses it: simulated
+/// typing is the only insertion that behaves identically in every app.
+#[tauri::command]
+pub async fn type_text(text: String) -> Res<()> {
+    if text.trim().is_empty() {
+        return Err("There is nothing to type yet.".into());
+    }
+    // `insert_expansion` shells out to osascript and waits; not on this thread.
+    tauri::async_runtime::spawn_blocking(move || {
+        crate::tools::expander::insert_expansion(&crate::tools::expander::ExpansionOutcome {
+            text,
+            cursor_offset: None,
+        })
+    })
+    .await
+    .map_err(|e| format!("Typing failed: {e}"))?
+}
+
 #[tauri::command]
 pub fn toggle_dictation<R: Runtime>(
     app: AppHandle<R>,

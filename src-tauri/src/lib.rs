@@ -369,6 +369,7 @@ pub fn run() {
             commands::voice_cancel,
             commands::voice_is_recording,
             commands::toggle_dictation,
+            commands::type_text,
             commands::capture_screenshot,
             commands::capture_record_start,
             commands::capture_record_stop,
@@ -713,6 +714,16 @@ fn handle_window_event(window: &tauri::Window, event: &WindowEvent) {
                 // window server hands it over. Closing on that would make the
                 // palette flash open and vanish.
                 if state.as_ref().is_some_and(|s| s.just_shown()) {
+                    return;
+                }
+                // Dictation types into the palette, so the palette must not
+                // dismiss itself mid-session — the recording HUD appearing, or
+                // macOS presenting its microphone/speech permission sheets,
+                // both cost it key status for a moment.
+                if app
+                    .try_state::<voice::VoiceRuntime>()
+                    .is_some_and(|r| r.is_recording())
+                {
                     return;
                 }
                 let _ = window.hide();

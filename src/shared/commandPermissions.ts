@@ -11,6 +11,7 @@ import type { PermissionId } from "./tabs";
 const PAGE_PERMISSIONS: Partial<Record<ToolPageId, PermissionId[]>> = {
   "screen-record": ["screen-recording"],
   meeting: ["screen-recording", "microphone", "speech-recognition"],
+  "voice-type": ["microphone", "speech-recognition"],
   "desktop-shapes": ["automation"],
   "desktop-sort": ["automation"],
   "sticky-notes": ["automation"],

@@ -43,6 +43,7 @@ import { StoragePage } from "./StoragePage";
 import { SubscriptionsPage } from "./SubscriptionsPage";
 import { TimePage } from "./TimePage";
 import { TotpPage } from "./TotpPage";
+import { VoiceTypePage } from "./VoiceTypePage";
 import { WallpaperPage } from "./WallpaperPage";
 import { WidgetsPage } from "./WidgetsPage";
 
@@ -57,6 +58,7 @@ export const TOOL_PAGES: Record<ToolPageId, ComponentType<ToolPageProps>> = {
   "desktop-shapes": DesktopShapesPage,
   citations: CitationsPage,
   meeting: MeetingPage,
+  "voice-type": VoiceTypePage,
   permissions: PermissionsSetupPage,
   "screen-record": ScreenRecordPage,
   security: SecurityPage,

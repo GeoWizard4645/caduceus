@@ -14,25 +14,38 @@ import Foundation
 // Protocol matches caduceus-stt-live so Rust can fall back to Apple Speech:
 //   preparing <message> | ready | partial <text> | final <text> | wav <path>
 // stdin: pause | resume | stop
+//
+// Everything executable lives in `run()` rather than in top-level statements.
+// Top-level code in a Swift 6 script is implicitly @MainActor, and closures
+// formed there inherit that isolation — including the AVAudioEngine tap block,
+// which CoreAudio then invokes on its realtime thread. The runtime's dynamic
+// isolation check kills the process with SIGTRAP the moment the first audio
+// buffer arrives, which the app sees as "Broken pipe" on the next stdin write.
+// The same inheritance parked the preview Task on a main actor that was
+// blocked in readLine, so partials never came out either. A nonisolated
+// `run()` gives the tap, the preview loop and the stdin loop plain
+// backgrounds to live on.
 
-private let stdoutLock = NSLock()
+private enum Out {
+    static let lock = NSLock()
+
+    static func emit(_ kind: String, _ payload: String = "") {
+        lock.lock()
+        defer { lock.unlock() }
+        let safe = payload.replacingOccurrences(of: "\n", with: " ")
+        fputs(safe.isEmpty ? "\(kind)\n" : "\(kind)\t\(safe)\n", stdout)
+        fflush(stdout)
+    }
+}
 
 private func emit(_ kind: String, _ payload: String = "") {
-    stdoutLock.lock()
-    defer { stdoutLock.unlock() }
-    let safe = payload.replacingOccurrences(of: "\n", with: " ")
-    fputs(safe.isEmpty ? "\(kind)\n" : "\(kind)\t\(safe)\n", stdout)
-    fflush(stdout)
+    Out.emit(kind, payload)
 }
 
 private func fail(_ message: String) -> Never {
     emit("error", message)
     exit(2)
 }
-
-private let pcmStdinMode = CommandLine.arguments.contains("--stdin-pcm16")
-private let modelStatusMode = CommandLine.arguments.contains("--model-ready")
-private let prepareModelMode = CommandLine.arguments.contains("--prepare-model")
 
 private func modelIsReady() -> Bool {
     let directory = AsrModels.defaultCacheDirectory(for: .v3)
@@ -167,117 +180,142 @@ private func writeWav(_ samples: [Float]) -> URL {
     return url
 }
 
-// Meeting stdin mode only needs the rolling preview; its authoritative final
-// pass reads the saved file. Keep that path bounded for multi-hour calls.
-private let store = AudioStore(maxRetainedSamples: pcmStdinMode ? 15 * 16_000 : nil)
-private let runtime = ParakeetRuntime()
+private func run() async {
+    let pcmStdinMode = CommandLine.arguments.contains("--stdin-pcm16")
+    let modelStatusMode = CommandLine.arguments.contains("--model-ready")
+    let prepareModelMode = CommandLine.arguments.contains("--prepare-model")
 
-if modelStatusMode {
-    exit(modelIsReady() ? 0 : 1)
-}
+    // Meeting stdin mode only needs the rolling preview; its authoritative
+    // final pass reads the saved file. Keep that path bounded for multi-hour
+    // calls.
+    let store = AudioStore(maxRetainedSamples: pcmStdinMode ? 15 * 16_000 : nil)
+    let runtime = ParakeetRuntime()
 
-if prepareModelMode {
-    do {
-        try await runtime.prepare()
-        exit(0)
-    } catch {
-        fail("Could not prepare the local transcription model: \(error.localizedDescription)")
+    if modelStatusMode {
+        exit(modelIsReady() ? 0 : 1)
     }
-}
 
-private let engine: AVAudioEngine? = pcmStdinMode ? nil : AVAudioEngine()
-
-if let engine {
-    let input = engine.inputNode
-    let format = input.outputFormat(forBus: 0)
-    input.installTap(onBus: 0, bufferSize: 2048, format: format) { buffer, _ in
-        store.append(mono16k(buffer))
-    }
-    do {
-        try engine.start()
-    } catch {
-        fail("Could not start the microphone: \(error.localizedDescription)")
-    }
-}
-
-emit("ready")
-
-let previewTask = Task {
-    var lastTotalSampleCount = 0
-    while !Task.isCancelled {
-        try? await Task.sleep(for: .seconds(1))
-        guard !Task.isCancelled else { break }
-        let totalSampleCount = store.count
-        let tail = store.snapshot(limit: 15 * 16_000)
-        guard tail.count >= 8_000, totalSampleCount != lastTotalSampleCount else { continue }
-        // In a first-use meeting, the microphone/voice path prepares the model
-        // in a separate helper. Keep buffering the bounded system-audio tail
-        // and join live as soon as that download becomes ready.
-        if pcmStdinMode, !modelIsReady() { continue }
-        lastTotalSampleCount = totalSampleCount
+    if prepareModelMode {
         do {
-            let text = try await runtime.preview(tail)
-            if !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                emit("partial", text)
-            }
+            try await runtime.prepare()
+            exit(0)
         } catch {
-            emit("error", "Live transcription is temporarily unavailable: \(error.localizedDescription)")
+            fail("Could not prepare the local transcription model: \(error.localizedDescription)")
         }
     }
-}
 
-if pcmStdinMode {
-    // Raw signed little-endian 16-bit mono, already resampled to 16 kHz by the
-    // ScreenCaptureKit recorder. Binary input avoids base64 and line-protocol
-    // overhead during hour-long calls.
-    var pendingByte: UInt8?
-    while let data = try? FileHandle.standardInput.read(upToCount: 16_384),
-          !data.isEmpty {
-        var bytes = Array(data)
-        if let carriedByte = pendingByte {
-            bytes.insert(carriedByte, at: 0)
-            pendingByte = nil
+    let engine: AVAudioEngine? = pcmStdinMode ? nil : AVAudioEngine()
+
+    if let engine {
+        let input = engine.inputNode
+        let format = input.outputFormat(forBus: 0)
+        // A missing microphone grant shows up here as a 0 Hz / 0-channel
+        // format, and installTap raises an uncatchable NSException on it.
+        // Failing over stdout keeps the app's error path in charge instead.
+        guard format.sampleRate > 0, format.channelCount > 0 else {
+            fail(
+                "The microphone is not available. Enable it for Caduceus in "
+                    + "System Settings → Privacy & Security → Microphone.")
         }
-        if !bytes.count.isMultiple(of: 2) {
-            pendingByte = bytes.removeLast()
+        input.installTap(onBus: 0, bufferSize: 2048, format: format) { buffer, _ in
+            store.append(mono16k(buffer))
         }
-        let samples = stride(from: 0, to: bytes.count, by: 2).map { index in
-            let value = UInt16(bytes[index]) | (UInt16(bytes[index + 1]) << 8)
-            return Float(Int16(bitPattern: value)) / Float(Int16.max)
+        do {
+            try engine.start()
+        } catch {
+            fail("Could not start the microphone: \(error.localizedDescription)")
         }
-        store.append(samples)
     }
-} else {
-    while let line = readLine(strippingNewline: true) {
-        switch line.trimmingCharacters(in: .whitespacesAndNewlines) {
-        case "pause": store.setPaused(true)
-        case "resume": store.setPaused(false)
-        case "stop": break
-        default: continue
-        }
-        if line.trimmingCharacters(in: .whitespacesAndNewlines) == "stop" { break }
+
+    emit("ready")
+
+    // Load the model while the first second of audio accumulates, so the
+    // first preview does not also pay the model-load cost. Meeting stdin mode
+    // leaves downloading to the dictation helper, as before.
+    if !pcmStdinMode {
+        Task { try? await runtime.prepare() }
     }
+
+    let previewTask = Task {
+        var lastTotalSampleCount = 0
+        while !Task.isCancelled {
+            try? await Task.sleep(for: .seconds(1))
+            guard !Task.isCancelled else { break }
+            let totalSampleCount = store.count
+            let tail = store.snapshot(limit: 15 * 16_000)
+            guard tail.count >= 8_000, totalSampleCount != lastTotalSampleCount else { continue }
+            // In a first-use meeting, the microphone/voice path prepares the
+            // model in a separate helper. Keep buffering the bounded
+            // system-audio tail and join live as soon as that download becomes
+            // ready.
+            if pcmStdinMode, !modelIsReady() { continue }
+            lastTotalSampleCount = totalSampleCount
+            do {
+                let text = try await runtime.preview(tail)
+                if !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    emit("partial", text)
+                }
+            } catch {
+                emit("error", "Live transcription is temporarily unavailable: \(error.localizedDescription)")
+            }
+        }
+    }
+
+    if pcmStdinMode {
+        // Raw signed little-endian 16-bit mono, already resampled to 16 kHz by
+        // the ScreenCaptureKit recorder. Binary input avoids base64 and
+        // line-protocol overhead during hour-long calls.
+        var pendingByte: UInt8?
+        while let data = try? FileHandle.standardInput.read(upToCount: 16_384),
+              !data.isEmpty {
+            var bytes = Array(data)
+            if let carriedByte = pendingByte {
+                bytes.insert(carriedByte, at: 0)
+                pendingByte = nil
+            }
+            if !bytes.count.isMultiple(of: 2) {
+                pendingByte = bytes.removeLast()
+            }
+            let samples = stride(from: 0, to: bytes.count, by: 2).map { index in
+                let value = UInt16(bytes[index]) | (UInt16(bytes[index + 1]) << 8)
+                return Float(Int16(bitPattern: value)) / Float(Int16.max)
+            }
+            store.append(samples)
+        }
+    } else {
+        while let line = readLine(strippingNewline: true) {
+            switch line.trimmingCharacters(in: .whitespacesAndNewlines) {
+            case "pause": store.setPaused(true)
+            case "resume": store.setPaused(false)
+            case "stop": break
+            default: continue
+            }
+            if line.trimmingCharacters(in: .whitespacesAndNewlines) == "stop" { break }
+        }
+    }
+
+    if let engine {
+        engine.inputNode.removeTap(onBus: 0)
+        engine.stop()
+    }
+    previewTask.cancel()
+    _ = await previewTask.result
+
+    let samples = store.snapshot()
+    guard !samples.isEmpty else { fail("Nothing was said — hold the key a little longer.") }
+
+    // Meeting system audio is finalised from the saved recording by Caduceus.
+    // The helper's job in stdin mode is only the no-wait live preview.
+    if pcmStdinMode { exit(0) }
+
+    do {
+        let text = try await runtime.final(samples)
+        emit("final", text)
+    } catch {
+        fail("Caduceus could not transcribe this recording: \(error.localizedDescription)")
+    }
+    let wav = writeWav(samples)
+    emit("wav", wav.path)
 }
 
-if let engine {
-    engine.inputNode.removeTap(onBus: 0)
-    engine.stop()
-}
-previewTask.cancel()
-_ = await previewTask.result
-
-let samples = store.snapshot()
-guard !samples.isEmpty else { fail("Nothing was said — hold the key a little longer.") }
-
-// Meeting system audio is finalised from the saved recording by Caduceus. The
-// helper's job in stdin mode is only the no-wait live preview.
-if pcmStdinMode { exit(0) }
-
-do {
-    let text = try await runtime.final(samples)
-    emit("final", text)
-} catch {
-    fail("Caduceus could not transcribe this recording: \(error.localizedDescription)")
-}
-let wav = writeWav(samples)
-emit("wav", wav.path)
+await run()

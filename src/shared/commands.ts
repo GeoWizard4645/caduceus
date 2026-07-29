@@ -242,6 +242,7 @@ export type ToolPageId =
   | "desktop-shapes"
   | "citations"
   | "meeting"
+  | "voice-type"
   | "permissions"
   | "screen-record"
   | "time"
@@ -3266,6 +3267,25 @@ const PAGE_COMMANDS: CommandDef[] = [
     reach: 90,
     run: ({ actions }) => {
       actions.openTab({ kind: "tool", commandId: "page.meeting", title: "Meeting notes" });
+      return false;
+    },
+  },
+  {
+    id: "page.voice-type",
+    title: "Voice typing",
+    detail:
+      "A microphone that turns speech into text, and nothing else. Dictate, watch the transcript arrive live, then copy it — or have Caduceus type it straight into the app behind, wherever your cursor is. Transcription runs on-device; nothing is uploaded.",
+    group: "utilities",
+    icon: "🎙",
+    keywords: [
+      "voice", "dictate", "dictation", "voice typing", "voice to text", "speech to text",
+      "transcribe", "transcription", "microphone", "mic", "stt", "talk", "speak", "whisper",
+      "superwhisper", "handy", "parakeet",
+    ],
+    page: "voice-type",
+    reach: 88,
+    run: ({ actions }) => {
+      actions.openTab({ kind: "tool", commandId: "page.voice-type", title: "Voice typing" });
       return false;
     },
   },

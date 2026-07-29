@@ -516,6 +516,8 @@ export type VoiceState = "idle" | "recording" | "paused" | "transcribing";
 export interface RoutedText {
   route: RouteTarget;
   text: string;
+  /** The transcript exactly as recognised, before any keyword stripping. */
+  raw: string;
   matchedGroup: string | null;
   matchedKeyword: string | null;
 }

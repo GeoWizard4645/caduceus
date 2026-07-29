@@ -84,12 +84,7 @@ export function MeetingPage({ active, onSetTitle }: ToolPageProps) {
     try {
       await meetingOpenPopout();
     } catch (e) {
-      // Most likely cause right now: the wiring `meeting.rs`'s module doc
-      // asks for (`generate_handler!` + the capabilities allow-list) has not
-      // landed yet. Said plainly rather than as a raw IPC error string.
-      setPopoutError(
-        `Could not open the pop-out window (${api.errorMessage(e)}). It may not be wired up yet.`,
-      );
+      setPopoutError(`Could not open the pop-out window (${api.errorMessage(e)}).`);
     }
   }, []);
 
@@ -160,9 +155,9 @@ export function MeetingPage({ active, onSetTitle }: ToolPageProps) {
           >
             {session.transcript || (
               <span className="text-ink-faint">
-                Press Start meeting. Apple's on-device recogniser transcribes your microphone live
-                as you speak; the other side of the call is added once you stop, once Caduceus has
-                had a chance to transcribe the recording — it is not live.
+                Press Start meeting. Your microphone is transcribed live as you speak, and the
+                other side of the call joins as its own “call audio” line. When you stop, the
+                saved call recording gets a final, higher-accuracy pass.
               </span>
             )}
           </div>

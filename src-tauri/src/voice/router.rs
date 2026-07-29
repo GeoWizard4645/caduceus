@@ -33,6 +33,9 @@ pub struct RoutedText {
     /// The text after any keyword was stripped. Never empty unless the input
     /// was only a keyword.
     pub text: String,
+    /// The transcript exactly as recognised, before any keyword stripping.
+    /// The voice-typing page wants what was *said*, not what would be run.
+    pub raw: String,
     /// Which group matched, for the UI to explain itself. `None` = fallback.
     pub matched_group: Option<String>,
     /// The keyword that matched.
@@ -82,12 +85,14 @@ pub fn route(transcript: &str, settings: &VoiceSettings) -> RoutedText {
         Some(c) => RoutedText {
             route: c.route,
             text: c.text,
+            raw: cleaned.to_string(),
             matched_group: Some(c.group_name),
             matched_keyword: Some(c.keyword),
         },
         None => RoutedText {
             route: settings.fallback_route,
             text: cleaned.to_string(),
+            raw: cleaned.to_string(),
             matched_group: None,
             matched_keyword: None,
         },

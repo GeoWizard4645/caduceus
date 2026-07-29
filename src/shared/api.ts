@@ -441,6 +441,13 @@ export const voiceIsRecording = () => invoke<boolean>("voice_is_recording");
 
 export const toggleDictation = () => invoke<void>("toggle_dictation");
 
+/**
+ * Type text into whatever app has keyboard focus, via simulated keystrokes.
+ * The palette is a non-activating panel, so the app behind it still has the
+ * caret. Needs the Accessibility permission (System Events).
+ */
+export const typeText = (text: string) => invoke<void>("type_text", { text });
+
 // --- misc ------------------------------------------------------------------
 
 export const quitApp = () => invoke<void>("quit_app");

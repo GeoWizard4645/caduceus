@@ -1593,6 +1593,10 @@
           "detail": "Records both sides of a call — the room through system audio, you through the microphone — transcribes on-device as it goes, and keeps your notes beside the transcript. Nothing is uploaded and no bot joins the meeting."
         },
         {
+          "name": "Voice typing",
+          "detail": "A microphone that turns speech into text, and nothing else. Dictate, watch the transcript arrive live, then copy it — or have Caduceus type it straight into the app behind, wherever your cursor is. Transcription runs on-device; nothing is uploaded."
+        },
+        {
           "name": "Cite this page",
           "detail": "Reads whatever your browser has in front and writes the citation in MLA, APA, Chicago, Harvard, IEEE, Vancouver and BibTeX at once. Fills in the author and date from the page when you ask it to, and admits when it cannot rather than inventing one."
         },

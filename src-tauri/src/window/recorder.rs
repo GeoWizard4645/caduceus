@@ -54,15 +54,19 @@ pub fn show<R: Runtime>(app: &AppHandle<R>) {
 
     position(&window);
 
+    // Panel-ised *before* it is shown, matching the meeting pop-out. `show()`
+    // on a plain window is `makeKeyAndOrderFront:`, and a HUD that becomes the
+    // key window for even a frame makes the Command Center resign key — which
+    // its blur handler reads as "the user clicked away" and hides the palette.
+    // That was the whole "starting dictation closes the Command Center" bug:
+    // the transcript then streamed into a window that was no longer on screen.
+    // As a panel it is incapable of taking the keyboard at all. See
+    // `window::panel`.
+    super::configure_staff_floating(&window);
+
     if let Err(e) = window.show() {
         log::error!("could not show the recording HUD: {e}");
-        return;
     }
-
-    // Same treatment as the staff: over full-screen apps, in every Space, and
-    // incapable of taking the keyboard away from whatever you are dictating
-    // into. See `window::panel`.
-    super::configure_staff_floating(&window);
 }
 
 pub fn hide<R: Runtime>(app: &AppHandle<R>) {

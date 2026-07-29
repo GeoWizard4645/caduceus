@@ -196,7 +196,10 @@ export function HomeTab({
   useTauriEvent<VoiceOutcome>(EVENTS.voiceResult, (outcome) => {
     if (!active) return;
     if (!outcome.ok) {
-      notify(outcome.error ?? "Transcription failed", "error");
+      // Through `actions.notify`, not the raw toast: a missing microphone or
+      // speech grant opens its permission page with Repair one click away,
+      // instead of flashing an error the user cannot act on.
+      actions.notify(outcome.error ?? "Transcription failed", "error");
       return;
     }
     const routed = outcome.routed;
