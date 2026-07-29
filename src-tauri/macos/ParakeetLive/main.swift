@@ -217,7 +217,11 @@ private func run() async {
                 "The microphone is not available. Enable it for Caduceus in "
                     + "System Settings → Privacy & Security → Microphone.")
         }
-        input.installTap(onBus: 0, bufferSize: 2048, format: format) { buffer, _ in
+        // Let Core Audio negotiate the active device's native stream format.
+        // Feeding outputFormat back into the tap can be rejected at start with
+        // kAudioUnitErr_FormatNotSupported (-10868) after route changes or for
+        // virtual/Bluetooth input devices.
+        input.installTap(onBus: 0, bufferSize: 2048, format: nil) { buffer, _ in
             store.append(mono16k(buffer))
         }
         do {

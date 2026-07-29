@@ -120,13 +120,21 @@ if recognizer.supportsOnDeviceRecognition {
 var pcmSamples: [Float] = []
 let inputNode = engine.inputNode
 let format = inputNode.outputFormat(forBus: 0)
+guard format.sampleRate > 0, format.channelCount > 0 else {
+    fail(
+        "The microphone is not available. Enable it for Caduceus in "
+            + "System Settings → Privacy & Security → Microphone.")
+}
 
 // Guarded by `stateLock`: the audio tap runs on a real-time thread and the
 // stdin loop runs on the main one.
 let stateLock = NSLock()
 var isPaused = false
 
-inputNode.installTap(onBus: 0, bufferSize: 2048, format: format) { buffer, _ in
+// Let Core Audio negotiate the active input device's native stream format.
+// Feeding outputFormat back into the tap can make engine.start() fail with
+// kAudioUnitErr_FormatNotSupported (-10868).
+inputNode.installTap(onBus: 0, bufferSize: 2048, format: nil) { buffer, _ in
     stateLock.lock()
     let paused = isPaused
     stateLock.unlock()

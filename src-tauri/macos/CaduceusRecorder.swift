@@ -415,8 +415,17 @@ final class Recorder: NSObject, SCStreamOutput, SCStreamDelegate {
         let engine = AVAudioEngine()
         let input = engine.inputNode
         let format = input.outputFormat(forBus: 0)
+        guard format.sampleRate > 0, format.channelCount > 0 else {
+            emit(
+                "error",
+                "The microphone is not available. Enable it for Caduceus in "
+                    + "System Settings → Privacy & Security → Microphone.")
+            return
+        }
 
-        input.installTap(onBus: 0, bufferSize: 2048, format: format) { [weak self] buffer, when in
+        // Let Core Audio negotiate the active device's native stream format;
+        // replaying outputFormat here can fail with -10868 after route changes.
+        input.installTap(onBus: 0, bufferSize: 2048, format: nil) { [weak self] buffer, when in
             guard let self, !self.held() else { return }
             if let sample = Self.sampleBuffer(from: buffer, at: when) {
                 self.writer?.append(sample, to: .mic)
