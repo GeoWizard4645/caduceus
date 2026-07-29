@@ -1,26 +1,4 @@
 (function () {
-  function mountBetaBanner() {
-    if (document.getElementById("beta-banner") || !document.body) return;
-
-    var bar = document.createElement("div");
-    bar.id = "beta-banner";
-    bar.className = "beta-banner";
-    bar.setAttribute("role", "status");
-    bar.setAttribute("aria-live", "polite");
-
-    bar.innerHTML =
-      '<p class="beta-banner__message">' +
-      "<strong>Public beta</strong> — bugs and rough edges expected. Launch <strong>August 1, 2026</strong>. " +
-      '<a href="https://github.com/GeoWizard4645/caduceus/issues">Report issues</a>.' +
-      "</p>";
-
-    document.body.insertBefore(bar, document.body.firstChild);
-    document.body.classList.add("has-beta-banner");
-  }
-
-  if (document.body) mountBetaBanner();
-  else document.addEventListener("DOMContentLoaded", mountBetaBanner);
-
   var KEY = "caduceus-site-theme";
 
   function current() {
