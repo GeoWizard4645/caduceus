@@ -34,7 +34,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import * as api from "@/shared/api";
 import { useTauriEvent } from "@/shared/hooks";
-import { EVENTS, type VoiceState } from "@/shared/types";
+import { EVENTS, type VoiceOutcome, type VoiceState } from "@/shared/types";
 import { cx } from "@/shared/ui";
 
 export function Recorder() {
@@ -63,6 +63,15 @@ export function Recorder() {
   });
 
   useTauriEvent<string>(EVENTS.voicePartial, setTranscript);
+
+  // Start failures used to hide this window instantly, so "Live speech helper
+  // did not become ready" only appeared in the log. Keep the HUD up and show
+  // the error here — Discard / Esc still closes it.
+  useTauriEvent<VoiceOutcome>(EVENTS.voiceResult, (outcome) => {
+    if (outcome.ok) return;
+    setError(outcome.error ?? "Dictation failed.");
+    setState("idle");
+  });
 
   // The clock stops while held, because a paused recording is not recording.
   useEffect(() => {
@@ -152,13 +161,14 @@ export function Recorder() {
 
   const paused = state === "paused";
   const transcribing = state === "transcribing";
+  const failed = Boolean(error) && state === "idle";
 
   return (
     // Click-through everywhere except the pill and the transcript: this window
     // is 520px wide and sitting over the middle of somebody's screen.
     <div className="pointer-events-none flex h-full w-full flex-col items-center justify-end gap-2 pb-1">
       {/* --- what it is hearing ---------------------------------------- */}
-      {(transcript || transcribing) && (
+      {(transcript || transcribing) && !failed && (
         <div
           ref={transcriptRef}
           className="glass pointer-events-auto max-h-[86px] w-full overflow-y-auto rounded-cad px-4 py-2.5 text-[13px] leading-relaxed text-ink shadow-float"
@@ -168,26 +178,36 @@ export function Recorder() {
       )}
 
       {error && (
-        <div className="glass pointer-events-auto rounded-cad px-3 py-1.5 text-2xs text-danger shadow-float">
+        <div className="glass pointer-events-auto max-w-[520px] rounded-cad px-3 py-2 text-2xs leading-relaxed text-danger shadow-float">
           {error}
         </div>
       )}
 
       {/* --- the pill --------------------------------------------------- */}
       <div className="glass pointer-events-auto flex items-center gap-2.5 rounded-full py-2 pl-3.5 pr-2 shadow-float">
-        <Dot state={state} />
+        <Dot state={failed ? "idle" : state} />
 
         <span className="min-w-[38px] font-mono text-[13px] tabular-nums text-ink">
           {formatElapsed(elapsed)}
         </span>
 
         <span className="text-2xs text-ink-faint">
-          {transcribing ? "Transcribing" : paused ? "Paused" : "Listening"}
+          {failed
+            ? "Could not start"
+            : transcribing
+              ? "Transcribing"
+              : paused
+                ? "Paused"
+                : "Listening"}
         </span>
 
         <span className="mx-0.5 h-4 w-px bg-line" aria-hidden="true" />
 
-        {ending ? (
+        {failed ? (
+          <PillButton onClick={discard} title="Dismiss (esc)">
+            Dismiss
+          </PillButton>
+        ) : ending ? (
           <>
             <PillButton onClick={resume} title="Keep going (space)">
               Resume

@@ -56,11 +56,13 @@ import type {
   GitRepo,
   Leftover,
   MediaAction,
+  OptimizeLevel,
   PermissionReport,
   PortUser,
   ShortcutKind,
   SshHost,
   SystemAction,
+  TargetModel,
   TextAiAction,
   ToolId,
   ToolOutcome,
@@ -78,7 +80,9 @@ export type {
   GitCommitAssist,
   GitFileChange,
   HttpPlaygroundResult,
+  OptimizeLevel,
   PinKind,
+  TargetModel,
 };
 
 // --- settings --------------------------------------------------------------
@@ -246,6 +250,9 @@ export const dispatchInput = (input: string) =>
   invoke<DispatchOutcome>("dispatch_input", { input });
 
 export const hideCommandCenter = () => invoke<void>("hide_command_center");
+
+export const toggleCommandCenter = (source?: string) =>
+  invoke<void>("toggle_command_center", { source: source ?? null });
 
 export const openCommandCenter = (mode?: string, prefill?: string, source?: string) =>
   invoke<void>("open_command_center", {
@@ -1427,6 +1434,82 @@ export const regexTest = (pattern: string, flags: string, text: string) =>
 /** A plain-English, token-by-token explanation of a pattern. */
 export const regexExplain = (pattern: string) =>
   invoke<ExplainToken[]>("regex_explain", { pattern });
+
+// --- prompt optimiser ------------------------------------------------------
+// Rewrites a bloated prompt into one shaped for a specific target model. The
+// compression itself is deterministic Rust; a small local model is used only
+// for the bounded judgement passes, and only if one is configured. See
+// `tools::promptopt` for why it is split that way.
+
+/** One deterministic pass, and what it actually removed. */
+export interface PassReport {
+  name: string;
+  detail: string;
+  charsBefore: number;
+  charsAfter: number;
+}
+
+/**
+ * One requirement lifted out of the original, and whether it survived.
+ *
+ * `missing` lists the tokens that had to appear verbatim and did not — a
+ * number, a backticked identifier, a quoted literal. Empty when `kept`.
+ */
+export interface RequirementCheck {
+  text: string;
+  kept: boolean;
+  missing: string[];
+}
+
+export interface OptimizedPrompt {
+  prompt: string;
+  target: TargetModel;
+  targetName: string;
+  beforeTokens: number;
+  afterTokens: number;
+  reductionPercent: number;
+  coveragePercent: number;
+  requirements: RequirementCheck[];
+  passes: PassReport[];
+  notes: string[];
+  /** The model that did the judgement passes, or null when the whole run was
+   * deterministic — which is a supported outcome, not a failure. */
+  modelUsed: string | null;
+}
+
+export interface TokenEstimate {
+  tokens: number;
+  chars: number;
+  words: number;
+  targetName: string;
+}
+
+/** Optimise a prompt. Slow by nature — several bounded model round trips. */
+export const promptOptimize = (
+  raw: string,
+  target: TargetModel,
+  level: OptimizeLevel,
+  useModel: boolean,
+) => invoke<OptimizedPrompt>("prompt_optimize", { raw, target, level, useModel });
+
+/** What a prompt costs on one target. Pure arithmetic, safe to call per
+ * keystroke — which is exactly why it is not part of `promptOptimize`. */
+export const promptEstimate = (raw: string, target: TargetModel) =>
+  invoke<TokenEstimate>("prompt_estimate", { raw, target });
+
+/** Which model the judgement passes would use. */
+export interface OptimizerBackend {
+  displayName: string;
+  model: string;
+  /** Served from this machine — free, private, and what the feature is tuned for. */
+  local: boolean;
+  detail: string;
+}
+
+/** What the "use a model" toggle would actually do, or null if nothing usable
+ * is configured. Settings only, no network — safe to call when the page opens. */
+export const promptOptimizerModel = () =>
+  invoke<OptimizerBackend | null>("prompt_optimizer_model");
 
 // --- cron parser -----------------------------------------------------------------
 

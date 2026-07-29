@@ -1,4 +1,5 @@
-//! macOS live dictation: AVAudioEngine + Speech partial results via `caduceus-stt-live`.
+//! macOS live dictation: local Parakeet on supported Apple Silicon Macs, with
+//! Apple Speech as the compatibility and first-model-download fallback.
 
 use std::io::{BufRead, BufReader, Write};
 use std::path::PathBuf;
@@ -7,8 +8,11 @@ use std::thread;
 use std::time::Duration;
 
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use parking_lot::Mutex;
+
+static PARAKEET_PREPARING: AtomicBool = AtomicBool::new(false);
 
 /// How long to give the helper to flush its final transcript after `stop`.
 ///
@@ -117,7 +121,12 @@ impl LiveSession {
             let mut line = String::new();
             let mut ready = false;
 
-            while reader.read_line(&mut line).ok().filter(|&n| n > 0).is_some() {
+            while reader
+                .read_line(&mut line)
+                .ok()
+                .filter(|&n| n > 0)
+                .is_some()
+            {
                 let trimmed = line.trim();
 
                 if !ready {
@@ -196,9 +205,10 @@ impl LiveSession {
             let _ = child.kill();
             let _ = child.wait();
             return Err(
-                "Live speech helper did not become ready. If macOS never asked for \
-                 microphone or speech-recognition access, enable Caduceus under System \
-                 Settings → Privacy & Security for both."
+                "Live speech helper did not become ready. Microphone and Speech Recognition \
+                 must be on for Caduceus and its speech helper. Open Settings → Permissions, \
+                 press Repair on Microphone (and Speech Recognition), approve the prompts, \
+                 then try dictation or Meeting notes again."
                     .into(),
             );
         }
@@ -261,20 +271,93 @@ impl LiveSession {
 }
 
 fn live_helper_path() -> Option<PathBuf> {
+    // Apple Silicon prefers the same FluidAudio/Parakeet v3 path MacParakeet
+    // uses. The original Apple Speech helper stays second: it covers Intel and
+    // development/release environments where SwiftPM could not build the
+    // optional CoreML helper.
+    let names: &[&str] = if parakeet_supported() {
+        &["caduceus-parakeet-live", "caduceus-stt-live"]
+    } else {
+        &["caduceus-stt-live"]
+    };
+
     if let Ok(exe) = std::env::current_exe() {
-        for relative in [
-            "../Resources/bin/caduceus-stt-live",
-            "bin/caduceus-stt-live",
-            "caduceus-stt-live",
-        ] {
-            if let Some(dir) = exe.parent() {
-                let candidate = dir.join(relative);
-                if candidate.is_file() {
-                    return Some(candidate);
+        if let Some(dir) = exe.parent() {
+            for name in names {
+                for prefix in ["../Resources/bin", "bin", "."] {
+                    let candidate = dir.join(prefix).join(name);
+                    if candidate.is_file() {
+                        if *name == "caduceus-parakeet-live"
+                            && !parakeet_model_ready(&candidate)
+                        {
+                            prepare_parakeet_model(&candidate);
+                            continue;
+                        }
+                        return Some(candidate);
+                    }
                 }
             }
         }
     }
-    let dev = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("bin/caduceus-stt-live");
-    dev.is_file().then_some(dev)
+    let bin = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("bin");
+    for name in names {
+        let candidate = bin.join(name);
+        if candidate.is_file() {
+            if *name == "caduceus-parakeet-live" && !parakeet_model_ready(&candidate) {
+                prepare_parakeet_model(&candidate);
+                continue;
+            }
+            return Some(candidate);
+        }
+    }
+    None
+}
+
+fn parakeet_model_ready(helper: &std::path::Path) -> bool {
+    Command::new(helper)
+        .arg("--model-ready")
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .is_ok_and(|status| status.success())
+}
+
+fn prepare_parakeet_model(helper: &std::path::Path) {
+    // First use remains functional through Apple Speech while the ~465 MB
+    // local model prepares in an isolated background helper. A later dictation
+    // automatically switches to Parakeet once `--model-ready` succeeds.
+    if PARAKEET_PREPARING.swap(true, Ordering::SeqCst) {
+        return;
+    }
+    match Command::new(helper)
+        .arg("--prepare-model")
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+    {
+        Ok(_) => log::info!("preparing the local Parakeet transcription model"),
+        Err(error) => {
+            PARAKEET_PREPARING.store(false, Ordering::SeqCst);
+            log::warn!("could not prepare Parakeet model: {error}");
+        }
+    }
+}
+
+fn parakeet_supported() -> bool {
+    if !cfg!(target_arch = "aarch64") {
+        return false;
+    }
+    // FluidAudio 0.15.4 targets macOS 14+. Caduceus itself still supports
+    // earlier systems, which must select the Apple Speech helper instead of
+    // finding a binary the loader cannot execute.
+    Command::new("sw_vers")
+        .arg("-productVersion")
+        .output()
+        .ok()
+        .filter(|output| output.status.success())
+        .and_then(|output| String::from_utf8(output.stdout).ok())
+        .and_then(|version| version.trim().split('.').next()?.parse::<u32>().ok())
+        .is_some_and(|major| major >= 14)
 }

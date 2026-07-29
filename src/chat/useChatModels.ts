@@ -245,6 +245,7 @@ export function useChatModels(mode: ChatMode) {
               supportsComputerUse: false,
               extraHeaders: [],
               timeoutSecs: 600,
+              reasoningEffort: null,
             };
         if (existing) Object.assign(existing, config);
         else next.agents.backends.push(config);

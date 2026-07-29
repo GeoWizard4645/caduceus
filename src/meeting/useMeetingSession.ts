@@ -31,7 +31,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import * as api from "@/shared/api";
+import { useTauriEvent } from "@/shared/hooks";
 import { useRecording } from "@/command-center/pages/tools/RecordShared";
+import { EVENTS, type VoiceOutcome } from "@/shared/types";
 
 import { emitMeetingCallAudio, meetingTranscribeSystemAudio } from "./meetingApi";
 import { useMeetingTranscript } from "./useMeetingTranscript";
@@ -75,6 +77,14 @@ export function useMeetingSession(active: boolean) {
       setVoiceError(api.errorMessage(e));
     }
   }, [recording, microphone]);
+
+  // `voice_start` returns before the speech helper is ready. Real failures
+  // arrive later on `voice-result` — without this listener Meeting notes just
+  // sat on "Recording" with an empty transcript.
+  useTauriEvent<VoiceOutcome>(EVENTS.voiceResult, (outcome) => {
+    if (outcome.ok) return;
+    setVoiceError(outcome.error ?? "Dictation failed.");
+  });
 
   const stop = useCallback(async () => {
     // Fire-and-forget, same as the recording HUD: the transcript arrives on

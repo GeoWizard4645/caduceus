@@ -113,6 +113,8 @@ export function RecordControls({
   // it. Rendering its clock here as though it were ours invites someone to
   // press "Stop and save" on a screen recording they meant to leave going.
   const mine = !active || status?.mode === mode;
+  // Helper failures after spawn land in `status.error`, not the local catch.
+  const displayError = error ?? status?.error ?? null;
 
   return (
     <div className="rounded-cad border border-line bg-surface/50 p-4">
@@ -179,10 +181,10 @@ export function RecordControls({
         </div>
       )}
 
-      {error && (
+      {displayError && (
         <div className="mt-3">
           <Callout tone="warn" title="That did not record">
-            <p>{error}</p>
+            <p>{displayError}</p>
           </Callout>
         </div>
       )}

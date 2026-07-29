@@ -119,7 +119,15 @@ impl RecorderRuntime {
     }
 
     /// Begin recording. `Err` if one is already running.
-    pub fn start(&self, mode: RecordMode, with_microphone: bool) -> Result<String, String> {
+    pub fn start<F>(
+        &self,
+        mode: RecordMode,
+        with_microphone: bool,
+        on_partial: F,
+    ) -> Result<String, String>
+    where
+        F: Fn(String) + Send + 'static,
+    {
         if self.session.lock().is_some() {
             return Err("Something is already being recorded.".into());
         }
@@ -189,6 +197,15 @@ impl RecorderRuntime {
                             if let Ok(parsed) = value.parse::<f32>() {
                                 *level.lock() = parsed;
                             }
+                        }
+                        ("partial", text) => on_partial(text.to_string()),
+                        ("transcription", message) => {
+                            log::info!("meeting transcription: {message}")
+                        }
+                        ("transcription-error", message) => {
+                            // Preview failure is deliberately non-fatal: the
+                            // durable recording still gets its final pass.
+                            log::warn!("meeting live transcription: {message}")
                         }
                         ("error", message) => {
                             log::error!("recorder: {message}");

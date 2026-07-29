@@ -22,15 +22,20 @@ not attempt to.
 
 ## What was actually taken
 
-**No source code was copied from either project.** Caduceus is Rust, TypeScript
-and a handful of small Swift command-line helpers; MacParakeet is a Swift 6 /
-SwiftUI application and Clean-Me is a Swift/AppKit one. There is no file in this
-repository that originated in either.
+Starting with Caduceus 4.0, the Parakeet live-transcription helper directly
+adapts MacParakeet's rolling 15-second dictation-preview architecture and its
+`LiveTranscriptStabilizer`. The adapted files carry source-level notices and
+remain GPL-3.0. Caduceus pins FluidAudio 0.15.4, the version used by the audited
+MacParakeet 0.7.3 source (commit
+`408d1bcd0b488c2363bc2de9d5dc62933478d413`).
 
-What they contributed is *design*: the shape of a recording HUD that stays out of
-your way, the decision to keep a live transcript visible while recording, and the
-category-by-category approach to reclaiming disk space. Those are ideas, not
-code, and ideas are not what a licence covers.
+No source code was copied from Clean-Me. Caduceus's cleaner remains an
+independent implementation informed by its category-level product design.
+
+Beyond the directly adapted transcription pieces named above, they contributed
+design: the shape of a recording HUD that stays out of your way, the decision
+to keep a live transcript visible while recording, and the category-by-category
+approach to reclaiming disk space.
 
 The licence changed anyway, for two reasons: so that borrowing directly is
 available in future without a second round of legal thinking, and because it is
@@ -51,10 +56,10 @@ insufficient, open an issue — it will be fixed.
 
 ## Other components
 
-Caduceus links a large number of Rust and JavaScript dependencies under
-permissive licences (MIT, Apache-2.0, BSD). `cargo tree` and `npm ls` enumerate
-them. Nothing GPL is currently linked into the binary; the licence change above
-is about the project's own terms, not an obligation inherited from a dependency.
+Caduceus links a large number of Rust, JavaScript, and Swift dependencies under
+permissive licences (MIT, Apache-2.0, BSD). `cargo tree`, `npm ls`, and the Swift
+package lockfile enumerate them. The adapted MacParakeet source is covered by
+the same GPL-3.0 terms as Caduceus itself.
 
 Apple frameworks used through their public APIs — Speech, AVFoundation,
 ScreenCaptureKit, Vision, AppKit, CoreAudio — are governed by the macOS SDK

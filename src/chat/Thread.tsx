@@ -10,14 +10,26 @@
  * its own input and its own focus rules, the window has a composer at the bottom.
  */
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
-import type { ChatMessage } from "@/shared/types";
+import type { ChatMessage, Usage } from "@/shared/types";
 import { Spinner, cx } from "@/shared/ui";
+
+export interface StreamStatus {
+  /** Partial assistant text so far. */
+  text: string;
+  /** Epoch ms when the request started. */
+  startedAt: number;
+  /** Final usage once the server reports it (often only on the last chunk). */
+  usage?: Usage | null;
+  /** True until the Done/Error event. */
+  active: boolean;
+}
 
 export function Thread({
   messages,
   pending,
+  stream,
   error,
   className,
   onCopy,
@@ -26,6 +38,8 @@ export function Thread({
   messages: ChatMessage[];
   /** A question that has been sent but not yet answered. */
   pending?: string | null;
+  /** Live assistant draft while tokens stream in. */
+  stream?: StreamStatus | null;
   error?: string | null;
   className?: string;
   onCopy?: (text: string) => void;
@@ -33,6 +47,20 @@ export function Thread({
 }) {
   const endRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const [elapsedMs, setElapsedMs] = useState(0);
+
+  // Tick the timer while a reply is in flight so "20 silent seconds" never
+  // looks like a freeze.
+  useEffect(() => {
+    if (!stream?.active || !stream.startedAt) {
+      setElapsedMs(0);
+      return;
+    }
+    const tick = () => setElapsedMs(Date.now() - stream.startedAt);
+    tick();
+    const id = window.setInterval(tick, 200);
+    return () => window.clearInterval(id);
+  }, [stream?.active, stream?.startedAt]);
 
   // Follow the conversation, but only when already at the bottom — yanking the
   // view down while someone is reading back through the thread is worse than
@@ -42,9 +70,9 @@ export function Thread({
     if (!box) return;
     const nearBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 120;
     if (nearBottom) endRef.current?.scrollIntoView({ block: "end" });
-  }, [messages, pending]);
+  }, [messages, pending, stream?.text]);
 
-  const empty = messages.length === 0 && !pending && !error;
+  const empty = messages.length === 0 && !pending && !error && !stream;
 
   return (
     <div ref={scrollRef} className={cx("overflow-y-auto", className)}>
@@ -70,10 +98,32 @@ export function Thread({
         {pending && (
           <>
             <Bubble role="user" text={pending} />
-            <div className="row gap-2 self-start rounded-cad bg-raised px-3 py-2 text-2xs text-ink-faint">
-              <Spinner />
-              Thinking…
-            </div>
+            {stream && (stream.text || stream.active) ? (
+              <div className="flex flex-col gap-1 self-stretch items-start">
+                <div className="max-w-[85%] whitespace-pre-wrap break-words rounded-cad border border-line/60 bg-raised px-3 py-2 text-[13px] leading-relaxed text-ink-soft">
+                  {stream.text || (
+                    <span className="inline-flex items-center gap-2 text-ink-faint">
+                      <Spinner />
+                      Waiting for first token…
+                    </span>
+                  )}
+                  {stream.active && stream.text ? (
+                    <span className="ml-0.5 inline-block h-[1em] w-[2px] animate-pulse bg-accent align-text-bottom" />
+                  ) : null}
+                </div>
+                <StatusLine
+                  elapsedMs={elapsedMs}
+                  usage={stream.usage}
+                  chars={stream.text.length}
+                  active={stream.active}
+                />
+              </div>
+            ) : (
+              <div className="row gap-2 self-start rounded-cad bg-raised px-3 py-2 text-2xs text-ink-faint">
+                <Spinner />
+                Thinking…
+              </div>
+            )}
           </>
         )}
 
@@ -85,6 +135,36 @@ export function Thread({
       </div>
       <div ref={endRef} />
     </div>
+  );
+}
+
+function StatusLine({
+  elapsedMs,
+  usage,
+  chars,
+  active,
+}: {
+  elapsedMs: number;
+  usage?: Usage | null;
+  chars: number;
+  active: boolean;
+}) {
+  const seconds = (Math.max(0, elapsedMs) / 1000).toFixed(1);
+  const out =
+    usage?.outputTokens ??
+    (chars > 0 ? Math.max(1, Math.round(chars / 4)) : null);
+  const inn = usage?.inputTokens ?? null;
+  const parts: string[] = [`${seconds}s`];
+  if (inn != null) parts.push(`${inn} in`);
+  if (out != null) {
+    parts.push(usage?.outputTokens != null ? `${out} out` : `~${out} out`);
+  }
+  if (active && chars === 0) parts.push("loading model…");
+
+  return (
+    <p className="px-1 text-2xs tabular-nums text-ink-faint">
+      {parts.join(" · ")}
+    </p>
   );
 }
 

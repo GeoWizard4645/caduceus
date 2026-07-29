@@ -190,6 +190,10 @@ export interface BackendConfig {
   supportsComputerUse: boolean;
   extraHeaders: [string, string][];
   timeoutSecs: number;
+  /** Passed through to servers that understand it; null leaves their default
+   * alone. Set in code (see `tools::promptopt`) rather than in the UI — it is
+   * how a caller says "this call is mechanical, do not think about it". */
+  reasoningEffort: string | null;
 }
 
 export interface AgentSettings {
@@ -554,6 +558,7 @@ export const EVENTS = {
   voiceResult: "caduceus://voice-result",
   hotkeyProblems: "caduceus://hotkey-problems",
   chatChanged: "caduceus://chat-changed",
+  chatChunk: "caduceus://chat-chunk",
   staffMarkChanged: "caduceus://staff-mark-changed",
   /** Rust asking the shell to open (or focus) a tab. */
   tabOpen: "caduceus://tab-open",
@@ -595,7 +600,24 @@ export interface Conversation {
 export interface ChatReply {
   conversationId: number;
   text: string;
+  model: string;
+  usage: Usage | null;
+  elapsedMs: number;
 }
+
+/** Live events while `chat_ask` is generating a reply. */
+export type ChatChunk =
+  | { type: "started"; conversationId: number }
+  | { type: "delta"; conversationId: number; text: string }
+  | {
+      type: "done";
+      conversationId: number;
+      text: string;
+      model: string;
+      usage: Usage | null;
+      elapsedMs: number;
+    }
+  | { type: "error"; conversationId: number; message: string };
 
 /**
  * What "Highlight & Act" can do to a selection.
@@ -617,6 +639,34 @@ export type TextAiAction =
   | "reply_politely"
   | "bullet_point"
   | "generate_title";
+
+/**
+ * The model an optimised prompt is being shaped for.
+ *
+ * Mirrors `tools::promptopt::TargetModel` (serde `snake_case`). Not a list of
+ * every model in the world — a list of the *formatting conventions* worth a
+ * separate profile, which is why two models that want the same shape share one
+ * entry rather than getting one each.
+ */
+export type TargetModel =
+  | "sonnet5"
+  | "opus5"
+  | "fable5"
+  | "k3"
+  | "gpt56_sol"
+  | "gpt56_luna"
+  | "gpt53_codex"
+  | "gemini_flash"
+  | "qwen37";
+
+/**
+ * How hard the optimiser is allowed to squeeze.
+ *
+ * Mirrors `tools::promptopt::OptimizeLevel`. The levels differ only in how much
+ * *prose* they will lose; none of them drops a constraint, a number or an
+ * identifier, which is a contract rather than a setting.
+ */
+export type OptimizeLevel = "light" | "balanced" | "aggressive";
 
 /**
  * The second bench of developer tools.

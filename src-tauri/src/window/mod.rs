@@ -27,7 +27,7 @@ use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, Runtime, WebviewWindow};
 
-use crate::settings::{Settings, SettingsManager, StaffEdge, Point};
+use crate::settings::{Point, Settings, SettingsManager, StaffEdge};
 
 #[cfg(target_os = "macos")]
 mod macos;
@@ -88,9 +88,7 @@ impl Default for PaletteFloating {
     fn default() -> Self {
         Self {
             floating: AtomicBool::new(true),
-            shown_at: parking_lot::Mutex::new(
-                std::time::Instant::now() - FOCUS_SETTLE * 2,
-            ),
+            shown_at: parking_lot::Mutex::new(std::time::Instant::now() - FOCUS_SETTLE * 2),
         }
     }
 }
@@ -110,7 +108,6 @@ impl PaletteFloating {
         self.shown_at.lock().elapsed() < FOCUS_SETTLE
     }
 }
-
 
 /// Emitted to the staff window as the pointer moves in and out.
 pub const STAFF_HOVER_EVENT: &str = "caduceus://staff-hover";
@@ -142,7 +139,8 @@ pub fn staff_window_side(settings: &Settings) -> f64 {
     }
 
     // Half the window must fit: top gap, the card, a gap, and the mark's radius.
-    let half_needed = ONBOARDING_CARD_GAP + ONBOARDING_CARD_HEIGHT + ONBOARDING_CARD_GAP + mark / 2.0;
+    let half_needed =
+        ONBOARDING_CARD_GAP + ONBOARDING_CARD_HEIGHT + ONBOARDING_CARD_GAP + mark / 2.0;
     base.max((half_needed * 2.0).min(680.0))
 }
 
@@ -169,7 +167,10 @@ pub fn configure_command_center_floating<R: Runtime>(window: &WebviewWindow<R>) 
     }
 }
 
-pub fn sync_staff_window<R: Runtime>(app: &AppHandle<R>, settings: &SettingsManager) -> tauri::Result<()> {
+pub fn sync_staff_window<R: Runtime>(
+    app: &AppHandle<R>,
+    settings: &SettingsManager,
+) -> tauri::Result<()> {
     if let Some(window) = staff(app) {
         configure_staff_floating(&window);
         position_staff(app, settings)?;
@@ -183,7 +184,10 @@ pub fn should_show_staff(settings: &Settings) -> bool {
 }
 
 /// Resize, reposition, and show the staff when the webview has loaded settings.
-pub fn refresh_staff_layout<R: Runtime>(app: &AppHandle<R>, settings: &SettingsManager) -> Result<(), String> {
+pub fn refresh_staff_layout<R: Runtime>(
+    app: &AppHandle<R>,
+    settings: &SettingsManager,
+) -> Result<(), String> {
     let cfg = settings.get();
     if let Some(window) = staff(app) {
         position_staff(app, settings).map_err(|e| e.to_string())?;
@@ -257,7 +261,6 @@ pub fn command_center<R: Runtime>(app: &AppHandle<R>) -> Option<WebviewWindow<R>
     app.get_webview_window(COMMAND_CENTER_WINDOW)
 }
 
-
 // ---------------------------------------------------------------------------
 // Staff
 // ---------------------------------------------------------------------------
@@ -268,7 +271,10 @@ pub fn command_center<R: Runtime>(app: &AppHandle<R>) -> Option<WebviewWindow<R>
 /// Also runs at startup for a saved position, because a monitor may have been
 /// unplugged since — an staff parked at x=3000 on a since-removed display would
 /// otherwise be invisible and unreachable.
-pub fn position_staff<R: Runtime>(app: &AppHandle<R>, settings: &SettingsManager) -> tauri::Result<()> {
+pub fn position_staff<R: Runtime>(
+    app: &AppHandle<R>,
+    settings: &SettingsManager,
+) -> tauri::Result<()> {
     let Some(window) = staff(app) else {
         return Ok(());
     };
@@ -338,8 +344,13 @@ pub fn set_staff_visible<R: Runtime>(
     Ok(())
 }
 
-pub fn toggle_staff<R: Runtime>(app: &AppHandle<R>, settings: &SettingsManager) -> Result<bool, String> {
-    let visible = staff(app).and_then(|w| w.is_visible().ok()).unwrap_or(false);
+pub fn toggle_staff<R: Runtime>(
+    app: &AppHandle<R>,
+    settings: &SettingsManager,
+) -> Result<bool, String> {
+    let visible = staff(app)
+        .and_then(|w| w.is_visible().ok())
+        .unwrap_or(false);
     set_staff_visible(app, settings, !visible)?;
     Ok(!visible)
 }
@@ -349,7 +360,9 @@ pub fn persist_staff_position<R: Runtime>(
     app: &AppHandle<R>,
     settings: &SettingsManager,
 ) -> Result<(), String> {
-    let Some(window) = staff(app) else { return Ok(()) };
+    let Some(window) = staff(app) else {
+        return Ok(());
+    };
     let scale = window.scale_factor().unwrap_or(1.0);
     let Ok(pos) = window.outer_position() else {
         return Ok(());
@@ -460,7 +473,14 @@ pub struct CaptureRect {
 
 impl CaptureRect {
     /// Is a physical-pixel screen point inside this rect?
-    fn contains(&self, cursor_x: f64, cursor_y: f64, origin_x: f64, origin_y: f64, scale: f64) -> bool {
+    fn contains(
+        &self,
+        cursor_x: f64,
+        cursor_y: f64,
+        origin_x: f64,
+        origin_y: f64,
+        scale: f64,
+    ) -> bool {
         let left = origin_x + self.x * scale;
         let top = origin_y + self.y * scale;
         cursor_x >= left
@@ -513,12 +533,13 @@ pub fn spawn_cursor_tracker<R: Runtime>(
         let mut block_expand = false;
         let mut last_emitted = state;
 
-        let emit_state = |window: &WebviewWindow<R>, state: &StaffHoverState, last: &mut StaffHoverState| {
-            if *state != *last {
-                *last = *state;
-                let _ = window.emit(STAFF_HOVER_EVENT, state);
-            }
-        };
+        let emit_state =
+            |window: &WebviewWindow<R>, state: &StaffHoverState, last: &mut StaffHoverState| {
+                if *state != *last {
+                    *last = *state;
+                    let _ = window.emit(STAFF_HOVER_EVENT, state);
+                }
+            };
 
         // Adaptive poll interval. Polling at 30Hz forever costs about 1% of a
         // CPU on an always-on app, which is real battery for something that is
@@ -573,10 +594,9 @@ pub fn spawn_cursor_tracker<R: Runtime>(
             let orb_radius = (appearance.staff_size as f64 / 2.0 + 8.0) * scale;
             // Corner resize knobs sit on a square around the mark — reach the
             // corner of that square plus the knob radius so they stay hittable.
-            let resize_reach = ((appearance.staff_size as f64 * 0.5 + 8.0)
-                * std::f64::consts::SQRT_2
-                + 10.0)
-                * scale;
+            let resize_reach =
+                ((appearance.staff_size as f64 * 0.5 + 8.0) * std::f64::consts::SQRT_2 + 10.0)
+                    * scale;
             let popout_radius =
                 (appearance.popout_radius as f64 + appearance.popout_icon_size as f64 / 2.0 + 12.0)
                     * scale;
@@ -642,7 +662,8 @@ pub fn spawn_cursor_tracker<R: Runtime>(
                 // --- collapse ---------------------------------------------
                 if state.expanded && !over_popout {
                     let left = *left_at.get_or_insert_with(std::time::Instant::now);
-                    if left.elapsed() >= std::time::Duration::from_millis(general.collapse_idle_ms) {
+                    if left.elapsed() >= std::time::Duration::from_millis(general.collapse_idle_ms)
+                    {
                         state = StaffHoverState {
                             hovering: false,
                             expanded: false,
@@ -676,13 +697,7 @@ pub fn spawn_cursor_tracker<R: Runtime>(
             // bounds only, so the rest of the window stays click-through and the
             // staff underneath keeps working while the card is up.
             let over_capture_rect = capture_rect.read().is_some_and(|r| {
-                r.contains(
-                    cursor.x,
-                    cursor.y,
-                    origin.x as f64,
-                    origin.y as f64,
-                    scale,
-                )
+                r.contains(cursor.x, cursor.y, origin.x as f64, origin.y as f64, scale)
             });
 
             let should_capture = force_interactive.load(Ordering::Relaxed)
@@ -796,7 +811,10 @@ pub fn hide_command_center<R: Runtime>(app: &AppHandle<R>) -> Result<(), String>
     Ok(())
 }
 
-pub fn toggle_command_center<R: Runtime>(app: &AppHandle<R>) -> Result<(), String> {
+pub fn toggle_command_center<R: Runtime>(
+    app: &AppHandle<R>,
+    source: impl Into<String>,
+) -> Result<(), String> {
     let visible = command_center(app)
         .and_then(|w| w.is_visible().ok())
         .unwrap_or(false);
@@ -806,7 +824,7 @@ pub fn toggle_command_center<R: Runtime>(app: &AppHandle<R>) -> Result<(), Strin
         open_command_center(
             app,
             CommandCenterOpenPayload {
-                source: "hotkey".into(),
+                source: source.into(),
                 ..Default::default()
             },
         )
@@ -825,13 +843,18 @@ pub fn toggle_command_center<R: Runtime>(app: &AppHandle<R>) -> Result<(), Strin
 pub fn open_tab<R: Runtime>(app: &AppHandle<R>, request: TabRequest) -> Result<(), String> {
     open_command_center(
         app,
-        CommandCenterOpenPayload { source: "tab".into(), ..Default::default() },
+        CommandCenterOpenPayload {
+            source: "tab".into(),
+            ..Default::default()
+        },
     )?;
 
     let Some(window) = command_center(app) else {
         return Err("the Command Center window is missing".into());
     };
-    window.emit(TAB_OPEN_EVENT, request).map_err(|e| e.to_string())
+    window
+        .emit(TAB_OPEN_EVENT, request)
+        .map_err(|e| e.to_string())
 }
 
 pub fn open_settings<R: Runtime>(app: &AppHandle<R>, tab: Option<&str>) -> Result<(), String> {
@@ -845,10 +868,17 @@ pub fn open_settings<R: Runtime>(app: &AppHandle<R>, tab: Option<&str>) -> Resul
     )
 }
 
-pub fn open_chat<R: Runtime>(app: &AppHandle<R>, conversation_id: Option<i64>) -> Result<(), String> {
+pub fn open_chat<R: Runtime>(
+    app: &AppHandle<R>,
+    conversation_id: Option<i64>,
+) -> Result<(), String> {
     open_tab(
         app,
-        TabRequest { kind: "chat".into(), section: None, conversation_id },
+        TabRequest {
+            kind: "chat".into(),
+            section: None,
+            conversation_id,
+        },
     )
 }
 
@@ -886,7 +916,6 @@ pub fn set_palette_floating<R: Runtime>(app: &AppHandle<R>, floating: bool) -> R
     }
     Ok(())
 }
-
 
 /// Which of Caduceus's own windows [`set_window_opacity`] can dim.
 ///
@@ -946,7 +975,6 @@ pub fn set_window_opacity<R: Runtime>(
 /// fires the window still reports itself visible, so counting it would keep the
 /// Dock icon forever.
 #[cfg(target_os = "macos")]
-
 
 /// Apply the platform's native background material to a window.
 ///
@@ -1016,7 +1044,10 @@ mod tests {
     fn never_polls_slower_than_the_far_rate() {
         for distance in [0.0, 50.0, 500.0, 100_000.0] {
             let delay = next_delay(distance, 100.0, 33, false);
-            assert!((33..=FAR_POLL_MS).contains(&delay), "{distance} gave {delay}");
+            assert!(
+                (33..=FAR_POLL_MS).contains(&delay),
+                "{distance} gave {delay}"
+            );
         }
     }
 

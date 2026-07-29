@@ -39,9 +39,9 @@ pub mod palette;
 pub mod popbar;
 pub mod settings;
 pub mod shortcuts;
+pub mod staff_mark;
 pub mod sysmon;
 pub mod tools;
-pub mod staff_mark;
 pub mod tray;
 pub mod uninstall;
 pub mod update;
@@ -132,6 +132,7 @@ pub fn run() {
             commands::dispatch_input,
             commands::open_command_center,
             commands::hide_command_center,
+            commands::toggle_command_center,
             commands::open_settings_window,
             commands::set_staff_interactive,
             commands::set_staff_capture_rect,
@@ -280,6 +281,9 @@ pub fn run() {
             commands::git_commit_assist,
             commands::inspect_dependencies,
             commands::text_ai_run,
+            commands::prompt_optimize,
+            commands::prompt_estimate,
+            commands::prompt_optimizer_model,
             commands::create_calendar_event,
             commands::calendar_events_today,
             commands::calendar_events_between,
@@ -638,7 +642,9 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
             if !window::should_show_staff(&manager.get()) {
                 return;
             }
-            let Some(staff) = window::staff(&handle) else { return };
+            let Some(staff) = window::staff(&handle) else {
+                return;
+            };
             if !staff.is_visible().unwrap_or(false) {
                 let _ = window::position_staff(&handle, &manager);
                 let _ = staff.show();
@@ -673,7 +679,11 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         env!("CARGO_PKG_VERSION"),
         std::env::consts::OS,
         loaded.shortcuts.len(),
-        if loaded.clipboard.enabled { "on" } else { "off" },
+        if loaded.clipboard.enabled {
+            "on"
+        } else {
+            "off"
+        },
     );
     Ok(())
 }

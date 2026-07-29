@@ -38,23 +38,23 @@ use crate::{voice, window};
 /// `Command` (this is the macOS-only path).
 #[cfg(target_os = "macos")]
 const SYSTEM_RESERVED: &[&str] = &[
-    "command+space",        // Spotlight
-    "command+alt+space",    // Finder search window
-    "command+tab",          // application switcher
-    "command+shift+tab",    // application switcher, backwards
-    "command+`",            // cycle windows in the active app
-    "control+up",           // Mission Control
-    "control+down",         // application windows
-    "control+left",         // move a space left
-    "control+right",        // move a space right
-    "command+h",            // hide the active app
-    "command+q",            // quit the active app
-    "command+shift+3",      // screenshot
-    "command+shift+4",      // screenshot selection
-    "command+shift+5",      // screenshot toolbar
-    "command+control+q",    // lock screen
-    "command+alt+esc",      // force quit
-    "fn+f",                 // not expressible, but rejected clearly if tried
+    "command+space",     // Spotlight
+    "command+alt+space", // Finder search window
+    "command+tab",       // application switcher
+    "command+shift+tab", // application switcher, backwards
+    "command+`",         // cycle windows in the active app
+    "control+up",        // Mission Control
+    "control+down",      // application windows
+    "control+left",      // move a space left
+    "control+right",     // move a space right
+    "command+h",         // hide the active app
+    "command+q",         // quit the active app
+    "command+shift+3",   // screenshot
+    "command+shift+4",   // screenshot selection
+    "command+shift+5",   // screenshot toolbar
+    "command+control+q", // lock screen
+    "command+alt+esc",   // force quit
+    "fn+f",              // not expressible, but rejected clearly if tried
 ];
 
 /// Whether macOS will swallow this accelerator before Caduceus ever sees it.
@@ -79,7 +79,9 @@ fn is_system_reserved(accelerator: &str) -> bool {
     parts.push(key);
     let normalised = parts.join("+");
 
-    SYSTEM_RESERVED.iter().any(|reserved| *reserved == normalised)
+    SYSTEM_RESERVED
+        .iter()
+        .any(|reserved| *reserved == normalised)
 }
 
 #[cfg(not(target_os = "macos"))]
@@ -108,11 +110,8 @@ const PUSH_TO_TALK_FALLBACKS: &[&str] = &[
     "F18",
 ];
 
-const TOGGLE_STAFF_FALLBACKS: &[&str] = &[
-    "CommandOrControl+Alt+S",
-    "Control+Shift+S",
-    "Alt+Shift+S",
-];
+const TOGGLE_STAFF_FALLBACKS: &[&str] =
+    &["CommandOrControl+Alt+S", "Control+Shift+S", "Alt+Shift+S"];
 
 /// What happened to one binding Caduceus had to move.
 #[derive(Debug, Clone)]
@@ -368,7 +367,7 @@ pub fn handle<R: Runtime>(app: &AppHandle<R>, shortcut: &Shortcut, event_state: 
         }
 
         if matches(&cfg.general.command_center_hotkey) {
-            if let Err(e) = window::toggle_command_center(app) {
+            if let Err(e) = window::toggle_command_center(app, "hotkey") {
                 log::error!("hotkey could not open the Command Center: {e}");
             }
             return;
@@ -387,12 +386,9 @@ pub fn handle<R: Runtime>(app: &AppHandle<R>, shortcut: &Shortcut, event_state: 
             return;
         }
         match event_state {
-            ShortcutState::Pressed => crate::fn_keys::dispatch_press(
-                app,
-                &settings,
-                binding.action,
-                &binding.shortcut_id,
-            ),
+            ShortcutState::Pressed => {
+                crate::fn_keys::dispatch_press(app, &settings, binding.action, &binding.shortcut_id)
+            }
             ShortcutState::Released => {
                 crate::fn_keys::dispatch_release(app, &settings, binding.action)
             }
@@ -482,14 +478,20 @@ pub fn start_push_to_talk<R: Runtime>(app: &AppHandle<R>, settings: &SettingsMan
             Ok(()) => {}
             Err(e) => {
                 log::error!("could not start recording: {e}");
-                // All three, in this order: the HUD comes down, the state event
-                // clears the indicator, and the result event says what went
-                // wrong. Doing only the last leaves a red dot on screen for a
-                // recording that never began — exactly the state nobody could
-                // get out of.
-                window::recorder::hide(&app);
+                // Leave the HUD up so the failure is readable — hiding it the
+                // instant the handshake fails is how "dictation does nothing"
+                // felt. Emit Idle + the error; Recorder.tsx shows the message
+                // and Discard closes the HUD. Also open the Command Center so
+                // Repair on the microphone permission page is one click away.
                 let _ = app.emit(voice::VOICE_STATE_EVENT, voice::VoiceState::Idle);
-                let _ = app.emit(voice::VOICE_RESULT_EVENT, VoiceOutcome::error(e));
+                let _ = app.emit(voice::VOICE_RESULT_EVENT, VoiceOutcome::error(&e));
+                let _ = window::open_command_center(
+                    &app,
+                    window::CommandCenterOpenPayload {
+                        source: "dictation".into(),
+                        ..Default::default()
+                    },
+                );
             }
         }
     });
@@ -514,7 +516,8 @@ pub fn stop_push_to_talk<R: Runtime>(app: &AppHandle<R>, settings: &SettingsMana
         let stopped = {
             let app = app.clone();
             tauri::async_runtime::spawn_blocking(move || {
-                app.try_state::<voice::VoiceRuntime>().and_then(|r| r.stop())
+                app.try_state::<voice::VoiceRuntime>()
+                    .and_then(|r| r.stop())
             })
             .await
         };
@@ -615,7 +618,10 @@ mod tests {
             "Control+Left",
             "CommandOrControl+Q",
         ] {
-            assert!(is_system_reserved(reserved), "{reserved} should be reserved");
+            assert!(
+                is_system_reserved(reserved),
+                "{reserved} should be reserved"
+            );
         }
     }
 
@@ -629,7 +635,10 @@ mod tests {
             "Shift+Cmd+3",
             "shift+commandorcontrol+3",
         ] {
-            assert!(is_system_reserved(spelling), "{spelling} should be reserved");
+            assert!(
+                is_system_reserved(spelling),
+                "{spelling} should be reserved"
+            );
         }
     }
 
@@ -659,7 +668,10 @@ mod tests {
             .chain(PUSH_TO_TALK_FALLBACKS)
             .chain(TOGGLE_STAFF_FALLBACKS)
         {
-            assert!(!is_system_reserved(candidate), "{candidate} is reserved by macOS");
+            assert!(
+                !is_system_reserved(candidate),
+                "{candidate} is reserved by macOS"
+            );
         }
     }
 

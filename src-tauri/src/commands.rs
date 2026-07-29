@@ -15,14 +15,14 @@
 use tauri::{AppHandle, Emitter, Manager, Runtime};
 
 use crate::agent::{self, AgentRuntime};
+use crate::capture;
+use crate::chat;
 use crate::clipboard::{self, ClipboardEntry, ClipboardStore, TransitionReport};
+use crate::extensions;
+use crate::notes;
 use crate::palette::{self, DispatchOutcome};
 use crate::settings::{self, secrets, BackendConfig, Settings, SettingsManager};
 use crate::shortcuts::{self, BrowserInstall, ExecOutcome};
-use crate::capture;
-use crate::extensions;
-use crate::chat;
-use crate::notes;
 use crate::tools;
 use crate::voice;
 use crate::window;
@@ -71,7 +71,9 @@ pub async fn update_settings<R: Runtime>(
     let hotkey_problems = crate::hotkeys::register_all(&app, &settings);
 
     // Reposition the staff if the edge changed and there is no manual position.
-    if previous.general.staff_edge != next.general.staff_edge && next.general.staff_position.is_none() {
+    if previous.general.staff_edge != next.general.staff_edge
+        && next.general.staff_position.is_none()
+    {
         let _ = window::position_staff(&app, &settings);
     }
     if previous.general.staff_visible != next.general.staff_visible {
@@ -174,7 +176,10 @@ pub async fn get_runtime_info<R: Runtime>(
         stt_backends: voice::stt::all_availability(&cfg.voice),
         browsers: shortcuts::detect_browsers(),
         clipboard_entries: store.as_ref().and_then(|s| s.count().ok()).unwrap_or(0),
-        clipboard_bytes: store.as_ref().and_then(|s| s.total_bytes().ok()).unwrap_or(0),
+        clipboard_bytes: store
+            .as_ref()
+            .and_then(|s| s.total_bytes().ok())
+            .unwrap_or(0),
         backends_with_keys: cfg
             .agents
             .backends
@@ -322,6 +327,11 @@ pub fn hide_command_center<R: Runtime>(app: AppHandle<R>) -> Res<()> {
 }
 
 #[tauri::command]
+pub fn toggle_command_center<R: Runtime>(app: AppHandle<R>, source: Option<String>) -> Res<()> {
+    window::toggle_command_center(&app, source.unwrap_or_else(|| "other".into()))
+}
+
+#[tauri::command]
 pub fn open_command_center<R: Runtime>(
     app: AppHandle<R>,
     mode: Option<String>,
@@ -375,7 +385,10 @@ pub fn open_settings_window<R: Runtime>(app: AppHandle<R>, tab: Option<String>) 
 // ---------------------------------------------------------------------------
 
 #[tauri::command]
-pub fn toggle_staff<R: Runtime>(app: AppHandle<R>, settings: tauri::State<'_, SettingsManager>) -> Res<bool> {
+pub fn toggle_staff<R: Runtime>(
+    app: AppHandle<R>,
+    settings: tauri::State<'_, SettingsManager>,
+) -> Res<bool> {
     let visible = window::toggle_staff(&app, &settings)?;
     crate::tray::refresh(&app);
     Ok(visible)
@@ -518,7 +531,10 @@ pub fn clipboard_image(
     use base64::Engine as _;
     let cfg = settings.with(|s| s.clipboard.clone());
     let key = clipboard::active_key(&cfg)?;
-    let Some((kind, bytes)) = store.get_content(id, key.as_ref()).map_err(|e| e.to_string())? else {
+    let Some((kind, bytes)) = store
+        .get_content(id, key.as_ref())
+        .map_err(|e| e.to_string())?
+    else {
         return Ok(None);
     };
     if kind != clipboard::EntryKind::Image {
@@ -700,7 +716,11 @@ pub fn voice_pause<R: Runtime>(
     let now = runtime.set_paused(paused)?;
     let _ = app.emit(
         voice::VOICE_STATE_EVENT,
-        if now { voice::VoiceState::Paused } else { voice::VoiceState::Recording },
+        if now {
+            voice::VoiceState::Paused
+        } else {
+            voice::VoiceState::Recording
+        },
     );
     Ok(now)
 }
@@ -746,8 +766,9 @@ pub async fn voice_stop(
 }
 
 #[tauri::command]
-pub fn voice_cancel(runtime: tauri::State<'_, voice::VoiceRuntime>) {
+pub fn voice_cancel<R: Runtime>(app: AppHandle<R>, runtime: tauri::State<'_, voice::VoiceRuntime>) {
     runtime.cancel();
+    window::recorder::hide(&app);
 }
 
 #[tauri::command]
@@ -939,6 +960,9 @@ end tell"#
 ///
 /// `conversation_id` of `None` continues the most recent thread, or starts one
 /// if there is none — which is what a bare `/` in the palette does.
+///
+/// Tokens are emitted on [`chat::CHAT_CHUNK_EVENT`] as they arrive so the chat
+/// UI can type live; the returned [`chat::ChatReply`] is the finished turn.
 #[tauri::command]
 pub async fn chat_ask<R: Runtime>(
     app: AppHandle<R>,
@@ -961,15 +985,17 @@ pub async fn chat_ask<R: Runtime>(
         None => chat::active_conversation(&store).map_err(|e| e.user_message())?,
     };
 
-    let text = chat::ask(&store, &settings, id, &prompt)
-        .await
-        .map_err(|e| e.user_message())?;
+    let emit_app = app.clone();
+    let reply = chat::ask_streaming(&store, &settings, id, &prompt, move |chunk| {
+        if let Err(e) = emit_app.emit(chat::CHAT_CHUNK_EVENT, &chunk) {
+            log::warn!("could not emit chat chunk: {e}");
+        }
+    })
+    .await
+    .map_err(|e| e.user_message())?;
 
     let _ = app.emit(chat::CHAT_CHANGED_EVENT, id);
-    Ok(chat::ChatReply {
-        conversation_id: id,
-        text,
-    })
+    Ok(reply)
 }
 
 #[tauri::command]
@@ -1174,7 +1200,10 @@ fn semantic_state<R: Runtime>(app: &AppHandle<R>) -> Res<&'static SemanticState>
             let dir = app_data(app)?;
             std::fs::create_dir_all(&dir).map_err(|e| format!("Could not create {dir:?}: {e}"))?;
             let index = tools::semantic::SemanticIndex::open(dir.join("semantic-index.sqlite"))?;
-            Ok(SemanticState { index, cancel: tools::semantic::CancelFlag::new() })
+            Ok(SemanticState {
+                index,
+                cancel: tools::semantic::CancelFlag::new(),
+            })
         })
         .as_ref()
         .map_err(|e| e.clone())
@@ -1210,7 +1239,10 @@ pub async fn semantic_index_sync<R: Runtime>(
     state.cancel.reset();
     state
         .index
-        .sync(&tools::semantic::IndexConfig::default(), state.cancel.clone())
+        .sync(
+            &tools::semantic::IndexConfig::default(),
+            state.cancel.clone(),
+        )
         .await
 }
 
@@ -1249,9 +1281,11 @@ pub async fn window_preset_restore<R: Runtime>(
     app: AppHandle<R>,
     name: String,
 ) -> Res<tools::knowledge::PresetRestoreOutcome> {
-    tauri::async_runtime::spawn_blocking(move || tools::knowledge::window_preset_restore(&app, name))
-        .await
-        .map_err(|e| e.to_string())?
+    tauri::async_runtime::spawn_blocking(move || {
+        tools::knowledge::window_preset_restore(&app, name)
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
@@ -1411,10 +1445,7 @@ pub async fn vision_describe_active_window(
 // the features most likely to be the first thing a new user tries.
 
 #[tauri::command]
-pub async fn pdf_summary(
-    settings: tauri::State<'_, SettingsManager>,
-    path: String,
-) -> Res<String> {
+pub async fn pdf_summary(settings: tauri::State<'_, SettingsManager>, path: String) -> Res<String> {
     tools::documents::pdf_summary(&settings, &path).await
 }
 
@@ -1533,7 +1564,10 @@ pub async fn calendar_events_between(
 }
 
 #[tauri::command]
-pub async fn create_reminder(text: String, due: Option<String>) -> Res<tools::calendar::CreatedReminder> {
+pub async fn create_reminder(
+    text: String,
+    due: Option<String>,
+) -> Res<tools::calendar::CreatedReminder> {
     tauri::async_runtime::spawn_blocking(move || {
         tools::calendar::create_reminder(&text, due.as_deref())
     })
@@ -1557,6 +1591,55 @@ pub async fn text_ai_run(
     tools::textai::run(&settings, action, &text, target_language.as_deref())
         .await
         .map_err(|e| e.to_string())
+}
+
+/// Optimise a prompt for one target model.
+///
+/// Takes the same shape as `text_ai_run` and for the same reason: the webview
+/// names a *target* and a *level*, both closed enums, never a prompt. Every
+/// instruction the optimiser sends to a model lives in `tools::promptopt`,
+/// where it is unit-tested and where a compromised webview cannot rewrite it
+/// into an arbitrary question asked with the user's own key.
+///
+/// Long-running by nature — the model passes are several bounded round trips
+/// to a local server — so this is `async` and the UI shows a spinner rather
+/// than blocking a keystroke on it. The instant half is `prompt_estimate`.
+#[tauri::command]
+pub async fn prompt_optimize(
+    settings: tauri::State<'_, SettingsManager>,
+    raw: String,
+    target: tools::promptopt::TargetModel,
+    level: tools::promptopt::OptimizeLevel,
+    use_model: bool,
+) -> Res<tools::promptopt::OptimizedPrompt> {
+    tools::promptopt::optimize(&settings, &raw, target, level, use_model)
+        .await
+        .map_err(|e| e.user_message())
+}
+
+/// Count what a prompt costs on one target, with no model involved.
+///
+/// Separate from `prompt_optimize` because the Command Center calls this on
+/// every keystroke to show a live token count, and a keystroke may never wait
+/// on a network round trip. Pure arithmetic, microseconds, no I/O.
+#[tauri::command]
+pub fn prompt_estimate(
+    raw: String,
+    target: tools::promptopt::TargetModel,
+) -> tools::promptopt::TokenEstimate {
+    tools::promptopt::estimate(&raw, target)
+}
+
+/// Which model the optimiser's judgement passes would use, if switched on.
+///
+/// `None` means nothing usable is configured, and the toggle says so rather
+/// than offering a switch that silently does nothing. Reads settings only — no
+/// network, so the page can call it on open.
+#[tauri::command]
+pub fn prompt_optimizer_model(
+    settings: tauri::State<'_, SettingsManager>,
+) -> Option<tools::promptopt::OptimizerBackend> {
+    tools::promptopt::optimizer_model(&settings)
 }
 
 /// Encode text as an SVG QR code.
@@ -1597,7 +1680,11 @@ pub fn define_word(word: String) -> tools::ToolOutcome {
 }
 
 #[tauri::command]
-pub fn convert_image(path: String, width: Option<u32>, format: Option<String>) -> tools::ToolOutcome {
+pub fn convert_image(
+    path: String,
+    width: Option<u32>,
+    format: Option<String>,
+) -> tools::ToolOutcome {
     tools::convert_image(&path, width, format.as_deref())
 }
 
@@ -1633,7 +1720,11 @@ pub fn install_extension<R: Runtime>(
             message: format!("Installed “{}”.", ext.name),
             extension: Some(ext),
         }),
-        Err(e) => Ok(extensions::InstallReport { ok: false, message: e, extension: None }),
+        Err(e) => Ok(extensions::InstallReport {
+            ok: false,
+            message: e,
+            extension: None,
+        }),
     }
 }
 
@@ -1649,7 +1740,9 @@ pub fn remove_extension<R: Runtime>(app: AppHandle<R>, id: String) -> Res<()> {
 
 /// What can be removed and what is currently installed.
 #[tauri::command]
-pub fn uninstall_snapshot<R: Runtime>(app: AppHandle<R>) -> Res<crate::uninstall::UninstallSnapshot> {
+pub fn uninstall_snapshot<R: Runtime>(
+    app: AppHandle<R>,
+) -> Res<crate::uninstall::UninstallSnapshot> {
     crate::uninstall::snapshot(&app)
 }
 
@@ -1677,7 +1770,10 @@ pub fn open_extensions_folder<R: Runtime>(app: AppHandle<R>) -> Res<()> {
 /// The permissions an extension is allowed to ask for, for the UI to show.
 #[tauri::command]
 pub fn extension_permissions() -> Vec<String> {
-    extensions::PERMISSIONS.iter().map(|s| s.to_string()).collect()
+    extensions::PERMISSIONS
+        .iter()
+        .map(|s| s.to_string())
+        .collect()
 }
 
 // ---------------------------------------------------------------------------
@@ -1752,10 +1848,7 @@ pub async fn extension_fetch<R: Runtime>(
 
 /// `ctx.selection()`
 #[tauri::command]
-pub async fn extension_selection<R: Runtime>(
-    app: AppHandle<R>,
-    id: String,
-) -> Res<Vec<String>> {
+pub async fn extension_selection<R: Runtime>(app: AppHandle<R>, id: String) -> Res<Vec<String>> {
     let dir = app_data(&app)?;
     extensions::require(&id, &dir, "selection")?;
     tauri::async_runtime::spawn_blocking(|| {
@@ -1773,11 +1866,7 @@ pub async fn extension_selection<R: Runtime>(
 /// The extension's name is the notification's title, so a banner you did not
 /// expect names the thing that sent it rather than just saying "Caduceus".
 #[tauri::command]
-pub async fn extension_notify<R: Runtime>(
-    app: AppHandle<R>,
-    id: String,
-    text: String,
-) -> Res<()> {
+pub async fn extension_notify<R: Runtime>(app: AppHandle<R>, id: String, text: String) -> Res<()> {
     let dir = app_data(&app)?;
     let ext = extensions::require(&id, &dir, "notifications")?;
 
@@ -1857,12 +1946,19 @@ pub async fn extension_shell_run<R: Runtime>(
     let dir = app_data(&app)?;
     extensions::require(&id, &dir, "shell")?;
     let timeout = timeout_secs.unwrap_or(60).min(120);
-    Ok(shortcuts::exec::run_command_capture(&command, input.as_deref().unwrap_or(""), timeout).await)
+    Ok(
+        shortcuts::exec::run_command_capture(&command, input.as_deref().unwrap_or(""), timeout)
+            .await,
+    )
 }
 
 /// `ctx.automation.runAppleScript(script)`
 #[tauri::command]
-pub async fn extension_automation_script<R: Runtime>(app: AppHandle<R>, id: String, script: String) -> Res<String> {
+pub async fn extension_automation_script<R: Runtime>(
+    app: AppHandle<R>,
+    id: String,
+    script: String,
+) -> Res<String> {
     let dir = app_data(&app)?;
     extensions::require(&id, &dir, "automation")?;
     tauri::async_runtime::spawn_blocking(move || tools::apple::run_script(&script))
@@ -1888,7 +1984,11 @@ pub async fn extension_automation_shortcut<R: Runtime>(
 
 /// `ctx.files.read(path)` — under ~ or app data.
 #[tauri::command]
-pub fn extension_files_read<R: Runtime>(app: AppHandle<R>, id: String, path: String) -> Res<String> {
+pub fn extension_files_read<R: Runtime>(
+    app: AppHandle<R>,
+    id: String,
+    path: String,
+) -> Res<String> {
     let dir = app_data(&app)?;
     extensions::require(&id, &dir, "files")?;
     extensions::files::read(&dir, &path)
@@ -1932,7 +2032,9 @@ pub async fn extension_settings_set<R: Runtime>(
     let previous = settings.get();
     settings::save(&app, &next)?;
     let _ = crate::hotkeys::register_all(&app, &settings);
-    if previous.general.staff_edge != next.general.staff_edge && next.general.staff_position.is_none() {
+    if previous.general.staff_edge != next.general.staff_edge
+        && next.general.staff_position.is_none()
+    {
         let _ = window::position_staff(&app, &settings);
     }
     if previous.general.staff_visible != next.general.staff_visible {
@@ -1968,8 +2070,10 @@ pub fn extension_commands_run_tool<R: Runtime>(
 ) -> Res<tools::dev::ToolResult> {
     let dir = app_data(&app)?;
     extensions::require(&id, &dir, "commands")?;
-    let tool: tools::dev::ToolId = serde_json::from_value(serde_json::Value::String(tool_id.clone()))
-        .map_err(|_| format!("Unknown tool id “{tool_id}”. Use snake_case names like sha256, json_format."))?;
+    let tool: tools::dev::ToolId =
+        serde_json::from_value(serde_json::Value::String(tool_id.clone())).map_err(|_| {
+            format!("Unknown tool id “{tool_id}”. Use snake_case names like sha256, json_format.")
+        })?;
     Ok(tools::dev::run(tool, &input))
 }
 
@@ -2007,14 +2111,12 @@ pub async fn extension_shortcuts_run<R: Runtime>(
         .iter()
         .find(|s| s.id == shortcut_id)
         .ok_or_else(|| format!("No shortcut with id “{shortcut_id}”."))?;
-    Ok(
-        shortcuts::execute_shortcut(
-            shortcut,
-            query.as_deref().unwrap_or_default(),
-            &cfg.command_center.browser,
-        )
-        .await,
+    Ok(shortcuts::execute_shortcut(
+        shortcut,
+        query.as_deref().unwrap_or_default(),
+        &cfg.command_center.browser,
     )
+    .await)
 }
 
 /// Clip a string to a character count, not a byte count.
@@ -2057,9 +2159,7 @@ pub fn window_permission() -> bool {
 /// Off the main thread like every other command here that shells out: `tccutil`
 /// is given eight seconds to answer, and a sync command spends them frozen.
 #[tauri::command]
-pub async fn repair_permission(
-    grant: window::grants::Grant,
-) -> Res<window::grants::RepairOutcome> {
+pub async fn repair_permission(grant: window::grants::Grant) -> Res<window::grants::RepairOutcome> {
     tauri::async_runtime::spawn_blocking(move || window::grants::repair(grant))
         .await
         .map_err(|e| format!("The repair could not be run: {e}"))
@@ -2361,7 +2461,10 @@ pub fn recording_start<R: Runtime>(
     mode: capture::recorder::RecordMode,
     microphone: bool,
 ) -> Res<String> {
-    let path = runtime.start(mode, microphone)?;
+    let partial_app = app.clone();
+    let path = runtime.start(mode, microphone, move |text| {
+        let _ = partial_app.emit(crate::meeting::MEETING_SYSTEM_PARTIAL_EVENT, text);
+    })?;
     let _ = app.emit(RECORDING_EVENT, runtime.status());
     Ok(path)
 }
@@ -2664,11 +2767,7 @@ pub fn record_usage(
 
 /// Give several commands a starting use count (onboarding favorites).
 #[tauri::command]
-pub fn seed_usage(
-    usage: tauri::State<'_, crate::usage::UsageStore>,
-    ids: Vec<String>,
-    count: u32,
-) {
+pub fn seed_usage(usage: tauri::State<'_, crate::usage::UsageStore>, ids: Vec<String>, count: u32) {
     let now = crate::usage::now_ms();
     for id in ids {
         usage.seed(&id, count, now);

@@ -132,7 +132,11 @@ const HELPER_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(330);
 fn stt_helper_path() -> Option<std::path::PathBuf> {
     // 1. Next to the running executable (Contents/Resources in a macOS bundle).
     if let Ok(exe) = std::env::current_exe() {
-        for relative in ["../Resources/bin/caduceus-stt", "bin/caduceus-stt", "caduceus-stt"] {
+        for relative in [
+            "../Resources/bin/caduceus-stt",
+            "bin/caduceus-stt",
+            "caduceus-stt",
+        ] {
             if let Some(dir) = exe.parent() {
                 let candidate = dir.join(relative);
                 if candidate.is_file() {
@@ -222,8 +226,8 @@ impl SttBackend for SystemNativeStt {
         } else if stt_helper_path().is_some() {
             (
                 true,
-                "Uses Apple's Speech framework. Runs on-device when the language pack is \
-                 installed, so audio never leaves your Mac."
+                "Uses local Parakeet on Apple Silicon, with Apple Speech as the fallback on \
+                 older Macs. Audio stays on your Mac."
                     .to_string(),
             )
         } else {
@@ -409,7 +413,12 @@ mod tests {
         assert_eq!(all.len(), 3);
         assert!(all.iter().any(|a| a.id == "openai_compatible"));
         // The default endpoint is pre-filled, so the HTTP backend is usable.
-        assert!(all.iter().find(|a| a.id == "openai_compatible").unwrap().available);
+        assert!(
+            all.iter()
+                .find(|a| a.id == "openai_compatible")
+                .unwrap()
+                .available
+        );
     }
 
     #[test]

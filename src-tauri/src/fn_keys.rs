@@ -49,7 +49,7 @@ pub fn dispatch_press<R: Runtime>(
             crate::tray::refresh(app);
         }
         FunctionKeyAction::CommandCenter => {
-            if let Err(e) = window::toggle_command_center(app) {
+            if let Err(e) = window::toggle_command_center(app, "hotkey") {
                 log::error!("function key could not open the Command Center: {e}");
             }
         }
@@ -89,12 +89,8 @@ pub fn dispatch_press<R: Runtime>(
                     log::error!("function key shortcut id {id} not found");
                     return;
                 };
-                let outcome = shortcuts::execute_shortcut(
-                    shortcut,
-                    "",
-                    &cfg.command_center.browser,
-                )
-                .await;
+                let outcome =
+                    shortcuts::execute_shortcut(shortcut, "", &cfg.command_center.browser).await;
                 if !outcome.ok {
                     log::error!("function key shortcut failed: {}", outcome.message);
                 }

@@ -73,14 +73,30 @@ export function CommandCenter() {
   // left rather than a blank one that fills in a frame later. Read through a
   // lazy initialiser: `useRef(loadTabs())` would re-read storage on every
   // render and throw the result away.
-  const [restored] = useState(loadTabs);
-  const [tabs, setTabs] = useState<Tab[]>(() => restored?.tabs ?? [homeTab()]);
-  const [activeId, setActiveId] = useState<string>(() => restored?.activeId ?? "");
+  //
+  // Always pair tabs with a real activeId on this first paint. The old path
+  // used `restored?.activeId ?? ""` while still creating a Home tab — so the
+  // bar rendered with nothing selected until a later effect caught up, and
+  // sometimes you opened the window into that empty state.
+  const [restored] = useState(() => {
+    const loaded = loadTabs();
+    if (loaded) return loaded;
+    const fresh = homeTab();
+    return { tabs: [fresh], activeId: fresh.id };
+  });
+  const [tabs, setTabs] = useState<Tab[]>(() => restored.tabs);
+  const [activeId, setActiveId] = useState<string>(() => restored.activeId);
+  const tabsRef = useRef(tabs);
+  const activeIdRef = useRef(activeId);
+  tabsRef.current = tabs;
+  activeIdRef.current = activeId;
   const { toasts, notify } = useToasts();
 
-  // The first tab's id is generated during the initial state, so adopt it once.
+  // Invariant: if there are tabs, exactly one is selected. Covers a stale
+  // activeId (tab closed out from under us) as well as an empty string.
   useEffect(() => {
-    if (!activeId && tabs[0]) setActiveId(tabs[0].id);
+    if (tabs.length === 0) return;
+    if (!tabs.some((tab) => tab.id === activeId)) setActiveId(tabs[0].id);
   }, [activeId, tabs]);
 
   // Granting Screen Recording restarts the app, because macOS only re-reads
@@ -93,11 +109,9 @@ export function CommandCenter() {
   useEffect(() => {
     const resume = takeResume();
     if (!resume) return;
-    setTabs((current) => {
-      const result = openTabIn(current, resume);
-      setActiveId(result.activeId);
-      return result.tabs;
-    });
+    const result = openTabIn(tabsRef.current, resume);
+    setTabs(result.tabs);
+    setActiveId(result.activeId);
   }, []);
 
   // Write them down as they change. Hiding the window keeps React state alive,
@@ -150,27 +164,21 @@ export function CommandCenter() {
   }, [floating]);
 
   const openTab = useCallback((request: Omit<Tab, "id">) => {
-    setTabs((current) => {
-      const result = openTabIn(current, request);
-      if (result.refused) {
-        notify(result.refused, "error");
-        return current;
-      }
-      setActiveId(result.activeId);
-      return result.tabs;
-    });
+    const result = openTabIn(tabsRef.current, request);
+    if (result.refused) {
+      notify(result.refused, "error");
+      return;
+    }
+    setTabs(result.tabs);
+    setActiveId(result.activeId);
   }, [notify]);
 
   const closeTab = useCallback((id: string) => {
-    setTabs((current) => {
-      const result = closeTabIn(current, activeId, id);
-      setActiveId(result.activeId);
-      // Closing the last tab puts the window away rather than leaving an empty
-      // frame; the fresh Home tab is what it reopens on.
-      if (result.emptied) void api.hideCommandCenter();
-      return result.tabs;
-    });
-  }, [activeId]);
+    const result = closeTabIn(tabsRef.current, activeIdRef.current, id);
+    setTabs(result.tabs);
+    setActiveId(result.activeId);
+    if (result.emptied) void api.hideCommandCenter();
+  }, []);
 
   const setTabTitle = useCallback((id: string, title: string | undefined) => {
     setTabs((current) =>
@@ -218,15 +226,30 @@ export function CommandCenter() {
   // calls `open_command_center` with `mode: "clipboard"`, and that must land on
   // clipboard rather than whatever was open before. ⌘T is how you ask for a
   // fresh Home tab deliberately.
+  //
+  // Either way, opening must leave a selected tab. An empty or stale activeId
+  // is how the bar can show tabs with none highlighted.
   useTauriEvent<CommandCenterOpenPayload>(EVENTS.commandCenterOpen, (payload) => {
     const destination = tabForMode(payload?.mode);
-    if (!destination) return;
+    const current = tabsRef.current;
 
-    setTabs((current) => {
+    if (destination) {
       const result = openTabIn(current, destination);
+      setTabs(result.tabs);
       setActiveId(result.activeId);
-      return result.tabs;
-    });
+      return;
+    }
+
+    if (current.length === 0) {
+      const fresh = homeTab();
+      setTabs([fresh]);
+      setActiveId(fresh.id);
+      return;
+    }
+
+    if (!current.some((tab) => tab.id === activeIdRef.current)) {
+      setActiveId(current[0].id);
+    }
   });
 
   // --- keyboard ------------------------------------------------------------

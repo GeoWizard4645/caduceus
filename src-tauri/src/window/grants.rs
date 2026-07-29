@@ -75,6 +75,23 @@ pub struct RepairOutcome {
 }
 
 const BUNDLE_ID: &str = "com.caduceus.desktop";
+/// Live / batch speech helpers. Mic and Speech Recognition prompts attach to
+/// these identifiers, not the main app — repairing only `BUNDLE_ID` left
+/// dictation and meeting transcripts dead after every rebuild.
+const SPEECH_HELPER_ID: &str = "com.caduceus.desktop.speech-helper";
+/// ScreenCaptureKit recorder (`caduceus-record`).
+const RECORDER_ID: &str = "com.caduceus.desktop.recorder";
+
+/// Bundle ids whose TCC entries must be cleared for this grant to actually
+/// take effect on the next attempt.
+fn bundle_ids_for(grant: Grant) -> &'static [&'static str] {
+    match grant {
+        Grant::Accessibility | Grant::Automation => &[BUNDLE_ID],
+        Grant::Microphone => &[BUNDLE_ID, SPEECH_HELPER_ID, RECORDER_ID],
+        Grant::SpeechRecognition => &[BUNDLE_ID, SPEECH_HELPER_ID],
+        Grant::ScreenRecording => &[BUNDLE_ID, RECORDER_ID],
+    }
+}
 
 /// Run a command, killing it if it outstays `limit`.
 fn run_bounded(command: &mut Command, limit: Duration) -> std::io::Result<std::process::Output> {
@@ -106,6 +123,33 @@ fn run_bounded(command: &mut Command, limit: Duration) -> std::io::Result<std::p
     child.wait_with_output()
 }
 
+fn reset_tcc(grant: Grant, bundle_id: &str) -> Result<(), String> {
+    let output = run_bounded(
+        Command::new("tccutil")
+            .arg("reset")
+            .arg(grant.service())
+            .arg(bundle_id),
+        Duration::from_secs(8),
+    );
+    match output {
+        Ok(out) if out.status.success() => Ok(()),
+        Ok(out) => {
+            // Not fatal. `tccutil` fails when there is no entry to remove,
+            // which is the normal state on a first run — and the prompt below
+            // is exactly what that case wants anyway.
+            let detail = String::from_utf8_lossy(&out.stderr);
+            log::debug!(
+                "tccutil reset {} {} said: {}",
+                grant.service(),
+                bundle_id,
+                detail.trim()
+            );
+            Ok(())
+        }
+        Err(e) => Err(e.to_string()),
+    }
+}
+
 /// Delete the stale entry and ask macOS for the grant again.
 #[cfg(target_os = "macos")]
 pub fn repair(grant: Grant) -> RepairOutcome {
@@ -114,31 +158,27 @@ pub fn repair(grant: Grant) -> RepairOutcome {
     // Bounded, like every other subprocess Caduceus starts. `tccutil` talks to
     // the TCC daemon, and a daemon that does not answer would otherwise hold
     // whichever thread is servicing this call indefinitely.
-    let output = run_bounded(
-        Command::new("tccutil").arg("reset").arg(grant.service()).arg(BUNDLE_ID),
-        Duration::from_secs(8),
-    );
+    //
+    // Dictation and meeting notes use helper binaries with their own bundle
+    // ids. Resetting only the main app left those helpers' stale grants
+    // untouched — the Settings switch looked on, the helper never became ready.
+    let mut first_error: Option<String> = None;
+    for id in bundle_ids_for(grant) {
+        if let Err(e) = reset_tcc(grant, id) {
+            first_error.get_or_insert(e);
+        }
+    }
 
-    match output {
-        Ok(out) if out.status.success() => {}
-        Ok(out) => {
-            // Not fatal. `tccutil` fails when there is no entry to remove,
-            // which is the normal state on a first run — and the prompt below
-            // is exactly what that case wants anyway.
-            let detail = String::from_utf8_lossy(&out.stderr);
-            log::debug!("tccutil reset {} said: {}", grant.service(), detail.trim());
-        }
-        Err(e) => {
-            return RepairOutcome {
-                ok: false,
-                message: format!(
-                    "Could not run tccutil ({e}). Switch Caduceus off and then on again in \
-                     System Settings — that does the same thing."
-                ),
-                granted: currently_granted(grant),
-                will_relaunch: false,
-            };
-        }
+    if let Some(e) = first_error {
+        return RepairOutcome {
+            ok: false,
+            message: format!(
+                "Could not run tccutil ({e}). Switch Caduceus off and then on again in \
+                 System Settings — that does the same thing."
+            ),
+            granted: currently_granted(grant),
+            will_relaunch: false,
+        };
     }
 
     let relaunch_note = if will_relaunch {
@@ -162,9 +202,7 @@ pub fn repair(grant: Grant) -> RepairOutcome {
             ok: true,
             granted: trusted,
             message: if trusted {
-                format!(
-                    "Accessibility is on. Everything that needed it works now.{relaunch_note}"
-                )
+                format!("Accessibility is on. Everything that needed it works now.{relaunch_note}")
             } else {
                 format!(
                     "Cleared the stale entry.{relaunch_note} If nothing prompted you, turn Caduceus on in the Accessibility list that opens from System Settings."
@@ -181,20 +219,25 @@ pub fn repair(grant: Grant) -> RepairOutcome {
             ok: true,
             granted,
             message: format!(
-                "Cleared the stale Screen Recording entry and asked macOS again.{relaunch_note} \
-                 If Caduceus was missing from the list, it should appear now — turn it on, then \
-                 let Caduceus restart if capture still fails."
+                "Cleared the stale Screen Recording entry (Caduceus and its recorder helper) \
+                 and asked macOS again.{relaunch_note} If Caduceus was missing from the list, \
+                 it should appear now — turn it on, then let Caduceus restart if capture still fails."
             ),
             will_relaunch,
         };
     }
 
+    let helper_note = match grant {
+        Grant::Microphone | Grant::SpeechRecognition => {
+            " Cleared both Caduceus and its speech helper — try dictation or Meeting notes again so macOS can ask about this build."
+        }
+        _ => " Try the thing that needed this permission again — macOS will ask about the build you are running.",
+    };
+
     RepairOutcome {
         ok: true,
         granted: false,
-        message: format!(
-            "Cleared the old entry.{relaunch_note} Try the thing that needed this permission again — macOS will ask about the build you are running."
-        ),
+        message: format!("Cleared the old entry.{relaunch_note}{helper_note}"),
         will_relaunch,
     }
 }
@@ -270,5 +313,20 @@ mod tests {
             assert!(!service.is_empty());
             assert!(!service.contains(' '), "{service} would be two arguments");
         }
+    }
+
+    #[test]
+    fn mic_and_speech_repair_also_clear_the_speech_helper() {
+        let ids = bundle_ids_for(Grant::Microphone);
+        assert!(ids.contains(&BUNDLE_ID));
+        assert!(ids.contains(&SPEECH_HELPER_ID));
+        assert!(ids.contains(&RECORDER_ID));
+
+        let speech = bundle_ids_for(Grant::SpeechRecognition);
+        assert!(speech.contains(&SPEECH_HELPER_ID));
+        assert!(!speech.contains(&RECORDER_ID));
+
+        let screen = bundle_ids_for(Grant::ScreenRecording);
+        assert!(screen.contains(&RECORDER_ID));
     }
 }

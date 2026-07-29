@@ -5,17 +5,15 @@
  *
  * # The pipeline's own accumulation, and exactly where it stops
  *
- * `voice/live_macos.rs` runs one `SFSpeechRecognizer` task per `LiveSession`
- * — one Start-to-Stop dictation session — and Apple's `partial` results for
- * that task are already cumulative: each one is the *whole session*
- * transcribed so far, not just the newest words (see `CaduceusSTTLive.swift`
- * — a single `SFSpeechAudioBufferRecognitionRequest` fed continuously until
- * `stop`, never replaced mid-session). That is why `setTranscript(text)`
- * looked correct in a quick manual test: for one continuous session, it is.
+ * `voice/live_macos.rs` runs one helper per Start-to-Stop session. On Apple
+ * Silicon that helper transcribes a rolling Parakeet window and stabilizes its
+ * revisions into one cumulative, append-only partial. The Apple Speech fallback
+ * is cumulative too. That is why replacing the current live segment is correct
+ * inside one session.
  *
  * It breaks the moment there is a *second* session, because the helper
  * process has no memory of the first one — a fresh `LiveSession` starts
- * Apple's recogniser from nothing, and its first partial is short and looks
+ * its recogniser from nothing, and its first partial is short and looks
  * nothing like a continuation of what came before. Before this fix, meeting
  * notes had exactly that shape: the recording and the dictation were
  * separate starts (see `MeetingPage.tsx`'s former `toggleTranscription`), so
@@ -54,9 +52,10 @@ import { EVENTS, type VoiceOutcome, type VoiceState } from "@/shared/types";
 
 import { MEETING_CALL_AUDIO_EVENT, type MeetingCallAudioPayload } from "./meetingApi";
 
-/** Precedes the text pulled from the finished recording after the call ends
- *  — see `MeetingPage.tsx`'s module doc for why that half cannot be live. */
-const CALL_AUDIO_LABEL = "— the call, transcribed after it ended —";
+/** System audio is a separately revised stream, so a Parakeet update from the
+ *  call can never overwrite the microphone's live hypothesis. */
+const CALL_AUDIO_LABEL = "— call audio —";
+const MEETING_SYSTEM_PARTIAL_EVENT = "caduceus://meeting-system-partial";
 
 export interface MeetingTranscript {
   /** Every finalised segment plus the live one, joined for display and
@@ -97,6 +96,7 @@ export function useMeetingTranscript(active: boolean, persistKey: string): Meeti
     liveRef.current = text;
     setLiveState(text);
   }, []);
+  const [callLive, setCallLive] = useState("");
 
   const [listening, setListening] = useState(false);
   const [carried, setCarried] = useState(() => readPersisted(persistKey).trim() !== "");
@@ -139,6 +139,12 @@ export function useMeetingTranscript(active: boolean, persistKey: string): Meeti
     finalizeLive(outcome.ok && outcome.routed?.text ? outcome.routed.text : undefined);
   });
 
+  useTauriEvent<string>(MEETING_SYSTEM_PARTIAL_EVENT, (text) => {
+    if (!active) return;
+    setCallLive(text.trim());
+    setCarried(false);
+  });
+
   // A segment produced by the *other* window — whichever one actually
   // called `recording_stop` and awaited the system-audio transcription. See
   // `meetingApi.ts`'s `MEETING_CALL_AUDIO_EVENT` doc for why this has to be
@@ -148,17 +154,23 @@ export function useMeetingTranscript(active: boolean, persistKey: string): Meeti
     if (!active) return;
     const trimmed = text.trim();
     if (!trimmed) return;
-    setSegments((prev) => [...prev, `${CALL_AUDIO_LABEL}\n${trimmed}`]);
+    // The full-file pass is authoritative: replace the rolling call preview
+    // instead of appending a duplicate copy when the meeting ends.
+    setCallLive(trimmed);
     setCarried(false);
   });
 
   const clear = useCallback(() => {
     setSegments([]);
     setLive("");
+    setCallLive("");
     setCarried(false);
   }, [setLive]);
 
-  const transcript = [...segments, live].filter((s) => s.trim() !== "").join("\n\n");
+  const callSegment = callLive ? `${CALL_AUDIO_LABEL}\n${callLive}` : "";
+  const transcript = [...segments, live, callSegment]
+    .filter((s) => s.trim() !== "")
+    .join("\n\n");
 
   return { transcript, listening, carried, clear };
 }

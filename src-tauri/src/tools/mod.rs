@@ -9,45 +9,46 @@
 pub mod apple;
 pub mod awake;
 pub mod birthdays;
+pub mod browser_cmds;
+pub mod browsertabs;
+pub mod calendar;
 pub mod citation;
 pub mod cleaner;
 pub mod cron;
 pub mod csv_clean;
 pub mod dev;
 pub mod devenv;
+pub mod devextra;
+pub mod documents;
+pub mod expander;
 pub mod files;
 pub mod habits;
-pub mod media;
-pub mod native;
+pub mod images;
+pub mod knowledge;
 pub mod markets;
 pub mod markets_widget;
+pub mod media;
+pub mod native;
 pub mod net;
+pub mod promptopt;
 pub mod qr;
+pub mod rates;
 pub mod redactor;
-pub mod semantic;
-pub mod knowledge;
+pub mod regex_tool;
 pub mod routing;
-pub mod browsertabs;
-pub mod browser_cmds;
 pub mod security;
 pub mod security_cmds;
-pub mod expander;
-pub mod images;
-pub mod vision;
-pub mod devextra;
-pub mod calendar;
-pub mod documents;
-pub mod subscriptions;
-pub mod textai;
-pub mod sports;
-pub mod rates;
-pub mod regex_tool;
+pub mod semantic;
 pub mod shapes;
 pub mod sorter;
+pub mod sports;
+pub mod subscriptions;
 pub mod system;
 pub mod text;
+pub mod textai;
 pub mod timekeeping;
 pub mod totp;
+pub mod vision;
 pub mod wallpaper;
 
 use std::path::PathBuf;
@@ -145,7 +146,11 @@ pub fn output_with_timeout(
     let stdout = stdout_reader.join().unwrap_or_default();
     let stderr = stderr_reader.join().unwrap_or_default();
 
-    Ok(std::process::Output { status, stdout, stderr })
+    Ok(std::process::Output {
+        status,
+        stdout,
+        stderr,
+    })
 }
 
 /// The result of a one-shot utility, shaped for a palette toast.
@@ -160,13 +165,25 @@ pub struct ToolOutcome {
 
 impl ToolOutcome {
     pub fn ok(message: impl Into<String>) -> Self {
-        Self { ok: true, message: message.into(), copied: None }
+        Self {
+            ok: true,
+            message: message.into(),
+            copied: None,
+        }
     }
     pub fn err(message: impl Into<String>) -> Self {
-        Self { ok: false, message: message.into(), copied: None }
+        Self {
+            ok: false,
+            message: message.into(),
+            copied: None,
+        }
     }
     pub fn copied(text: String, message: impl Into<String>) -> Self {
-        Self { ok: true, message: message.into(), copied: Some(text) }
+        Self {
+            ok: true,
+            message: message.into(),
+            copied: Some(text),
+        }
     }
 }
 
@@ -209,7 +226,9 @@ pub fn latest_download() -> Result<PathBuf, String> {
             continue;
         }
         let Ok(meta) = entry.metadata() else { continue };
-        let Ok(modified) = meta.modified() else { continue };
+        let Ok(modified) = meta.modified() else {
+            continue;
+        };
         if best.as_ref().is_none_or(|(t, _)| modified > *t) {
             best = Some((modified, path));
         }
@@ -226,8 +245,14 @@ fn dirs_downloads() -> Option<PathBuf> {
 pub fn copy_latest_download() -> ToolOutcome {
     match latest_download() {
         Ok(path) => {
-            let name = path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
-            ToolOutcome::copied(path.to_string_lossy().to_string(), format!("Copied path to {name}"))
+            let name = path
+                .file_name()
+                .map(|n| n.to_string_lossy().to_string())
+                .unwrap_or_default();
+            ToolOutcome::copied(
+                path.to_string_lossy().to_string(),
+                format!("Copied path to {name}"),
+            )
         }
         Err(e) => ToolOutcome::err(e),
     }
@@ -238,7 +263,9 @@ pub fn open_latest_download() -> ToolOutcome {
         Ok(path) => match run("open", &[&path.to_string_lossy()]) {
             Ok(_) => ToolOutcome::ok(format!(
                 "Opened {}",
-                path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default()
+                path.file_name()
+                    .map(|n| n.to_string_lossy().to_string())
+                    .unwrap_or_default()
             )),
             Err(e) => ToolOutcome::err(format!("Could not open it: {e}")),
         },
@@ -267,7 +294,11 @@ pub fn copy_finder_path() -> ToolOutcome {
             let n = paths.lines().filter(|l| !l.trim().is_empty()).count();
             ToolOutcome::copied(
                 paths.trim().to_string(),
-                if n == 1 { "Copied path".into() } else { format!("Copied {n} paths") },
+                if n == 1 {
+                    "Copied path".into()
+                } else {
+                    format!("Copied {n} paths")
+                },
             )
         }
         Ok(_) => ToolOutcome::err("Nothing is selected in Finder."),
@@ -295,7 +326,11 @@ pub fn eject_all_disks() -> ToolOutcome {
         let path = entry.path();
         // The boot volume lives here too and is not ejectable; asking anyway
         // produces a scary error for something the user never meant.
-        if path.symlink_metadata().map(|m| m.file_type().is_symlink()).unwrap_or(false) {
+        if path
+            .symlink_metadata()
+            .map(|m| m.file_type().is_symlink())
+            .unwrap_or(false)
+        {
             continue;
         }
         let name = entry.file_name().to_string_lossy().to_string();
@@ -320,7 +355,9 @@ pub fn eject_all_disks() -> ToolOutcome {
 
 /// Whether `caffeinate` is currently held open by Caduceus.
 pub fn awake_state() -> bool {
-    run("pgrep", &["-f", "caffeinate -dimsu -w"]).map(|s| !s.is_empty()).unwrap_or(false)
+    run("pgrep", &["-f", "caffeinate -dimsu -w"])
+        .map(|s| !s.is_empty())
+        .unwrap_or(false)
 }
 
 /// Toggle "keep this Mac awake".
@@ -379,7 +416,10 @@ pub fn search_files(query: &str, limit: usize) -> Vec<FileHit> {
     if let Some(home) = std::env::var_os("HOME") {
         command.arg("-onlyin").arg(home);
     }
-    command.stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::null());
+    command
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null());
 
     let mut child = match command.spawn() {
         Ok(child) => child,
@@ -472,10 +512,12 @@ pub fn convert_image(path: &str, width: Option<u32>, format: Option<&str>) -> To
         return ToolOutcome::err("That file does not exist.");
     }
 
-    let ext = format.unwrap_or_else(|| {
-        source.extension().and_then(|e| e.to_str()).unwrap_or("png")
-    });
-    let stem = source.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
+    let ext =
+        format.unwrap_or_else(|| source.extension().and_then(|e| e.to_str()).unwrap_or("png"));
+    let stem = source
+        .file_stem()
+        .map(|s| s.to_string_lossy().to_string())
+        .unwrap_or_default();
     let suffix = match width {
         Some(w) => format!("-{w}w"),
         None => "-converted".into(),
@@ -502,7 +544,12 @@ pub fn convert_image(path: &str, width: Option<u32>, format: Option<&str>) -> To
     match run("sips", &refs) {
         Ok(_) => ToolOutcome::copied(
             dest.to_string_lossy().to_string(),
-            format!("Wrote {}", dest.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default()),
+            format!(
+                "Wrote {}",
+                dest.file_name()
+                    .map(|n| n.to_string_lossy().to_string())
+                    .unwrap_or_default()
+            ),
         ),
         Err(e) => ToolOutcome::err(format!("sips said: {e}")),
     }
@@ -522,7 +569,9 @@ mod output_timeout_tests {
     fn output_larger_than_a_pipe_buffer_is_not_mistaken_for_a_hang() {
         let mut command = Command::new("sh");
         // ~2 MB, comfortably past any pipe buffer.
-        command.arg("-c").arg("yes abcdefghijklmnopqrstuvwxyz | head -n 80000");
+        command
+            .arg("-c")
+            .arg("yes abcdefghijklmnopqrstuvwxyz | head -n 80000");
 
         let output = output_with_timeout(&mut command, Duration::from_secs(20), "wedged")
             .expect("a chatty command is not a hung one");
@@ -553,8 +602,8 @@ mod output_timeout_tests {
         let mut command = Command::new("sleep");
         command.arg("30");
 
-        let err = output_with_timeout(&mut command, Duration::from_millis(150), "wedged")
-            .unwrap_err();
+        let err =
+            output_with_timeout(&mut command, Duration::from_millis(150), "wedged").unwrap_err();
         assert_eq!(err, "wedged");
     }
 
@@ -575,7 +624,10 @@ mod tests {
     fn urlencoding_escapes_what_a_url_cannot_carry() {
         assert_eq!(urlencode("hello"), "hello");
         assert_eq!(urlencode("two words"), "two%20words");
-        assert_eq!(urlencode("caf\u{e9}"), "%C3%A9".to_string().replace("%C3%A9", "caf%C3%A9"));
+        assert_eq!(
+            urlencode("caf\u{e9}"),
+            "%C3%A9".to_string().replace("%C3%A9", "caf%C3%A9")
+        );
         assert!(urlencode("a/b?c#d").contains("%2F"));
     }
 

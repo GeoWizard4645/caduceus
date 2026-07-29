@@ -43,3 +43,5 @@ pnpm-debug.log*
 
 # Built by src-tauri/build.rs from the Swift sources in src-tauri/macos/
 src-tauri/bin/
+src-tauri/macos/.build/
+src-tauri/target/swift-parakeet/

@@ -178,8 +178,8 @@ export function Staff() {
     dragging.current = false;
     if (wasDrag || resizing) return;
 
-    // Single click opens the Command Center; double-click also starts dictation
-    // (F1 does the same).
+    // Single click toggles the Command Center; double-click also starts
+    // dictation (F1 does the same).
     //
     // The first click acts immediately rather than waiting out a double-click
     // window. Deferring it made every single click feel ~280ms slow, and there
@@ -192,7 +192,7 @@ export function Staff() {
       return;
     }
 
-    void api.openCommandCenter(undefined, undefined, "staff");
+    void api.toggleCommandCenter("staff");
     doubleClickWindow.current = setTimeout(() => {
       doubleClickWindow.current = null;
     }, DOUBLE_CLICK_MS);

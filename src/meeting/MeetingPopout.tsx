@@ -90,7 +90,7 @@ export function MeetingPopout() {
             <span className="text-ink-faint">
               {session.meetingActive
                 ? "Listening…"
-                : "Start the meeting to begin a live transcript of your microphone."}
+                : "Start the meeting to transcribe your microphone and call audio live."}
             </span>
           )}
         </div>

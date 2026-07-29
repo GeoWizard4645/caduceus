@@ -39,7 +39,7 @@ pub fn build<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
                 ..
             } = event
             {
-                let _ = window::toggle_command_center(tray.app_handle());
+                let _ = window::toggle_command_center(tray.app_handle(), "tray");
             }
         });
 
@@ -49,7 +49,9 @@ pub fn build<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
     const TRAY_PNG: &[u8] = include_bytes!("../icons/tray@2x.png");
     match tauri::image::Image::from_bytes(TRAY_PNG) {
         Ok(image) => {
-            builder = builder.icon(image).icon_as_template(cfg!(target_os = "macos"));
+            builder = builder
+                .icon(image)
+                .icon_as_template(cfg!(target_os = "macos"));
         }
         Err(e) => {
             log::warn!("tray template icon unusable ({e}); falling back to the app icon");
@@ -81,13 +83,29 @@ fn build_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
             &MenuItem::with_id(
                 app,
                 ID_TOGGLE_ORB,
-                if staff_visible { "Hide Staff" } else { "Show Staff" },
+                if staff_visible {
+                    "Hide Staff"
+                } else {
+                    "Show Staff"
+                },
                 true,
                 None::<&str>,
             )?,
-            &MenuItem::with_id(app, ID_CLIPBOARD, "Clipboard History\u{2026}", true, None::<&str>)?,
+            &MenuItem::with_id(
+                app,
+                ID_CLIPBOARD,
+                "Clipboard History\u{2026}",
+                true,
+                None::<&str>,
+            )?,
             &PredefinedMenuItem::separator(app)?,
-            &MenuItem::with_id(app, ID_SETTINGS, "Settings\u{2026}", true, Some("CmdOrCtrl+,"))?,
+            &MenuItem::with_id(
+                app,
+                ID_SETTINGS,
+                "Settings\u{2026}",
+                true,
+                Some("CmdOrCtrl+,"),
+            )?,
             &MenuItem::with_id(app, ID_STOP_AGENTS, "Stop All Agents", true, None::<&str>)?,
             &PredefinedMenuItem::separator(app)?,
             &MenuItem::with_id(app, ID_RESTART, "Restart Caduceus", true, None::<&str>)?,

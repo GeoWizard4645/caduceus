@@ -142,42 +142,222 @@ pub struct ZoneDef {
 /// financial hubs — not the ~400 IANA has, which is more than anyone
 /// searching a "world clock" picker wants to scroll through.
 pub static ZONES: &[ZoneDef] = &[
-    ZoneDef { id: "Pacific/Honolulu", label: "Honolulu", std_offset_minutes: -600, dst: DstRule::None },
-    ZoneDef { id: "America/Anchorage", label: "Anchorage", std_offset_minutes: -540, dst: DstRule::UnitedStates },
-    ZoneDef { id: "America/Los_Angeles", label: "Los Angeles", std_offset_minutes: -480, dst: DstRule::UnitedStates },
-    ZoneDef { id: "America/Denver", label: "Denver", std_offset_minutes: -420, dst: DstRule::UnitedStates },
-    ZoneDef { id: "America/Chicago", label: "Chicago", std_offset_minutes: -360, dst: DstRule::UnitedStates },
-    ZoneDef { id: "America/Mexico_City", label: "Mexico City", std_offset_minutes: -360, dst: DstRule::None },
-    ZoneDef { id: "America/New_York", label: "New York", std_offset_minutes: -300, dst: DstRule::UnitedStates },
-    ZoneDef { id: "America/Toronto", label: "Toronto", std_offset_minutes: -300, dst: DstRule::UnitedStates },
-    ZoneDef { id: "America/Sao_Paulo", label: "São Paulo", std_offset_minutes: -180, dst: DstRule::None },
-    ZoneDef { id: "Atlantic/Azores", label: "Azores", std_offset_minutes: -60, dst: DstRule::EuropeanUnion },
-    ZoneDef { id: "Etc/UTC", label: "UTC", std_offset_minutes: 0, dst: DstRule::None },
-    ZoneDef { id: "Europe/London", label: "London", std_offset_minutes: 0, dst: DstRule::EuropeanUnion },
-    ZoneDef { id: "Europe/Lisbon", label: "Lisbon", std_offset_minutes: 0, dst: DstRule::EuropeanUnion },
-    ZoneDef { id: "Europe/Paris", label: "Paris", std_offset_minutes: 60, dst: DstRule::EuropeanUnion },
-    ZoneDef { id: "Europe/Berlin", label: "Berlin", std_offset_minutes: 60, dst: DstRule::EuropeanUnion },
-    ZoneDef { id: "Europe/Madrid", label: "Madrid", std_offset_minutes: 60, dst: DstRule::EuropeanUnion },
-    ZoneDef { id: "Europe/Rome", label: "Rome", std_offset_minutes: 60, dst: DstRule::EuropeanUnion },
-    ZoneDef { id: "Europe/Athens", label: "Athens", std_offset_minutes: 120, dst: DstRule::EuropeanUnion },
-    ZoneDef { id: "Africa/Cairo", label: "Cairo", std_offset_minutes: 120, dst: DstRule::None },
-    ZoneDef { id: "Africa/Johannesburg", label: "Johannesburg", std_offset_minutes: 120, dst: DstRule::None },
-    ZoneDef { id: "Europe/Moscow", label: "Moscow", std_offset_minutes: 180, dst: DstRule::None },
-    ZoneDef { id: "Asia/Dubai", label: "Dubai", std_offset_minutes: 240, dst: DstRule::None },
-    ZoneDef { id: "Asia/Karachi", label: "Karachi", std_offset_minutes: 300, dst: DstRule::None },
-    ZoneDef { id: "Asia/Kolkata", label: "Mumbai, New Delhi", std_offset_minutes: 330, dst: DstRule::None },
-    ZoneDef { id: "Asia/Dhaka", label: "Dhaka", std_offset_minutes: 360, dst: DstRule::None },
-    ZoneDef { id: "Asia/Bangkok", label: "Bangkok", std_offset_minutes: 420, dst: DstRule::None },
-    ZoneDef { id: "Asia/Jakarta", label: "Jakarta", std_offset_minutes: 420, dst: DstRule::None },
-    ZoneDef { id: "Asia/Shanghai", label: "Shanghai, Beijing", std_offset_minutes: 480, dst: DstRule::None },
-    ZoneDef { id: "Asia/Singapore", label: "Singapore", std_offset_minutes: 480, dst: DstRule::None },
-    ZoneDef { id: "Asia/Hong_Kong", label: "Hong Kong", std_offset_minutes: 480, dst: DstRule::None },
-    ZoneDef { id: "Asia/Tokyo", label: "Tokyo", std_offset_minutes: 540, dst: DstRule::None },
-    ZoneDef { id: "Asia/Seoul", label: "Seoul", std_offset_minutes: 540, dst: DstRule::None },
-    ZoneDef { id: "Australia/Sydney", label: "Sydney", std_offset_minutes: 600, dst: DstRule::SouthernAustralia },
-    ZoneDef { id: "Australia/Melbourne", label: "Melbourne", std_offset_minutes: 600, dst: DstRule::SouthernAustralia },
-    ZoneDef { id: "Australia/Perth", label: "Perth", std_offset_minutes: 480, dst: DstRule::None },
-    ZoneDef { id: "Pacific/Auckland", label: "Auckland", std_offset_minutes: 720, dst: DstRule::NewZealand },
+    ZoneDef {
+        id: "Pacific/Honolulu",
+        label: "Honolulu",
+        std_offset_minutes: -600,
+        dst: DstRule::None,
+    },
+    ZoneDef {
+        id: "America/Anchorage",
+        label: "Anchorage",
+        std_offset_minutes: -540,
+        dst: DstRule::UnitedStates,
+    },
+    ZoneDef {
+        id: "America/Los_Angeles",
+        label: "Los Angeles",
+        std_offset_minutes: -480,
+        dst: DstRule::UnitedStates,
+    },
+    ZoneDef {
+        id: "America/Denver",
+        label: "Denver",
+        std_offset_minutes: -420,
+        dst: DstRule::UnitedStates,
+    },
+    ZoneDef {
+        id: "America/Chicago",
+        label: "Chicago",
+        std_offset_minutes: -360,
+        dst: DstRule::UnitedStates,
+    },
+    ZoneDef {
+        id: "America/Mexico_City",
+        label: "Mexico City",
+        std_offset_minutes: -360,
+        dst: DstRule::None,
+    },
+    ZoneDef {
+        id: "America/New_York",
+        label: "New York",
+        std_offset_minutes: -300,
+        dst: DstRule::UnitedStates,
+    },
+    ZoneDef {
+        id: "America/Toronto",
+        label: "Toronto",
+        std_offset_minutes: -300,
+        dst: DstRule::UnitedStates,
+    },
+    ZoneDef {
+        id: "America/Sao_Paulo",
+        label: "São Paulo",
+        std_offset_minutes: -180,
+        dst: DstRule::None,
+    },
+    ZoneDef {
+        id: "Atlantic/Azores",
+        label: "Azores",
+        std_offset_minutes: -60,
+        dst: DstRule::EuropeanUnion,
+    },
+    ZoneDef {
+        id: "Etc/UTC",
+        label: "UTC",
+        std_offset_minutes: 0,
+        dst: DstRule::None,
+    },
+    ZoneDef {
+        id: "Europe/London",
+        label: "London",
+        std_offset_minutes: 0,
+        dst: DstRule::EuropeanUnion,
+    },
+    ZoneDef {
+        id: "Europe/Lisbon",
+        label: "Lisbon",
+        std_offset_minutes: 0,
+        dst: DstRule::EuropeanUnion,
+    },
+    ZoneDef {
+        id: "Europe/Paris",
+        label: "Paris",
+        std_offset_minutes: 60,
+        dst: DstRule::EuropeanUnion,
+    },
+    ZoneDef {
+        id: "Europe/Berlin",
+        label: "Berlin",
+        std_offset_minutes: 60,
+        dst: DstRule::EuropeanUnion,
+    },
+    ZoneDef {
+        id: "Europe/Madrid",
+        label: "Madrid",
+        std_offset_minutes: 60,
+        dst: DstRule::EuropeanUnion,
+    },
+    ZoneDef {
+        id: "Europe/Rome",
+        label: "Rome",
+        std_offset_minutes: 60,
+        dst: DstRule::EuropeanUnion,
+    },
+    ZoneDef {
+        id: "Europe/Athens",
+        label: "Athens",
+        std_offset_minutes: 120,
+        dst: DstRule::EuropeanUnion,
+    },
+    ZoneDef {
+        id: "Africa/Cairo",
+        label: "Cairo",
+        std_offset_minutes: 120,
+        dst: DstRule::None,
+    },
+    ZoneDef {
+        id: "Africa/Johannesburg",
+        label: "Johannesburg",
+        std_offset_minutes: 120,
+        dst: DstRule::None,
+    },
+    ZoneDef {
+        id: "Europe/Moscow",
+        label: "Moscow",
+        std_offset_minutes: 180,
+        dst: DstRule::None,
+    },
+    ZoneDef {
+        id: "Asia/Dubai",
+        label: "Dubai",
+        std_offset_minutes: 240,
+        dst: DstRule::None,
+    },
+    ZoneDef {
+        id: "Asia/Karachi",
+        label: "Karachi",
+        std_offset_minutes: 300,
+        dst: DstRule::None,
+    },
+    ZoneDef {
+        id: "Asia/Kolkata",
+        label: "Mumbai, New Delhi",
+        std_offset_minutes: 330,
+        dst: DstRule::None,
+    },
+    ZoneDef {
+        id: "Asia/Dhaka",
+        label: "Dhaka",
+        std_offset_minutes: 360,
+        dst: DstRule::None,
+    },
+    ZoneDef {
+        id: "Asia/Bangkok",
+        label: "Bangkok",
+        std_offset_minutes: 420,
+        dst: DstRule::None,
+    },
+    ZoneDef {
+        id: "Asia/Jakarta",
+        label: "Jakarta",
+        std_offset_minutes: 420,
+        dst: DstRule::None,
+    },
+    ZoneDef {
+        id: "Asia/Shanghai",
+        label: "Shanghai, Beijing",
+        std_offset_minutes: 480,
+        dst: DstRule::None,
+    },
+    ZoneDef {
+        id: "Asia/Singapore",
+        label: "Singapore",
+        std_offset_minutes: 480,
+        dst: DstRule::None,
+    },
+    ZoneDef {
+        id: "Asia/Hong_Kong",
+        label: "Hong Kong",
+        std_offset_minutes: 480,
+        dst: DstRule::None,
+    },
+    ZoneDef {
+        id: "Asia/Tokyo",
+        label: "Tokyo",
+        std_offset_minutes: 540,
+        dst: DstRule::None,
+    },
+    ZoneDef {
+        id: "Asia/Seoul",
+        label: "Seoul",
+        std_offset_minutes: 540,
+        dst: DstRule::None,
+    },
+    ZoneDef {
+        id: "Australia/Sydney",
+        label: "Sydney",
+        std_offset_minutes: 600,
+        dst: DstRule::SouthernAustralia,
+    },
+    ZoneDef {
+        id: "Australia/Melbourne",
+        label: "Melbourne",
+        std_offset_minutes: 600,
+        dst: DstRule::SouthernAustralia,
+    },
+    ZoneDef {
+        id: "Australia/Perth",
+        label: "Perth",
+        std_offset_minutes: 480,
+        dst: DstRule::None,
+    },
+    ZoneDef {
+        id: "Pacific/Auckland",
+        label: "Auckland",
+        std_offset_minutes: 720,
+        dst: DstRule::NewZealand,
+    },
 ];
 
 pub fn find_zone(id: &str) -> Option<&'static ZoneDef> {
@@ -189,7 +369,8 @@ fn nth_sunday(year: i32, month: u32, n: u32) -> NaiveDate {
     let first = NaiveDate::from_ymd_opt(year, month, 1).expect("valid calendar month");
     let days_to_first_sunday = (7 - first.weekday().num_days_from_sunday()) % 7;
     let first_sunday = 1 + days_to_first_sunday;
-    NaiveDate::from_ymd_opt(year, month, first_sunday + (n - 1) * 7).expect("Sunday exists in every month")
+    NaiveDate::from_ymd_opt(year, month, first_sunday + (n - 1) * 7)
+        .expect("Sunday exists in every month")
 }
 
 /// The last Sunday of `month`.
@@ -200,7 +381,9 @@ fn last_sunday(year: i32, month: u32) -> NaiveDate {
         NaiveDate::from_ymd_opt(year, month + 1, 1)
     }
     .expect("valid calendar month");
-    let last_day = next_month_first.pred_opt().expect("a month always has a previous day");
+    let last_day = next_month_first
+        .pred_opt()
+        .expect("a month always has a previous day");
     last_day - ChronoDuration::days(last_day.weekday().num_days_from_sunday() as i64)
 }
 
@@ -310,7 +493,10 @@ pub struct ConvertedTime {
 /// The source offset is resolved against the *typed* date, not today's date —
 /// converting a March time needs March's DST state, which may differ from
 /// whatever the offset would be right now.
-pub fn convert(request: &ConvertRequest, target_ids: &[String]) -> Result<Vec<ConvertedTime>, String> {
+pub fn convert(
+    request: &ConvertRequest,
+    target_ids: &[String],
+) -> Result<Vec<ConvertedTime>, String> {
     let source = find_zone(&request.zone_id)
         .ok_or_else(|| format!("“{}” is not a time zone Caduceus knows.", request.zone_id))?;
     let naive = NaiveDateTime::parse_from_str(&request.local_datetime, "%Y-%m-%dT%H:%M")
@@ -328,7 +514,8 @@ pub fn convert(request: &ConvertRequest, target_ids: &[String]) -> Result<Vec<Co
             // guarded against the rare case a conversion lands right on a DST
             // boundary and the first guess is a day off — one correction step
             // is enough because no zone's DST offset ever exceeds an hour.
-            let first_guess = utc + ChronoDuration::minutes(offset_minutes(zone, utc.date()) as i64);
+            let first_guess =
+                utc + ChronoDuration::minutes(offset_minutes(zone, utc.date()) as i64);
             let offset = offset_minutes(zone, first_guess.date());
             let local = utc + ChronoDuration::minutes(offset as i64);
             Ok(ConvertedTime {
@@ -463,9 +650,17 @@ fn phase_minutes(config: &PomodoroConfig, phase: Phase) -> u32 {
 
 fn phase_message(phase: Phase, cycle: u32) -> String {
     match phase {
-        Phase::Work => format!("Break's over — work session {cycle} starting."),
-        Phase::ShortBreak => "Work session done. Take a short break.".to_string(),
-        Phase::LongBreak => "Nice streak — take a long break.".to_string(),
+        Phase::Work => format!(
+            "Pomodoro — break's over; work session {cycle} starting. Stop it in Caduceus → Time → Pomodoro."
+        ),
+        Phase::ShortBreak => {
+            "Pomodoro — work session done. Take a short break. Stop it in Caduceus → Time → Pomodoro."
+                .to_string()
+        }
+        Phase::LongBreak => {
+            "Pomodoro — nice streak; take a long break. Stop it in Caduceus → Time → Pomodoro."
+                .to_string()
+        }
     }
 }
 
@@ -481,9 +676,16 @@ fn advance(config: &PomodoroConfig, phase: Phase, cycle: u32) -> Option<(Phase, 
             if config.total_cycles > 0 && cycle >= config.total_cycles {
                 return None;
             }
-            let long_break = config.cycles_before_long_break > 0
-                && cycle % config.cycles_before_long_break == 0;
-            Some((if long_break { Phase::LongBreak } else { Phase::ShortBreak }, cycle))
+            let long_break =
+                config.cycles_before_long_break > 0 && cycle % config.cycles_before_long_break == 0;
+            Some((
+                if long_break {
+                    Phase::LongBreak
+                } else {
+                    Phase::ShortBreak
+                },
+                cycle,
+            ))
         }
         Phase::ShortBreak | Phase::LongBreak => {
             let next_cycle = cycle + 1;
@@ -576,7 +778,9 @@ impl TimekeepingRuntime {
             return Err("Timers top out at 24 hours.".into());
         }
         if self.timers.lock().iter().filter(|t| !t.completed).count() >= MAX_CONCURRENT_TIMERS {
-            return Err(format!("That is {MAX_CONCURRENT_TIMERS} running timers already — dismiss one first."));
+            return Err(format!(
+                "That is {MAX_CONCURRENT_TIMERS} running timers already — dismiss one first."
+            ));
         }
 
         let id = self.next_timer_id.fetch_add(1, Ordering::SeqCst);
@@ -586,7 +790,13 @@ impl TimekeepingRuntime {
 
         let snapshot = {
             let mut guard = self.timers.lock();
-            guard.push(CountdownTimer { id, name: name.clone(), deadline, total, completed: false });
+            guard.push(CountdownTimer {
+                id,
+                name: name.clone(),
+                deadline,
+                total,
+                completed: false,
+            });
             timer_snapshot(guard.last().expect("just pushed"), Instant::now())
         };
 
@@ -617,7 +827,11 @@ impl TimekeepingRuntime {
 
     pub fn list_timers(&self) -> Vec<TimerSnapshot> {
         let now = Instant::now();
-        self.timers.lock().iter().map(|t| timer_snapshot(t, now)).collect()
+        self.timers
+            .lock()
+            .iter()
+            .map(|t| timer_snapshot(t, now))
+            .collect()
     }
 
     pub fn dismiss_timer(&self, id: u64) {
@@ -679,7 +893,10 @@ impl TimekeepingRuntime {
         if config.long_break_minutes == 0 {
             return Err("Long-break length must be at least a minute.".into());
         }
-        if config.work_minutes > 180 || config.short_break_minutes > 180 || config.long_break_minutes > 180 {
+        if config.work_minutes > 180
+            || config.short_break_minutes > 180
+            || config.long_break_minutes > 180
+        {
             return Err("Three hours is the longest a single phase can run.".into());
         }
 
@@ -697,6 +914,16 @@ impl TimekeepingRuntime {
         });
 
         Self::spawn_pomodoro_reaper(Arc::clone(&self.pomodoro), generation, duration);
+
+        // Announce the start: a session that only notifies at phase boundaries
+        // is easy to forget you began — and then every break alert feels random.
+        notify(
+            "Caduceus",
+            &format!(
+                "Pomodoro started — {mins} min work session 1. Stop it anytime in Time → Pomodoro.",
+                mins = config.work_minutes
+            ),
+        );
 
         Ok(self.pomodoro_status())
     }
@@ -718,19 +945,26 @@ impl TimekeepingRuntime {
     /// with a loop in it, so a `pomodoro_stop` between two phases has nothing
     /// to cancel: the next iteration simply finds no session, or the wrong
     /// generation, and stops quietly.
-    fn spawn_pomodoro_reaper(pomodoro: Arc<Mutex<Option<PomodoroSession>>>, generation: u64, wait: Duration) {
+    fn spawn_pomodoro_reaper(
+        pomodoro: Arc<Mutex<Option<PomodoroSession>>>,
+        generation: u64,
+        wait: Duration,
+    ) {
         tauri::async_runtime::spawn(async move {
             tokio::time::sleep(wait).await;
 
             let outcome = {
                 let mut guard = pomodoro.lock();
-                let Some(session) = guard.as_mut() else { return };
+                let Some(session) = guard.as_mut() else {
+                    return;
+                };
                 if session.generation != generation {
                     return;
                 }
                 match advance(&session.config, session.phase, session.cycle) {
                     Some((phase, cycle)) => {
-                        let duration = Duration::from_secs(phase_minutes(&session.config, phase) as u64 * 60);
+                        let duration =
+                            Duration::from_secs(phase_minutes(&session.config, phase) as u64 * 60);
                         session.phase = phase;
                         session.cycle = cycle;
                         session.duration = duration;
@@ -739,13 +973,17 @@ impl TimekeepingRuntime {
                     }
                     None => {
                         *guard = None;
-                        Some(("Pomodoro complete — nice work.".to_string(), None))
+                        Some((
+                            "Pomodoro complete — nice work. Start another from Caduceus → Time → Pomodoro."
+                                .to_string(),
+                            None,
+                        ))
                     }
                 }
             };
 
             if let Some((message, next_wait)) = outcome {
-                notify("Pomodoro", &message);
+                notify("Caduceus", &message);
                 if let Some(wait) = next_wait {
                     Self::spawn_pomodoro_reaper(pomodoro, generation, wait);
                 }
@@ -764,46 +1002,94 @@ mod tests {
     fn nth_sunday_finds_the_right_calendar_day() {
         // March 2026: the 1st is a Sunday, so the 2nd Sunday (US DST start) is
         // the 8th.
-        assert_eq!(nth_sunday(2026, 3, 1), NaiveDate::from_ymd_opt(2026, 3, 1).unwrap());
-        assert_eq!(nth_sunday(2026, 3, 2), NaiveDate::from_ymd_opt(2026, 3, 8).unwrap());
+        assert_eq!(
+            nth_sunday(2026, 3, 1),
+            NaiveDate::from_ymd_opt(2026, 3, 1).unwrap()
+        );
+        assert_eq!(
+            nth_sunday(2026, 3, 2),
+            NaiveDate::from_ymd_opt(2026, 3, 8).unwrap()
+        );
     }
 
     #[test]
     fn last_sunday_finds_the_final_one_even_when_the_month_ends_midweek() {
         // October 2026 ends on a Saturday, so the last Sunday is the 25th.
-        assert_eq!(last_sunday(2026, 10), NaiveDate::from_ymd_opt(2026, 10, 25).unwrap());
+        assert_eq!(
+            last_sunday(2026, 10),
+            NaiveDate::from_ymd_opt(2026, 10, 25).unwrap()
+        );
     }
 
     #[test]
     fn us_dst_is_active_in_july_and_not_in_january() {
-        assert!(is_dst_active(DstRule::UnitedStates, NaiveDate::from_ymd_opt(2026, 7, 15).unwrap()));
-        assert!(!is_dst_active(DstRule::UnitedStates, NaiveDate::from_ymd_opt(2026, 1, 15).unwrap()));
+        assert!(is_dst_active(
+            DstRule::UnitedStates,
+            NaiveDate::from_ymd_opt(2026, 7, 15).unwrap()
+        ));
+        assert!(!is_dst_active(
+            DstRule::UnitedStates,
+            NaiveDate::from_ymd_opt(2026, 1, 15).unwrap()
+        ));
     }
 
     #[test]
     fn us_dst_boundaries_land_on_the_right_sundays() {
         // 2026: US DST starts Sun Mar 8, ends Sun Nov 1.
-        assert!(!is_dst_active(DstRule::UnitedStates, NaiveDate::from_ymd_opt(2026, 3, 7).unwrap()));
-        assert!(is_dst_active(DstRule::UnitedStates, NaiveDate::from_ymd_opt(2026, 3, 8).unwrap()));
-        assert!(is_dst_active(DstRule::UnitedStates, NaiveDate::from_ymd_opt(2026, 10, 31).unwrap()));
-        assert!(!is_dst_active(DstRule::UnitedStates, NaiveDate::from_ymd_opt(2026, 11, 1).unwrap()));
+        assert!(!is_dst_active(
+            DstRule::UnitedStates,
+            NaiveDate::from_ymd_opt(2026, 3, 7).unwrap()
+        ));
+        assert!(is_dst_active(
+            DstRule::UnitedStates,
+            NaiveDate::from_ymd_opt(2026, 3, 8).unwrap()
+        ));
+        assert!(is_dst_active(
+            DstRule::UnitedStates,
+            NaiveDate::from_ymd_opt(2026, 10, 31).unwrap()
+        ));
+        assert!(!is_dst_active(
+            DstRule::UnitedStates,
+            NaiveDate::from_ymd_opt(2026, 11, 1).unwrap()
+        ));
     }
 
     #[test]
     fn eu_dst_boundaries_land_on_the_last_sundays() {
         // 2026: EU DST starts Sun Mar 29, ends Sun Oct 25.
-        assert!(!is_dst_active(DstRule::EuropeanUnion, NaiveDate::from_ymd_opt(2026, 3, 28).unwrap()));
-        assert!(is_dst_active(DstRule::EuropeanUnion, NaiveDate::from_ymd_opt(2026, 3, 29).unwrap()));
-        assert!(is_dst_active(DstRule::EuropeanUnion, NaiveDate::from_ymd_opt(2026, 10, 24).unwrap()));
-        assert!(!is_dst_active(DstRule::EuropeanUnion, NaiveDate::from_ymd_opt(2026, 10, 25).unwrap()));
+        assert!(!is_dst_active(
+            DstRule::EuropeanUnion,
+            NaiveDate::from_ymd_opt(2026, 3, 28).unwrap()
+        ));
+        assert!(is_dst_active(
+            DstRule::EuropeanUnion,
+            NaiveDate::from_ymd_opt(2026, 3, 29).unwrap()
+        ));
+        assert!(is_dst_active(
+            DstRule::EuropeanUnion,
+            NaiveDate::from_ymd_opt(2026, 10, 24).unwrap()
+        ));
+        assert!(!is_dst_active(
+            DstRule::EuropeanUnion,
+            NaiveDate::from_ymd_opt(2026, 10, 25).unwrap()
+        ));
     }
 
     #[test]
     fn southern_hemisphere_dst_wraps_across_new_year() {
         // Sydney: DST from Oct through the following April.
-        assert!(is_dst_active(DstRule::SouthernAustralia, NaiveDate::from_ymd_opt(2026, 12, 25).unwrap()));
-        assert!(is_dst_active(DstRule::SouthernAustralia, NaiveDate::from_ymd_opt(2026, 1, 15).unwrap()));
-        assert!(!is_dst_active(DstRule::SouthernAustralia, NaiveDate::from_ymd_opt(2026, 7, 15).unwrap()));
+        assert!(is_dst_active(
+            DstRule::SouthernAustralia,
+            NaiveDate::from_ymd_opt(2026, 12, 25).unwrap()
+        ));
+        assert!(is_dst_active(
+            DstRule::SouthernAustralia,
+            NaiveDate::from_ymd_opt(2026, 1, 15).unwrap()
+        ));
+        assert!(!is_dst_active(
+            DstRule::SouthernAustralia,
+            NaiveDate::from_ymd_opt(2026, 7, 15).unwrap()
+        ));
     }
 
     #[test]
@@ -818,20 +1104,32 @@ mod tests {
     #[test]
     fn new_york_is_five_hours_behind_utc_in_winter_and_four_in_summer() {
         let ny = find_zone("America/New_York").unwrap();
-        assert_eq!(offset_minutes(ny, NaiveDate::from_ymd_opt(2026, 1, 1).unwrap()), -300);
-        assert_eq!(offset_minutes(ny, NaiveDate::from_ymd_opt(2026, 7, 1).unwrap()), -240);
+        assert_eq!(
+            offset_minutes(ny, NaiveDate::from_ymd_opt(2026, 1, 1).unwrap()),
+            -300
+        );
+        assert_eq!(
+            offset_minutes(ny, NaiveDate::from_ymd_opt(2026, 7, 1).unwrap()),
+            -240
+        );
     }
 
     #[test]
     fn an_unknown_zone_id_is_named_in_the_error() {
-        let request = ConvertRequest { zone_id: "Nowhere/Imaginary".into(), local_datetime: "2026-07-01T12:00".into() };
+        let request = ConvertRequest {
+            zone_id: "Nowhere/Imaginary".into(),
+            local_datetime: "2026-07-01T12:00".into(),
+        };
         let err = convert(&request, &["Etc/UTC".to_string()]).unwrap_err();
         assert!(err.contains("Nowhere/Imaginary"));
     }
 
     #[test]
     fn a_malformed_datetime_is_refused_rather_than_panicking() {
-        let request = ConvertRequest { zone_id: "Etc/UTC".into(), local_datetime: "not a date".into() };
+        let request = ConvertRequest {
+            zone_id: "Etc/UTC".into(),
+            local_datetime: "not a date".into(),
+        };
         assert!(convert(&request, &["Etc/UTC".to_string()]).is_err());
     }
 
@@ -840,8 +1138,15 @@ mod tests {
         // 5pm EDT (summer, UTC-4) is 9pm UTC, which is 6am the next day in
         // Tokyo (UTC+9) — the canonical "5pm EST in Tokyo" example from the
         // feature brief, using EDT since July is inside US DST.
-        let request = ConvertRequest { zone_id: "America/New_York".into(), local_datetime: "2026-07-15T17:00".into() };
-        let results = convert(&request, &["Asia/Tokyo".to_string(), "Europe/London".to_string()]).unwrap();
+        let request = ConvertRequest {
+            zone_id: "America/New_York".into(),
+            local_datetime: "2026-07-15T17:00".into(),
+        };
+        let results = convert(
+            &request,
+            &["Asia/Tokyo".to_string(), "Europe/London".to_string()],
+        )
+        .unwrap();
 
         let tokyo = results.iter().find(|r| r.id == "Asia/Tokyo").unwrap();
         assert_eq!(tokyo.local_iso, "2026-07-16T06:00");
@@ -855,7 +1160,10 @@ mod tests {
 
     #[test]
     fn converting_to_the_same_zone_is_the_identity() {
-        let request = ConvertRequest { zone_id: "Etc/UTC".into(), local_datetime: "2026-07-15T12:00".into() };
+        let request = ConvertRequest {
+            zone_id: "Etc/UTC".into(),
+            local_datetime: "2026-07-15T12:00".into(),
+        };
         let results = convert(&request, &["Etc/UTC".to_string()]).unwrap();
         assert_eq!(results[0].local_iso, "2026-07-15T12:00");
         assert_eq!(results[0].day_offset, 0);
@@ -937,7 +1245,9 @@ mod tests {
     #[test]
     fn a_timer_over_a_day_is_refused() {
         let runtime = TimekeepingRuntime::new();
-        assert!(runtime.start_timer("Marathon".into(), MAX_TIMER_SECS + 1).is_err());
+        assert!(runtime
+            .start_timer("Marathon".into(), MAX_TIMER_SECS + 1)
+            .is_err());
     }
 
     #[test]
@@ -969,7 +1279,10 @@ mod tests {
         runtime.start_timer("Blink".into(), 1).unwrap();
         std::thread::sleep(Duration::from_millis(30));
         let remaining = runtime.list_timers()[0].remaining_secs;
-        assert!(remaining <= 1, "expected the countdown to have moved, got {remaining}");
+        assert!(
+            remaining <= 1,
+            "expected the countdown to have moved, got {remaining}"
+        );
     }
 
     // --- stopwatch -------------------------------------------------------------
@@ -977,17 +1290,33 @@ mod tests {
     #[test]
     fn elapsed_time_accrues_while_running() {
         let start = Instant::now();
-        let sw = Stopwatch { running: true, accumulated: Duration::ZERO, started_at: Some(start), laps: vec![] };
+        let sw = Stopwatch {
+            running: true,
+            accumulated: Duration::ZERO,
+            started_at: Some(start),
+            laps: vec![],
+        };
         let elapsed = stopwatch_elapsed(&sw, start + Duration::from_secs(5));
         assert_eq!(elapsed, Duration::from_secs(5));
     }
 
     #[test]
     fn elapsed_time_freezes_once_stopped() {
-        let sw = Stopwatch { running: false, accumulated: Duration::from_secs(12), started_at: None, laps: vec![] };
+        let sw = Stopwatch {
+            running: false,
+            accumulated: Duration::from_secs(12),
+            started_at: None,
+            laps: vec![],
+        };
         // "Now" moving on should not move a stopped watch's elapsed time.
-        assert_eq!(stopwatch_elapsed(&sw, Instant::now()), Duration::from_secs(12));
-        assert_eq!(stopwatch_elapsed(&sw, Instant::now() + Duration::from_secs(100)), Duration::from_secs(12));
+        assert_eq!(
+            stopwatch_elapsed(&sw, Instant::now()),
+            Duration::from_secs(12)
+        );
+        assert_eq!(
+            stopwatch_elapsed(&sw, Instant::now() + Duration::from_secs(100)),
+            Duration::from_secs(12)
+        );
     }
 
     #[test]
@@ -1039,7 +1368,13 @@ mod tests {
 
     // --- pomodoro cycle transitions ---------------------------------------------
 
-    fn config(work: u32, short: u32, long: u32, cycles_before_long: u32, total: u32) -> PomodoroConfig {
+    fn config(
+        work: u32,
+        short: u32,
+        long: u32,
+        cycles_before_long: u32,
+        total: u32,
+    ) -> PomodoroConfig {
         PomodoroConfig {
             work_minutes: work,
             short_break_minutes: short,
@@ -1101,7 +1436,10 @@ mod tests {
     fn cycles_before_long_break_of_zero_means_always_short() {
         let cfg = config(25, 5, 15, 0, 0);
         for cycle in 1..=10 {
-            assert_eq!(advance(&cfg, Phase::Work, cycle), Some((Phase::ShortBreak, cycle)));
+            assert_eq!(
+                advance(&cfg, Phase::Work, cycle),
+                Some((Phase::ShortBreak, cycle))
+            );
         }
     }
 

@@ -24,27 +24,14 @@
  * `MeetingControls` renders exactly one Start/Stop pair, and it drives both
  * subsystems every time.
  *
- * # Where the live transcript comes from, and where the honesty ends
+ * # Where the live transcript comes from
  *
- * On the Mac, through Apple's Speech framework — the same on-device recogniser
- * dictation uses — transcribing your **microphone**, live, for as long as the
- * meeting runs (see `src/meeting/useMeetingTranscript.ts` for how a whole
- * meeting's worth of dictation sessions are stitched into one transcript
- * rather than each one erasing the last). Nothing is uploaded, no account is
- * involved, and it works with the network off.
- *
- * The **other side of the call is not live.** Caduceus's two audio-capture
- * paths do not share a pipe: the dictation helper taps the microphone only,
- * and the screen/audio recorder taps system audio only to write it to a file,
- * with no live stream anything downstream can listen to (see
- * `src-tauri/src/meeting.rs`'s module doc for the full technical reasoning,
- * including what a live version would actually require). So instead: once you
- * stop the meeting, Caduceus automatically pulls the system-audio track out of
- * the recording it just finished and transcribes it, and that segment is
- * appended — clearly labelled as after-the-fact — a little while later. That
- * is a real, working half of "both you and computer audio," not the live half
- * the original complaint asked for; the UI below says so rather than
- * implying otherwise.
+ * On Apple Silicon, Parakeet v3 runs locally through FluidAudio. One stream
+ * previews your microphone and another receives ScreenCaptureKit's system
+ * audio, so both sides appear while the meeting is still running. The two
+ * rolling hypotheses are kept separate so revisions do not erase each other.
+ * Once you stop, the saved call track gets a full final pass and replaces the
+ * lower-latency system-audio preview. Nothing is uploaded.
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";

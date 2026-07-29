@@ -21,6 +21,8 @@
 // Protocol (stdout, tab separated):
 //   ready                 capture has started
 //   level <0..1>          rough input level, a few times a second, for a meter
+//   partial <text>         rolling Parakeet transcript of system audio
+//   transcription <text>  local-model preparation status
 //   error <message>
 //   done <path>
 //
@@ -193,6 +195,144 @@ final class Writer {
 }
 
 // ---------------------------------------------------------------------------
+// Live system-audio transcription
+// ---------------------------------------------------------------------------
+
+/// Feeds the meeting's ScreenCaptureKit audio into the sibling Parakeet helper.
+/// The helper owns CoreML inference; this recorder stays responsive and keeps
+/// writing the durable audio file even if model preparation or preview fails.
+@available(macOS 13.0, *)
+final class SystemAudioTranscriber {
+    private let process: Process
+    private let input: FileHandle
+    private let queue = DispatchQueue(label: "com.caduceus.record.live-transcript")
+
+    private init(process: Process, input: FileHandle, output: Pipe) {
+        self.process = process
+        self.input = input
+        DispatchQueue.global(qos: .utility).async {
+            var pending = ""
+            while true {
+                let data = output.fileHandleForReading.availableData
+                guard !data.isEmpty else { break }
+                pending += String(decoding: data, as: UTF8.self)
+                while let newline = pending.firstIndex(of: "\n") {
+                    let line = String(pending[..<newline])
+                    pending.removeSubrange(...newline)
+                    let fields = line.split(separator: "\t", maxSplits: 1).map(String.init)
+                    guard fields.count == 2 else { continue }
+                    switch fields[0] {
+                    case "partial": emit("partial", fields[1])
+                    case "preparing": emit("transcription", fields[1])
+                    case "error": emit("transcription-error", fields[1])
+                    default: break
+                    }
+                }
+            }
+        }
+    }
+
+    static func startIfAvailable() -> SystemAudioTranscriber? {
+        guard ProcessInfo.processInfo.operatingSystemVersion.majorVersion >= 14 else { return nil }
+        let executable = URL(fileURLWithPath: CommandLine.arguments[0])
+            .deletingLastPathComponent()
+            .appendingPathComponent("caduceus-parakeet-live")
+        guard FileManager.default.isExecutableFile(atPath: executable.path) else { return nil }
+
+        let process = Process()
+        let input = Pipe()
+        let output = Pipe()
+        process.executableURL = executable
+        process.arguments = ["--stdin-pcm16"]
+        process.standardInput = input
+        process.standardOutput = output
+        process.standardError = FileHandle.nullDevice
+        do {
+            try process.run()
+            return SystemAudioTranscriber(
+                process: process, input: input.fileHandleForWriting, output: output)
+        } catch {
+            emit("transcription-error", "Could not start live call transcription: \(error.localizedDescription)")
+            return nil
+        }
+    }
+
+    func append(_ sampleBuffer: CMSampleBuffer) {
+        guard let pcm = Self.pcmBuffer(from: sampleBuffer),
+              let samples = Self.samples16k(from: pcm), !samples.isEmpty else { return }
+        queue.async { [input] in
+            var words = samples.map {
+                Int16(max(-1, min(1, $0)) * Float(Int16.max)).littleEndian
+            }
+            let data = words.withUnsafeMutableBytes { Data($0) }
+            try? input.write(contentsOf: data)
+        }
+    }
+
+    func stop() {
+        queue.sync { try? input.close() }
+        if process.isRunning { process.terminate() }
+    }
+
+    private static func pcmBuffer(from sampleBuffer: CMSampleBuffer) -> AVAudioPCMBuffer? {
+        let count = CMSampleBufferGetNumSamples(sampleBuffer)
+        guard count > 0,
+              let description = CMSampleBufferGetFormatDescription(sampleBuffer),
+              let stream = CMAudioFormatDescriptionGetStreamBasicDescription(description),
+              let format = AVAudioFormat(streamDescription: stream),
+              let buffer = AVAudioPCMBuffer(
+                pcmFormat: format, frameCapacity: AVAudioFrameCount(count)) else { return nil }
+        buffer.frameLength = AVAudioFrameCount(count)
+        return CMSampleBufferCopyPCMDataIntoAudioBufferList(
+            sampleBuffer, at: 0, frameCount: Int32(count), into: buffer.mutableAudioBufferList
+        ) == noErr ? buffer : nil
+    }
+
+    private static func samples16k(from buffer: AVAudioPCMBuffer) -> [Float]? {
+        let frames = Int(buffer.frameLength)
+        let channels = Int(buffer.format.channelCount)
+        guard frames > 0, channels > 0 else { return nil }
+        var mono = [Float](repeating: 0, count: frames)
+        if let values = buffer.floatChannelData {
+            for channel in 0..<channels {
+                for frame in 0..<frames { mono[frame] += values[channel][frame] }
+            }
+        } else if let values = buffer.int16ChannelData {
+            for channel in 0..<channels {
+                for frame in 0..<frames {
+                    mono[frame] += Float(values[channel][frame]) / Float(Int16.max)
+                }
+            }
+        } else if let values = buffer.int32ChannelData {
+            for channel in 0..<channels {
+                for frame in 0..<frames {
+                    mono[frame] += Float(values[channel][frame]) / Float(Int32.max)
+                }
+            }
+        } else {
+            return nil
+        }
+        if channels > 1 {
+            let scale = 1 / Float(channels)
+            for index in mono.indices { mono[index] *= scale }
+        }
+
+        let sourceRate = Int(buffer.format.sampleRate.rounded())
+        guard sourceRate != 16_000 else { return mono }
+        let ratio = Double(sourceRate) / 16_000
+        let outputCount = Int(Double(mono.count) / ratio)
+        return (0..<outputCount).map { index in
+            let source = Double(index) * ratio
+            let lower = Int(source)
+            let fraction = Float(source - Double(lower))
+            let a = mono[min(lower, mono.count - 1)]
+            let b = mono[min(lower + 1, mono.count - 1)]
+            return a + (b - a) * fraction
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Capture
 // ---------------------------------------------------------------------------
 
@@ -201,6 +341,7 @@ final class Recorder: NSObject, SCStreamOutput, SCStreamDelegate {
     private var stream: SCStream?
     private var writer: Writer?
     private var engine: AVAudioEngine?
+    private var systemTranscriber: SystemAudioTranscriber?
     private let paused = NSLock()
     private var isPaused = false
     private let stopping = NSLock()
@@ -260,6 +401,10 @@ final class Recorder: NSObject, SCStreamOutput, SCStreamDelegate {
 
         try await stream.startCapture()
         self.stream = stream
+
+        if mode == "audio" {
+            systemTranscriber = SystemAudioTranscriber.startIfAvailable()
+        }
 
         if wantsMic { startMicrophone() }
         emit("ready")
@@ -333,6 +478,7 @@ final class Recorder: NSObject, SCStreamOutput, SCStreamDelegate {
             writer?.append(buffer, to: .video)
         case .audio:
             writer?.append(buffer, to: .system)
+            systemTranscriber?.append(buffer)
         default:
             break
         }
@@ -361,6 +507,8 @@ final class Recorder: NSObject, SCStreamOutput, SCStreamDelegate {
 
         engine?.inputNode.removeTap(onBus: 0)
         engine?.stop()
+        systemTranscriber?.stop()
+        systemTranscriber = nil
         if let stream { try? await stream.stopCapture() }
 
         if writer?.finish() == true {

@@ -246,6 +246,7 @@ export type ToolPageId =
   | "screen-record"
   | "time"
   | "regex"
+  | "prompt-optimizer"
   | "cron"
   | "images"
   | "search"
@@ -3095,6 +3096,29 @@ const PAGE_COMMANDS: CommandDef[] = [
     reach: 58,
     run: ({ actions }) => {
       actions.openTab({ kind: "tool", commandId: "page.regex", title: "Regex tester" });
+      return false;
+    },
+  },
+  {
+    id: "page.prompt-optimizer",
+    title: "Prompt optimiser",
+    detail:
+      "Rewrites a long, unstructured prompt into one shaped for a specific model — Opus 5, GPT-5.6, Gemini Flash and six more — then shows what it cost: how many tokens went, and which of your original requirements survived. The compression runs on this Mac; a local model is used only for the judgement passes, and only if you have one.",
+    group: "text",
+    icon: "✦",
+    keywords: [
+      "prompt", "optimise", "optimize", "optimizer", "optimiser", "compress", "shorten",
+      "tokens", "token", "cost", "cheaper", "rewrite prompt", "prompt engineering",
+      "system prompt", "context", "trim", "condense",
+    ],
+    page: "prompt-optimizer",
+    reach: 62,
+    run: ({ actions }) => {
+      actions.openTab({
+        kind: "tool",
+        commandId: "page.prompt-optimizer",
+        title: "Prompt optimiser",
+      });
       return false;
     },
   },

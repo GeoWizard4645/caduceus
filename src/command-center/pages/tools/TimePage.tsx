@@ -79,6 +79,32 @@ export function TimePage({ active, onSetTitle }: ToolPageProps) {
   useEffect(() => onSetTitle("Time"), [onSetTitle]);
 
   const [tab, setTab] = useState<SubTab>("clock");
+  const [pomodoro, setPomodoro] = useState<api.PomodoroStatus | null>(null);
+  const [stoppingPomodoro, setStoppingPomodoro] = useState(false);
+  // If a session is already running when Time opens, land on Pomodoro so Stop
+  // is obvious — otherwise notifications feel like they came from nowhere.
+  const autoOpenedPomodoro = useRef(false);
+
+  const refreshPomodoro = useCallback(() => {
+    void api.timePomodoroStatus().then((status) => {
+      setPomodoro(status);
+      if (status.running && !autoOpenedPomodoro.current) {
+        autoOpenedPomodoro.current = true;
+        setTab("pomodoro");
+      }
+    });
+  }, []);
+  useEffect(() => refreshPomodoro(), [refreshPomodoro]);
+  useInterval(refreshPomodoro, active ? 1000 : null);
+
+  const stopPomodoro = async () => {
+    setStoppingPomodoro(true);
+    try {
+      setPomodoro(await api.timePomodoroStop());
+    } finally {
+      setStoppingPomodoro(false);
+    }
+  };
 
   // The zone catalogue is shared between the World clock and Converter tabs —
   // fetched once here rather than by each tab, so switching between them
@@ -93,6 +119,8 @@ export function TimePage({ active, onSetTitle }: ToolPageProps) {
   // without polling Rust on every tick.
   useInterval(refreshZones, active ? 5 * 60 * 1000 : null);
 
+  const pomodoroRunning = pomodoro?.running ?? false;
+
   return (
     <div className="flex h-full flex-col">
       <div className="shrink-0 border-b border-line px-5 py-3">
@@ -101,6 +129,25 @@ export function TimePage({ active, onSetTitle }: ToolPageProps) {
           Timers, the stopwatch and the pomodoro keep running even after you close this window —
           they live outside the page, not inside it.
         </p>
+        {pomodoroRunning && pomodoro && (
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-accent/35 bg-accent/10 px-3 py-2">
+            <div className="min-w-0">
+              <p className="text-[13px] font-medium text-ink">
+                Pomodoro running —{" "}
+                {pomodoro.phase ? PHASE_LABEL[pomodoro.phase] : "session"} ·{" "}
+                {formatHms(pomodoro.remainingSecs)}
+              </p>
+              <p className="text-2xs text-ink-mute">
+                Work session {pomodoro.cycle}
+                {pomodoro.totalCycles > 0 ? ` of ${pomodoro.totalCycles}` : ""}
+                . Notifications will keep firing until you stop it.
+              </p>
+            </div>
+            <Button tone="danger" size="sm" onClick={() => void stopPomodoro()} disabled={stoppingPomodoro}>
+              Stop pomodoro
+            </Button>
+          </div>
+        )}
         <div className="row mt-3 flex-wrap gap-2">
           {TABS.map(({ key, label }) => (
             <button
@@ -115,6 +162,7 @@ export function TimePage({ active, onSetTitle }: ToolPageProps) {
               )}
             >
               {label}
+              {key === "pomodoro" && pomodoroRunning ? " · on" : ""}
             </button>
           ))}
         </div>
@@ -125,7 +173,9 @@ export function TimePage({ active, onSetTitle }: ToolPageProps) {
         {tab === "convert" && <ConverterTab zones={zones} />}
         {tab === "timers" && <TimersTab active={active} />}
         {tab === "stopwatch" && <StopwatchTab active={active} />}
-        {tab === "pomodoro" && <PomodoroTab active={active} />}
+        {tab === "pomodoro" && (
+          <PomodoroTab active={active} status={pomodoro} onStatus={setPomodoro} />
+        )}
       </div>
     </div>
   );
@@ -571,22 +621,31 @@ const PHASE_LABEL: Record<api.PomodoroPhase, string> = {
   longBreak: "Long break",
 };
 
-function PomodoroTab({ active }: { active: boolean }) {
-  const [status, setStatus] = useState<api.PomodoroStatus | null>(null);
+function PomodoroTab({
+  active,
+  status,
+  onStatus,
+}: {
+  active: boolean;
+  status: api.PomodoroStatus | null;
+  onStatus: (status: api.PomodoroStatus) => void;
+}) {
   const [workMinutes, setWorkMinutes] = useState(25);
   const [shortBreakMinutes, setShortBreakMinutes] = useState(5);
   const [longBreakMinutes, setLongBreakMinutes] = useState(15);
   const [cyclesBeforeLongBreak, setCyclesBeforeLongBreak] = useState(4);
-  const [totalCycles, setTotalCycles] = useState(8);
+  // Classic four-session day by default — the old default of 8 kept notifying
+  // for hours if Start was pressed once and forgotten.
+  const [totalCycles, setTotalCycles] = useState(4);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  const refresh = useCallback(() => {
-    void api.timePomodoroStatus().then(setStatus);
-  }, []);
-
-  useEffect(() => refresh(), [refresh]);
-  useInterval(refresh, active ? 1000 : null);
+  // Parent already polls while Time is active; refresh once more when this
+  // sub-tab becomes visible so the face is current even if we just switched in.
+  useEffect(() => {
+    if (!active) return;
+    void api.timePomodoroStatus().then(onStatus);
+  }, [active, onStatus]);
 
   const start = async () => {
     setBusy(true);
@@ -598,7 +657,7 @@ function PomodoroTab({ active }: { active: boolean }) {
         cyclesBeforeLongBreak,
         totalCycles,
       });
-      setStatus(next);
+      onStatus(next);
       setError(null);
     } catch (e) {
       setError(api.errorMessage(e));
@@ -610,7 +669,7 @@ function PomodoroTab({ active }: { active: boolean }) {
   const stop = async () => {
     setBusy(true);
     try {
-      setStatus(await api.timePomodoroStop());
+      onStatus(await api.timePomodoroStop());
     } finally {
       setBusy(false);
     }
@@ -624,7 +683,7 @@ function PomodoroTab({ active }: { active: boolean }) {
       description={
         running
           ? undefined
-          : "Configure the cycle, then start it. A notification fires at every work/break transition, so this window never has to be the thing you are watching."
+          : "Press Start only when you want a focus cycle. Caduceus notifies at every work/break change — and keeps doing so after you close this window — until the session finishes or you stop it."
       }
     >
       {running && status ? (

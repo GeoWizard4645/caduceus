@@ -1,8 +1,8 @@
 //! Push-to-talk voice input.
 //!
-//! On macOS with the system STT backend, recording uses Apple's Speech framework
-//! with **live partial transcripts** (`caduceus-stt-live`). Other platforms and
-//! HTTP backends still use cpal batch capture.
+//! On Apple-Silicon macOS with the system STT backend, recording uses local
+//! Parakeet/FluidAudio with **live partial transcripts**. Apple Speech remains
+//! the Intel/older-macOS fallback; HTTP backends still use cpal batch capture.
 
 pub mod recorder;
 pub mod router;
@@ -132,9 +132,9 @@ impl VoiceRuntime {
     pub fn stop(&self) -> Option<StopOutcome> {
         let active = self.active.lock().take()?;
         Some(match active {
-            ActiveRecording::Batch(recording) => StopOutcome::Batch(
-                recording.finish().map_err(|e| e.to_string()),
-            ),
+            ActiveRecording::Batch(recording) => {
+                StopOutcome::Batch(recording.finish().map_err(|e| e.to_string()))
+            }
             #[cfg(target_os = "macos")]
             ActiveRecording::Live(live) => StopOutcome::Live(live.stop()),
         })
@@ -178,10 +178,9 @@ impl VoiceRuntime {
                 self.paused.store(paused, Ordering::SeqCst);
                 Ok(paused)
             }
-            ActiveRecording::Batch(_) => {
-                Err("Pausing needs the on-device speech backend; this recording cannot be held."
-                    .into())
-            }
+            ActiveRecording::Batch(_) => Err(
+                "Pausing needs the on-device speech backend; this recording cannot be held.".into(),
+            ),
         }
     }
 }

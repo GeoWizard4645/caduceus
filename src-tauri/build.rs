@@ -25,6 +25,7 @@ fn build_macos_helpers() {
         b"Helper executables bundled with Caduceus.\n\n\
          caduceus-stt       Transcribe a WAV (batch).\n\
          caduceus-stt-live  Live mic + partial transcripts.\n\
+         caduceus-parakeet-live  MacParakeet-style local live transcription (Apple Silicon).\n\
          caduceus-native    Vision OCR, CoreAudio device switching, colour sampling.\n\
          caduceus-record    Screen and meeting recording, with system audio.\n",
     );
@@ -40,6 +41,7 @@ fn build_macos_helpers() {
         "speech-to-text helper",
         SPEECH_HELPER_ID,
     );
+    build_parakeet_helper(&bin_dir);
     compile_swift(
         &bin_dir,
         "macos/CaduceusSTTLive.swift",
@@ -67,6 +69,114 @@ fn build_macos_helpers() {
         "screen and meeting recorder",
         "com.caduceus.desktop.recorder",
     );
+}
+
+/// Build the Apple-Silicon Parakeet helper through SwiftPM.
+///
+/// FluidAudio/CoreML is Apple-Silicon-only. The existing universal Apple
+/// Speech helper remains in the bundle and is selected as the fallback on
+/// Intel or when this optional build is unavailable.
+fn build_parakeet_helper(bin_dir: &Path) {
+    if std::env::consts::ARCH != "aarch64" {
+        return;
+    }
+
+    let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR");
+    let package_dir = Path::new(&manifest_dir).join("macos");
+    let output = bin_dir.join("caduceus-parakeet-live");
+    // Under `target/` so Tauri's dev watcher (see `.taurignore`) never sees
+    // SwiftPM churn and restart cargo in a loop.
+    let build_path = Path::new(&manifest_dir).join("target").join("swift-parakeet");
+    let module_cache = build_path.join("module-cache");
+    let _ = std::fs::create_dir_all(&module_cache);
+    println!("cargo:rerun-if-changed=macos/Package.swift");
+    println!("cargo:rerun-if-changed=macos/Package.resolved");
+    println!("cargo:rerun-if-changed=macos/ParakeetLive");
+
+    let built = build_path
+        .join("arm64-apple-macosx")
+        .join("release")
+        .join("caduceus-parakeet-live");
+
+    if parakeet_bundle_up_to_date(&output, &package_dir) {
+        return;
+    }
+
+    let status = Command::new("swift")
+        .current_dir(&package_dir)
+        // Keep Swift/Clang caches inside the project. This also makes builds
+        // work in sandboxed CI where ~/.cache and ~/Library/Caches are read-only.
+        .env("CLANG_MODULE_CACHE_PATH", &module_cache)
+        .env("SWIFTPM_MODULECACHE_OVERRIDE", &module_cache)
+        .args([
+            "build",
+            "--build-path",
+        ])
+        .arg(&build_path)
+        .args([
+            "--disable-sandbox",
+            "-c",
+            "release",
+            "--arch",
+            "arm64",
+            "--product",
+            "caduceus-parakeet-live",
+        ])
+        .status();
+
+    if !matches!(status, Ok(value) if value.success()) {
+        println!("cargo:warning=Parakeet helper did not build; Caduceus will use Apple Speech");
+        return;
+    }
+    if std::fs::copy(&built, &output).is_err() {
+        println!("cargo:warning=Parakeet helper built but could not be bundled");
+        return;
+    }
+    seal_helper_signature(&output, "Parakeet live speech helper", SPEECH_HELPER_ID);
+}
+
+fn parakeet_bundle_up_to_date(output: &Path, package_dir: &Path) -> bool {
+    let Ok(out_meta) = std::fs::metadata(output) else {
+        return false;
+    };
+    let Ok(out_time) = out_meta.modified() else {
+        return false;
+    };
+    for path in [
+        package_dir.join("Package.swift"),
+        package_dir.join("Package.resolved"),
+    ] {
+        if path
+            .metadata()
+            .ok()
+            .and_then(|m| m.modified().ok())
+            .is_some_and(|t| t > out_time)
+        {
+            return false;
+        }
+    }
+    let parakeet_src = package_dir.join("ParakeetLive");
+    if newest_mtime(&parakeet_src).is_some_and(|t| t > out_time) {
+        return false;
+    }
+    true
+}
+
+fn newest_mtime(root: &Path) -> Option<std::time::SystemTime> {
+    let mut newest: Option<std::time::SystemTime> = None;
+    let mut stack = vec![root.to_path_buf()];
+    while let Some(dir) = stack.pop() {
+        let read = std::fs::read_dir(&dir).ok()?;
+        for entry in read.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                stack.push(path);
+            } else if let Ok(t) = entry.metadata().and_then(|m| m.modified()) {
+                newest = Some(newest.map_or(t, |n: std::time::SystemTime| n.max(t)));
+            }
+        }
+    }
+    newest
 }
 
 /// Signing identifier for the helpers that ask for microphone and speech access.
@@ -131,7 +241,10 @@ fn compile_swift(
     // recording were all dead there.
     let mut slices = Vec::new();
     let mut built_any = false;
-    for (arch, triple) in [("arm64", "arm64-apple-macos11"), ("x86_64", "x86_64-apple-macos11")] {
+    for (arch, triple) in [
+        ("arm64", "arm64-apple-macos11"),
+        ("x86_64", "x86_64-apple-macos11"),
+    ] {
         let slice = output.with_extension(arch);
         match compile_slice(&source, &slice, triple, &helper_plist) {
             Ok(()) => {
@@ -175,7 +288,11 @@ fn compile_swift(
 
     println!(
         "cargo:warning=built macOS {label} ({output_name}, {})",
-        if slices.len() > 1 { "universal" } else { "this architecture only" }
+        if slices.len() > 1 {
+            "universal"
+        } else {
+            "this architecture only"
+        }
     );
     // Signed after lipo: merging rewrites the file and would invalidate a
     // signature applied to either slice.
@@ -190,7 +307,12 @@ fn compile_slice(
     helper_plist: &Path,
 ) -> Result<(), String> {
     let mut cmd = Command::new("swiftc");
-    cmd.arg("-O").arg("-target").arg(target).arg("-o").arg(output).arg(source);
+    cmd.arg("-O")
+        .arg("-target")
+        .arg(target)
+        .arg("-o")
+        .arg(output)
+        .arg(source);
 
     if helper_plist.is_file() {
         for arg in [
@@ -209,7 +331,12 @@ fn compile_slice(
 
     match cmd.output() {
         Ok(out) if out.status.success() => Ok(()),
-        Ok(out) => Err(String::from_utf8_lossy(&out.stderr).trim().lines().last().unwrap_or("swiftc failed").to_string()),
+        Ok(out) => Err(String::from_utf8_lossy(&out.stderr)
+            .trim()
+            .lines()
+            .last()
+            .unwrap_or("swiftc failed")
+            .to_string()),
         Err(e) => Err(e.to_string()),
     }
 }

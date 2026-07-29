@@ -44,7 +44,7 @@ export function VoiceTab({ draft, info }: { draft: Draft; info: RuntimeInfo | nu
     <>
       <Section
         title="Dictation"
-        description="Live transcription through macOS: AVAudioEngine captures your voice locally; Apple's Speech framework turns it into text in the Command Center. ScreenCaptureKit is used for system audio when you record the screen — not during ordinary dictation."
+        description="Live local transcription on macOS: AVAudioEngine captures your voice and Parakeet turns it into text continuously on Apple Silicon. Apple Speech remains the fallback on older Macs."
       >
         <Toggle
           label="Enable voice input"
@@ -56,7 +56,7 @@ export function VoiceTab({ draft, info }: { draft: Draft; info: RuntimeInfo | nu
         <div className="mt-4 grid grid-cols-2 gap-5">
           <Field
             label="Push-to-talk key (hold)"
-            hint="Optional: hold this key instead of tap-to-toggle. Same AVAudioEngine + Speech stack as F1."
+            hint="Optional: hold this key instead of tap-to-toggle. Uses the same live local transcription as F1."
           >
             <HotkeyInput
               value={voice.pushToTalkHotkey}

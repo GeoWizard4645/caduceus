@@ -255,5 +255,8 @@ function blankBackend(id: string): BackendConfig {
     supportsComputerUse: false,
     extraHeaders: [],
     timeoutSecs: 600,
+    // Null leaves the server's own default alone. Callers that know their
+    // request is mechanical set it themselves — see `tools::promptopt`.
+    reasoningEffort: null,
   };
 }

@@ -17,45 +17,14 @@
 //! both commands by name, and reachable from the palette via `page.meeting`
 //! (see `src/command-center/pages/tools/MeetingPage.tsx`).
 //!
-//! # Why system audio is not transcribed live — the honest answer
+//! # Live system audio and final accuracy
 //!
-//! The product complaint this module exists to fix says "live transcript is
-//! both you and computer audio." That is achievable in principle but not
-//! inside this task's boundaries, and shipping a UI that *claims* it is true
-//! when it is not would be worse than shipping the honest, smaller thing. The
-//! evidence:
-//!
-//! * `voice/live_macos.rs` + `macos/CaduceusSTTLive.swift` tap
-//!   `AVAudioEngine.inputNode` — the microphone, and nothing else — and feed
-//!   it to one `SFSpeechAudioBufferRecognitionRequest` for the life of a
-//!   session. There is no second input anywhere in that path.
-//! * `capture/recorder.rs` + `macos/CaduceusRecorder.swift` tap
-//!   ScreenCaptureKit's system-audio stream, but only to hand sample buffers
-//!   to an `AVAssetWriter` — a file, not a recogniser. Its stdout protocol is
-//!   `ready` / `level` / `error` / `done`; it never hands audio samples to
-//!   anything downstream, so there is nothing here to intercept even if this
-//!   module wanted to.
-//!
-//! Making system audio live would mean a genuinely new Swift helper: open a
-//! second `SFSpeechRecognizer` task and feed it from an `SCStream` audio
-//! callback the same way `CaduceusSTTLive.swift` feeds one from the mic, then
-//! merge the two partial streams by wall-clock time in the UI. That is a
-//! real, buildable design — not a dead end — but it means touching
-//! `capture/` and `voice/` and standing up new build/signing/bundling
-//! plumbing for a second binary, all of which this task was explicitly told
-//! to leave alone.
-//!
-//! So this ships the fallback the task's own brief allowed for: the
-//! microphone stays live, unmodified, driven from the frontend exactly as it
-//! already was; once the meeting recording stops, the system-audio *track*
-//! of the finished file — kept as a genuinely separate track from the mic by
-//! `CaduceusRecorder.swift`'s `Writer`, see the comment on
-//! [`meeting_transcribe_system_audio`] — is pulled out with `afconvert` (a
-//! binary every Mac ships, not a new dependency) and handed to the same
-//! batch speech backend the rest of Caduceus already uses for everything
-//! that is not live dictation. The frontend must say plainly that this half
-//! arrives after the call ends, not during it — see `MeetingPage.tsx`'s
-//! own module doc for the exact wording, and do not soften it.
+//! `CaduceusRecorder.swift` now sends ScreenCaptureKit's system-audio samples
+//! to the Parakeet helper while it writes the durable recording. Its rolling
+//! preview is emitted here as a separate source from microphone dictation, so
+//! revisions to one speaker cannot erase the other. At Stop, the saved system
+//! track still takes the existing full-file transcription path: the live text
+//! is for immediacy, while the final pass is authoritative for accuracy.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -72,6 +41,9 @@ use crate::settings::SettingsManager;
 /// there is only ever one meeting to be looking at, so this is a fixed
 /// label rather than `widgets.rs`'s `widget-<uuid>` scheme.
 pub const MEETING_POPOUT_WINDOW: &str = "meeting-popout";
+
+/// Rolling Parakeet transcript from ScreenCaptureKit's system-audio stream.
+pub const MEETING_SYSTEM_PARTIAL_EVENT: &str = "caduceus://meeting-system-partial";
 
 /// The Vite entry point for the pop-out. See `vite.config.ts` and
 /// `meeting.html` at the repo root — the same one-HTML-file-per-surface

@@ -123,8 +123,9 @@ export const STALE_GRANT_EXPLANATION =
   "Already switched on and Caduceus still says no? That is what happens after an " +
   "update. macOS files the permission under the app's signature, and Caduceus is " +
   "not signed with an Apple certificate — so every new build looks like a different " +
-  "app to it, even though the switch stays where you left it. Repairing it clears " +
-  "the old entry and asks again for the build you are running.";
+  "app to it, even though the switch stays where you left it. Dictation and Meeting " +
+  "notes also use a speech helper with its own entry. Repairing clears Caduceus and " +
+  "that helper, then asks again for the build you are running.";
 
 /**
  * The canonical sentence for each wall.

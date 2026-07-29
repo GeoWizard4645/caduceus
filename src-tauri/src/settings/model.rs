@@ -164,8 +164,8 @@ pub struct PersonalizationProfile {
 
 /// Keys exposed in Settings → General → Function keys.
 pub const FUNCTION_KEY_LABELS: &[&str] = &[
-    "F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8", "F9", "F10", "F11", "F12", "F13", "F14",
-    "F15", "F16", "F17", "F18", "F19", "F20",
+    "F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8", "F9", "F10", "F11", "F12", "F13", "F14", "F15",
+    "F16", "F17", "F18", "F19", "F20",
 ];
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -648,6 +648,20 @@ pub struct BackendConfig {
     /// Request timeout in seconds. Agent tasks that drive the screen legitimately
     /// take minutes, so this is generous by default.
     pub timeout_secs: u64,
+    /// `reasoning_effort`, passed through to servers that understand it, or
+    /// `None` to leave the server's own default alone.
+    ///
+    /// This exists because a small *reasoning* model is a trap for any caller
+    /// doing short mechanical work. Asked to compress one paragraph,
+    /// `qwen3.5:2b` spends its entire completion budget thinking, returns empty
+    /// content with `finish_reason: length`, and takes twenty-two seconds to do
+    /// it. Setting this to `"none"` on the same request returns real content in
+    /// seven. Nothing in the UI sets it — it is for code that knows its call is
+    /// mechanical and wants to say so, such as `tools::promptopt`.
+    ///
+    /// Sent only when set, because a server that does not recognise the field
+    /// is likelier to reject the request than to ignore it.
+    pub reasoning_effort: Option<String>,
 }
 
 impl Default for BackendConfig {
@@ -665,6 +679,7 @@ impl Default for BackendConfig {
             supports_computer_use: false,
             extra_headers: Vec::new(),
             timeout_secs: 600,
+            reasoning_effort: None,
         }
     }
 }

@@ -31,6 +31,7 @@ import { ImagesPage } from "./ImagesPage";
 import { MeetingPage } from "./MeetingPage";
 import { PermissionsSetupPage } from "./PermissionsSetupPage";
 import { ProcessesPage } from "./ProcessesPage";
+import { PromptOptimizerPage } from "./PromptOptimizerPage";
 import { QrPage } from "./QrPage";
 import { RegexPage } from "./RegexPage";
 import { ScreenRecordPage } from "./ScreenRecordPage";
@@ -61,6 +62,7 @@ export const TOOL_PAGES: Record<ToolPageId, ComponentType<ToolPageProps>> = {
   security: SecurityPage,
   time: TimePage,
   regex: RegexPage,
+  "prompt-optimizer": PromptOptimizerPage,
   cron: CronPage,
   images: ImagesPage,
   search: SearchPage,

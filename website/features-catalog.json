@@ -1269,6 +1269,10 @@
           "detail": "Finds emails, phone numbers, Social Security numbers, credit card numbers and IP addresses in text and replaces each with a placeholder. Runs entirely on this Mac — nothing is sent anywhere."
         },
         {
+          "name": "Prompt optimiser",
+          "detail": "Rewrites a long, unstructured prompt into one shaped for a specific model — Opus 5, GPT-5.6, Gemini Flash and six more — then shows what it cost: how many tokens went, and which of your original requirements survived. The compression runs on this Mac; a local model is used only for the judgement passes, and only if you have one."
+        },
+        {
           "name": "Lorem ipsum",
           "detail": "Three sentences of placeholder text."
         },

@@ -220,7 +220,7 @@ const TUTORIALS: Tutorial[] = [
     body: ({ draft, settings, goTo }) => (
       <>
         <p>
-          Dictation uses AVAudioEngine and on-device Speech on macOS. Press{" "}
+          Dictation uses AVAudioEngine and local Parakeet transcription on Apple Silicon. Press{" "}
           <Kbd>F1</Kbd> or double-click the staff to start and stop, or hold your
           push-to-talk key. Keyword groups route the transcript: “search” to the web,
           “clipboard” to history, and so on.

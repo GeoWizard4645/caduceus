@@ -10,13 +10,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AgentPanel } from "@/command-center/AgentPanel";
 import * as api from "@/shared/api";
 import { useSettings, useTauriEvent } from "@/shared/hooks";
-import type { ChatMessage, Conversation, Settings } from "@/shared/types";
+import type { ChatChunk, ChatMessage, Conversation, Settings } from "@/shared/types";
 import type { Tab } from "@/shared/tabs";
 import { EVENTS } from "@/shared/types";
 import { Spinner, cx } from "@/shared/ui";
 
 import { attachmentsToPrompt, filesToAttachments, type PickedAttachment } from "./chatAttachments";
-import { Thread } from "./Thread";
+import { Thread, type StreamStatus } from "./Thread";
 import { type ChatMode, useChatModels } from "./useChatModels";
 import { CaduceusMark } from "@/shared/CaduceusMark";
 
@@ -63,6 +63,7 @@ export function Chat({
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [draft, setDraft] = useState("");
   const [pending, setPending] = useState<string | null>(null);
+  const [stream, setStream] = useState<StreamStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [flash, setFlash] = useState<string | null>(null);
   const [agentSession, setAgentSession] = useState<{ id: string; task: string } | null>(null);
@@ -126,11 +127,47 @@ export function Chat({
     }
   });
 
+  // Live tokens from Rust while chat_ask is in flight. Conversation id may
+  // only become known on the Started event (new thread), so we accept chunks
+  // for whichever turn we currently have pending.
+  useTauriEvent<ChatChunk>(EVENTS.chatChunk, (chunk) => {
+    if (!pending) return;
+    switch (chunk.type) {
+      case "started":
+        setActiveId(chunk.conversationId);
+        setStream({
+          text: "",
+          startedAt: Date.now(),
+          active: true,
+        });
+        break;
+      case "delta":
+        setStream((current) => ({
+          text: (current?.text ?? "") + chunk.text,
+          startedAt: current?.startedAt ?? Date.now(),
+          usage: current?.usage,
+          active: true,
+        }));
+        break;
+      case "done":
+        setStream({
+          text: chunk.text,
+          startedAt: Date.now() - chunk.elapsedMs,
+          usage: chunk.usage,
+          active: false,
+        });
+        break;
+      case "error":
+        setStream(null);
+        break;
+    }
+  });
+
   useEffect(() => {
     if (activeId == null && conversations.length > 0) setActiveId(conversations[0].id);
   }, [conversations, activeId]);
 
-  const showGreeting = messages.length === 0 && !pending && !error && !agentSession;
+  const showGreeting = messages.length === 0 && !pending && !error && !agentSession && !stream;
 
   const modelLabel = useMemo(() => {
     const row = choices.find((c) => c.backendId === activeBackendId && !c.connect);
@@ -173,13 +210,22 @@ export function Chat({
     }
 
     setPending(full);
+    setStream({ text: "", startedAt: Date.now(), active: true });
     try {
       const reply = await api.chatAsk(full, activeId);
       setActiveId(reply.conversationId);
+      setStream({
+        text: reply.text,
+        startedAt: Date.now() - reply.elapsedMs,
+        usage: reply.usage,
+        active: false,
+      });
       await loadMessages(reply.conversationId);
       await loadConversations();
+      setStream(null);
     } catch (e) {
       setError(String(e));
+      setStream(null);
     } finally {
       setPending(null);
       inputRef.current?.focus();
@@ -372,6 +418,7 @@ export function Chat({
                   className="flex-1 text-ink"
                   messages={messages}
                   pending={pending}
+                  stream={stream}
                   error={error}
                   onCopy={(t) => void navigator.clipboard.writeText(t).then(() => say("Copied."))}
                   onSaveToNotes={(t) =>

@@ -11,12 +11,15 @@ pub use store::{ChatMessage, ChatStore, Conversation, Role, DB_FILE};
 
 use serde::Serialize;
 
-use crate::agent::{self, AgentError, AgentResult, Message};
+use crate::agent::{self, AgentError, AgentResult, Message, Usage};
 use crate::settings::SettingsManager;
 
 /// Emitted app-wide when a thread gains a turn or is deleted, so the palette
 /// and the chat window stay in step without polling.
 pub const CHAT_CHANGED_EVENT: &str = "caduceus://chat-changed";
+
+/// Live tokens for the chat UI while a reply is being generated.
+pub const CHAT_CHUNK_EVENT: &str = "caduceus://chat-chunk";
 
 /// What `chat_ask` hands back: the reply plus the thread it landed in, since
 /// the caller may not have known which thread it was continuing.
@@ -25,6 +28,31 @@ pub const CHAT_CHANGED_EVENT: &str = "caduceus://chat-changed";
 pub struct ChatReply {
     pub conversation_id: i64,
     pub text: String,
+    pub model: String,
+    pub usage: Option<Usage>,
+    pub elapsed_ms: u64,
+}
+
+/// One event while a reply is streaming into the chat UI.
+#[derive(Debug, Clone, Serialize)]
+#[serde(tag = "type", rename_all = "camelCase")]
+pub enum ChatChunk {
+    /// The request has been accepted; the timer can start.
+    Started { conversation_id: i64 },
+    /// Fresh assistant text (append).
+    Delta { conversation_id: i64, text: String },
+    /// The turn finished successfully.
+    Done {
+        conversation_id: i64,
+        text: String,
+        model: String,
+        usage: Option<Usage>,
+        elapsed_ms: u64,
+    },
+    Error {
+        conversation_id: i64,
+        message: String,
+    },
 }
 
 /// How many past turns to send with a new question.
@@ -39,14 +67,20 @@ const HISTORY_TURNS: usize = 20;
 ///
 /// Both sides of the exchange are persisted: the question before the request,
 /// so a reply that never arrives still leaves a record of what was asked, and
-/// the answer after.
-pub async fn ask(
+/// the answer after. `on_chunk` receives started / delta / done (or error)
+/// events so the UI can type as tokens arrive.
+pub async fn ask_streaming<F>(
     store: &ChatStore,
     settings: &SettingsManager,
     conversation_id: i64,
     prompt: &str,
-) -> AgentResult<String> {
+    mut on_chunk: F,
+) -> AgentResult<ChatReply>
+where
+    F: FnMut(ChatChunk) + Send,
+{
     let _ = store.append(conversation_id, Role::User, prompt);
+    on_chunk(ChatChunk::Started { conversation_id });
 
     let history = store
         .messages(conversation_id)
@@ -61,9 +95,56 @@ pub async fn ask(
         })
         .collect::<Vec<_>>();
 
-    let response = agent::chat_with_history(settings, history).await?;
-    let _ = store.append(conversation_id, Role::Assistant, &response.text);
-    Ok(response.text)
+    let started = std::time::Instant::now();
+    let result = agent::chat_with_history_streaming(settings, history, |delta| {
+        on_chunk(ChatChunk::Delta {
+            conversation_id,
+            text: delta.to_string(),
+        });
+    })
+    .await;
+
+    let elapsed_ms = started.elapsed().as_millis() as u64;
+
+    match result {
+        Ok(response) => {
+            let _ = store.append(conversation_id, Role::Assistant, &response.text);
+            let reply = ChatReply {
+                conversation_id,
+                text: response.text.clone(),
+                model: response.model.clone(),
+                usage: response.usage.clone(),
+                elapsed_ms,
+            };
+            on_chunk(ChatChunk::Done {
+                conversation_id,
+                text: response.text,
+                model: response.model,
+                usage: response.usage,
+                elapsed_ms,
+            });
+            Ok(reply)
+        }
+        Err(error) => {
+            on_chunk(ChatChunk::Error {
+                conversation_id,
+                message: error.user_message(),
+            });
+            Err(error)
+        }
+    }
+}
+
+/// Non-streaming wrapper for callers that only need the final string
+/// (e.g. the palette's one-shot `/` path when it does not listen for chunks).
+pub async fn ask(
+    store: &ChatStore,
+    settings: &SettingsManager,
+    conversation_id: i64,
+    prompt: &str,
+) -> AgentResult<String> {
+    let reply = ask_streaming(store, settings, conversation_id, prompt, |_| {}).await?;
+    Ok(reply.text)
 }
 
 /// The thread a bare `/` should continue: the most recent one, or a new one.

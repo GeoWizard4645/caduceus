@@ -24,7 +24,9 @@ pub mod null;
 pub mod openai;
 pub mod types;
 
-pub use backend::{AgentBackend, AgentLoopContext, ApprovalAsker, ApprovalGate, CancelToken, StepSink};
+pub use backend::{
+    AgentBackend, AgentLoopContext, ApprovalAsker, ApprovalGate, CancelToken, StepSink,
+};
 /// Re-exported so other subsystems (e.g. speech-to-text) can render provider
 /// error bodies the same way.
 pub use http::extract_error_message as http_error_message;
@@ -224,6 +226,33 @@ pub async fn chat_with_history(
     backend_for(config.kind).chat(messages, &config).await
 }
 
+/// Like [`chat_with_history`], but feeds `on_delta` as tokens arrive when the
+/// resolved backend can stream (OpenAI-compatible / Ollama). Hermes and Null
+/// still answer in one shot — `on_delta` then fires once with the full text.
+pub async fn chat_with_history_streaming<F>(
+    settings: &SettingsManager,
+    messages: Vec<Message>,
+    mut on_delta: F,
+) -> AgentResult<AgentResponse>
+where
+    F: FnMut(&str) + Send,
+{
+    let snapshot = settings.get();
+    let prompt = latest_user_content(&messages);
+    let config = resolve_chat_backend(&snapshot, prompt)?;
+
+    match config.kind {
+        BackendKind::OpenAiCompatible => openai::stream_chat(messages, &config, on_delta).await,
+        other => {
+            let response = backend_for(other).chat(messages, &config).await?;
+            if !response.text.is_empty() {
+                on_delta(&response.text);
+            }
+            Ok(response)
+        }
+    }
+}
+
 /// The text of the most recent [`Role::User`] message, or `""` if there is
 /// none (e.g. a malformed all-system/assistant history) — classification on
 /// an empty string is well-defined (see `routing::classify`'s tests) and
@@ -387,7 +416,11 @@ mod tests {
 
     #[test]
     fn every_backend_kind_resolves_to_an_implementation() {
-        for kind in [BackendKind::Null, BackendKind::OpenAiCompatible, BackendKind::Hermes] {
+        for kind in [
+            BackendKind::Null,
+            BackendKind::OpenAiCompatible,
+            BackendKind::Hermes,
+        ] {
             let b = backend_for(kind);
             assert!(!b.id().is_empty());
             assert!(!b.display_name().is_empty());
@@ -426,7 +459,11 @@ mod tests {
         // Deleting Hermes must leave something selectable rather than an empty
         // dropdown, so every AI code path still resolves.
         let s = Settings::default();
-        assert!(s.agents.backends.iter().any(|b| b.kind == BackendKind::Null));
+        assert!(s
+            .agents
+            .backends
+            .iter()
+            .any(|b| b.kind == BackendKind::Null));
     }
 
     #[test]
