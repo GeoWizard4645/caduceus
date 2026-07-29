@@ -28,7 +28,18 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import * as api from "@/shared/api";
-import { Button, Callout, Field, Section, Select, Spinner, TextArea, Toggle, cx } from "@/shared/ui";
+import {
+  Button,
+  Callout,
+  Field,
+  NumberInput,
+  Section,
+  Select,
+  Spinner,
+  TextArea,
+  Toggle,
+  cx,
+} from "@/shared/ui";
 import type { ToolPageProps } from "../ToolPage";
 
 /** Grouped so the dropdown reads as families rather than as nine flat names. */
@@ -67,6 +78,11 @@ export function PromptOptimizerPage({ onSetTitle }: ToolPageProps) {
   const [target, setTarget] = useState<api.TargetModel>("opus5");
   const [level, setLevel] = useState<api.OptimizeLevel>("balanced");
   const [useModel, setUseModel] = useState(true);
+  // Off by default: this is the one control that changes what the prompt asks
+  // for rather than how it says it, so it is never applied without being asked
+  // for. It is also the largest saving available — see the hint under it.
+  const [capAnswer, setCapAnswer] = useState(false);
+  const [capWords, setCapWords] = useState(200);
 
   // What the toggle would actually do. Resolved once when the page opens: a
   // switch labelled "use a local model" is unanswerable without knowing which
@@ -122,7 +138,13 @@ export function PromptOptimizerPage({ onSetTitle }: ToolPageProps) {
     setError(null);
     setCopied(false);
     try {
-      const next = await api.promptOptimize(raw, target, level, useModel);
+      const next = await api.promptOptimize(
+        raw,
+        target,
+        level,
+        useModel,
+        capAnswer ? capWords : null,
+      );
       if (runId.current === id) setResult(next);
     } catch (err) {
       if (runId.current === id) {
@@ -235,6 +257,21 @@ export function PromptOptimizerPage({ onSetTitle }: ToolPageProps) {
             </div>
           )}
         </div>
+        <div className="mt-3 border-t border-line pt-3">
+          <Toggle
+            checked={capAnswer}
+            onChange={setCapAnswer}
+            label="Cap how long the answer may be"
+            hint="The largest saving available here, and the only setting that changes what you are asking for rather than how you ask it. Output tokens bill at roughly 4× the input rate and an unbounded answer runs several times the length of the prompt — on the bundled benchmark, capping an unbounded prompt cut the turn by 80% while its answers obeyed the original constraints slightly more often, not less. Ignored when your prompt already sets a limit of its own."
+          />
+          {capAnswer && (
+            <div className="mt-2.5 max-w-[220px]">
+              <Field label="Answer limit (words)">
+                <NumberInput value={capWords} onChange={setCapWords} min={20} max={2000} step={50} />
+              </Field>
+            </div>
+          )}
+        </div>
         <div className="mt-3 row gap-2">
           <Button tone="primary" onClick={() => void optimize()} disabled={busy || !raw.trim()}>
             {busy ? "Optimising…" : "Optimise"}
@@ -248,18 +285,41 @@ export function PromptOptimizerPage({ onSetTitle }: ToolPageProps) {
 
       {result && (
         <>
-          <Section title="Result">
-            <div className="grid grid-cols-3 gap-3">
+          <Section
+            title="Result"
+            description={`Cost is the whole turn, not just the prompt: input + output × ${result.economics.outputCostRatio}, in input-token equivalents. The prompt is the cheap half — an answer nobody bounded is usually most of the bill.`}
+          >
+            <div className="grid grid-cols-4 gap-3">
               <Stat
-                label="Tokens"
-                value={`${result.beforeTokens.toLocaleString()} → ${result.afterTokens.toLocaleString()}`}
-                caption={`for ${result.targetName}`}
+                label="Turn cost"
+                value={`−${result.economics.totalReductionPercent}%`}
+                caption={`${result.economics.totalBefore.toLocaleString()} → ${result.economics.totalAfter.toLocaleString()}`}
+                tone={
+                  result.economics.totalReductionPercent >= 25
+                    ? "positive"
+                    : result.economics.totalReductionPercent === 0
+                      ? "warn"
+                      : undefined
+                }
               />
               <Stat
-                label="Smaller by"
-                value={`${result.reductionPercent}%`}
-                caption={result.reductionPercent > 0 ? "of the original" : "already minimal"}
-                tone={result.reductionPercent >= 40 ? "positive" : undefined}
+                label="Prompt"
+                value={`${result.economics.inputBefore.toLocaleString()} → ${result.economics.inputAfter.toLocaleString()}`}
+                caption={`${result.reductionPercent}% smaller`}
+              />
+              <Stat
+                label="Answer"
+                value={
+                  result.economics.outputAfter === result.economics.outputBefore
+                    ? `~${result.economics.outputAfter.toLocaleString()}`
+                    : `${result.economics.outputBefore.toLocaleString()} → ${result.economics.outputAfter.toLocaleString()}`
+                }
+                caption={
+                  result.economics.boundedAfter
+                    ? `capped by “${result.economics.boundSource ?? "a stated limit"}”`
+                    : "unbounded — estimated"
+                }
+                tone={result.economics.boundedAfter ? "positive" : "warn"}
               />
               <Stat
                 label="Requirements kept"
@@ -268,6 +328,16 @@ export function PromptOptimizerPage({ onSetTitle }: ToolPageProps) {
                 tone={result.coveragePercent === 100 ? "positive" : "warn"}
               />
             </div>
+            {!result.economics.boundedAfter && (
+              <div className="mt-3">
+                <Callout tone="warn" title="The answer has no length limit">
+                  So the biggest number on this page is a guess, and the biggest saving is one you
+                  have not taken. Turn on “Cap how long the answer may be” above and run it again —
+                  on the benchmark that was worth four times more than everything the compression
+                  achieved.
+                </Callout>
+              </div>
+            )}
             <p className="mt-3 text-2xs text-ink-faint">
               {result.modelUsed
                 ? `Judgement passes ran on ${result.modelUsed}.`

@@ -143,6 +143,56 @@ pub struct RequirementCheck {
     pub missing: Vec<String>,
 }
 
+/// What one turn actually costs, both halves of it.
+///
+/// # Why the input-only number was the wrong headline
+///
+/// The first version of this reported "33% smaller" and meant the prompt. That
+/// is a real number and very nearly a useless one, because a prompt is the
+/// cheap half of a turn twice over: output tokens are billed at roughly four
+/// times the rate of input tokens, and an unbounded answer runs to several
+/// times the length of the prompt that asked for it.
+///
+/// Worked through on a real example — a 243-token prompt compressed to 164,
+/// with no length bound on the answer:
+///
+/// ```text
+///                 input   output   weighted total
+/// before            243      ~700           3,043
+/// after             164      ~700           2,964   <- 3% cheaper
+/// after + a cap     174      ~267           1,242   <- 59% cheaper
+/// ```
+///
+/// Compressing the prompt bought 3%. Ten tokens of "answer in at most 200
+/// words" bought fifty-nine. Any tool that reports only the first number is
+/// pointing its user at the wrong lever, which is why this struct exists and
+/// why `reduction_percent` is no longer the headline.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TokenEconomics {
+    pub input_before: u32,
+    pub input_after: u32,
+    /// Answer length implied by the prompt's own stated bound, before and after.
+    /// Equal unless a cap was added.
+    pub output_before: u32,
+    pub output_after: u32,
+    /// Whether the *original* stated any bound on answer length at all. When
+    /// false, `output_before` is an assumption ([`UNBOUNDED_OUTPUT_TOKENS`])
+    /// rather than something read out of the prompt, and the UI says so.
+    pub bounded_before: bool,
+    pub bounded_after: bool,
+    /// Where the bound was read from, for the UI to quote back.
+    pub bound_source: Option<String>,
+    /// `input + output * OUTPUT_COST_RATIO`, in input-token equivalents.
+    pub total_before: u32,
+    pub total_after: u32,
+    /// The headline. How much cheaper the whole turn is, 0–100.
+    pub total_reduction_percent: u32,
+    /// The ratio used, surfaced so the arithmetic is checkable rather than
+    /// magic.
+    pub output_cost_ratio: f32,
+}
+
 /// What the optimiser produced, and everything needed to judge it.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -150,6 +200,7 @@ pub struct OptimizedPrompt {
     pub prompt: String,
     pub target: TargetModel,
     pub target_name: String,
+    pub economics: TokenEconomics,
     pub before_tokens: u32,
     pub after_tokens: u32,
     /// How much smaller, 0–100. Clamped at 0: a prompt that was already
@@ -168,6 +219,170 @@ pub struct OptimizedPrompt {
     /// means the whole thing ran deterministically — which is a supported
     /// outcome, not a failure, and typically still lands most of the saving.
     pub model_used: Option<String>,
+}
+
+// ---------------------------------------------------------------------------
+// The output side of the ledger
+// ---------------------------------------------------------------------------
+
+/// How much an output token costs relative to an input token.
+///
+/// Providers differ, and the exact multiple moves with every price change, but
+/// it has sat between three and five across every major provider for years —
+/// four is the middle of that and is surfaced in the result
+/// (`TokenEconomics::output_cost_ratio`) so nobody has to take it on trust.
+/// Being wrong by one either way changes the headline percentage by a few
+/// points; treating output as *free*, which is what an input-only score
+/// implicitly does, changes it by fifty.
+pub const OUTPUT_COST_RATIO: f32 = 4.0;
+
+/// What an answer costs when the prompt never says how long it should be.
+///
+/// This is the one number here that is an assumption rather than arithmetic, so
+/// it is worth saying where it comes from: the benchmark in this module's tests
+/// runs unbounded prompts against a real model and reports the actual output
+/// length. Against `qwen3.5:2b` on the bundled corpus it lands in the 600–900
+/// range, and this sits in the middle of that. A different model will differ —
+/// which is exactly why the UI labels this figure as an estimate whenever
+/// `bounded_before` is false, rather than presenting it as measured.
+pub const UNBOUNDED_OUTPUT_TOKENS: u32 = 700;
+
+/// Below this, a prompt is short enough that there is little to compress.
+///
+/// Used only to decide whether to warn. Calibrated off the benchmark: the one
+/// case in the bundled corpus the optimiser made *worse* was a 121-token prompt
+/// that already bounded its answer, where the structure added cost nothing
+/// could pay for.
+const LEAN_PROMPT_TOKENS: u32 = 200;
+
+/// A stated limit on answer length, read out of the prompt itself.
+#[derive(Debug, Clone)]
+struct OutputBound {
+    tokens: u32,
+    /// The phrase it was read from, for the UI to quote.
+    source: String,
+}
+
+/// Words per unit, for units that are not words.
+fn words_per(unit: &str) -> Option<f32> {
+    // "bullet   points" from a wrapped line normalises to "bullet point".
+    let unit: String = unit.split_whitespace().collect::<Vec<_>>().join(" ");
+    Some(match unit.trim_end_matches('s') {
+        "bullet point" | "line item" => 14.0,
+        "word" => 1.0,
+        "character" | "char" => 0.18,
+        // A sentence of English prose averages 15–20 words; a paragraph, 4–6
+        // sentences. Both are rounded down, because a prompt that says "three
+        // sentences" is asking for brevity and tends to get it.
+        "sentence" => 16.0,
+        "paragraph" => 70.0,
+        "bullet" | "item" | "line" | "point" | "step" => 14.0,
+        _ => return None,
+    })
+}
+
+static BOUND_PATTERNS: LazyLock<Vec<Regex>> = LazyLock::new(|| {
+    // Compound units first — the alternation is leftmost-first, so "bullets?"
+    // offered before "bullet points?" would match "5 bullet" out of "5 bullet
+    // points maximum" and then fail to find the trailing "maximum".
+    let units = r"bullet\s+points?|line\s+items?|words?|characters?|chars?|sentences?|paragraphs?|bullets?|items?|lines?|points?|steps?";
+    vec![
+        // "no more than 200 words", "under 300 characters", "in 5 bullet points"
+        Regex::new(&format!(
+            r"(?i)\b(?:no more than|not more than|at most|no longer than|not exceed|fewer than|less than|under|within|maximum of|max(?:imum)?(?: of)?|up to|limit(?:ed)? to|in)\s+(\d+)\s*({units})\b"
+        ))
+        .expect("bound pattern is valid"),
+        // "200 words or less", "5 bullets maximum"
+        Regex::new(&format!(
+            r"(?i)\b(\d+)\s*({units})\s+(?:or less|or fewer|max(?:imum)?|at most)\b"
+        ))
+        .expect("bound pattern is valid"),
+    ]
+});
+
+/// The tightest length bound the prompt states, if it states one.
+///
+/// Tightest rather than first, because a prompt that says "keep it short, no
+/// more than 500 words" near the top and "the summary must be under 200 words"
+/// near the bottom is bounded by the 200 — the looser figure is context, the
+/// tighter one is the requirement.
+fn detect_output_bound(text: &str) -> Option<OutputBound> {
+    let mut best: Option<OutputBound> = None;
+
+    for pattern in BOUND_PATTERNS.iter() {
+        for caps in pattern.captures_iter(text) {
+            let Ok(count) = caps[1].parse::<f32>() else {
+                continue;
+            };
+            let Some(per) = words_per(&caps[2].to_lowercase()) else {
+                continue;
+            };
+            // Words to tokens: English prose runs about 1.33 tokens per word.
+            let tokens = (count * per * 1.33).ceil() as u32;
+            if tokens == 0 {
+                continue;
+            }
+            if best.as_ref().is_none_or(|b| tokens < b.tokens) {
+                best = Some(OutputBound {
+                    tokens,
+                    source: caps[0].trim().to_string(),
+                });
+            }
+        }
+    }
+    best
+}
+
+/// Work out what a turn costs before and after.
+fn economics(
+    original: &str,
+    optimized: &str,
+    target: TargetModel,
+    added_cap_words: Option<u32>,
+) -> TokenEconomics {
+    let input_before = estimate_tokens(original, target);
+    let input_after = estimate_tokens(optimized, target);
+
+    let before_bound = detect_output_bound(original);
+    let after_bound = detect_output_bound(optimized);
+
+    let output_before = before_bound
+        .as_ref()
+        .map(|b| b.tokens)
+        .unwrap_or(UNBOUNDED_OUTPUT_TOKENS);
+    let output_after = after_bound
+        .as_ref()
+        .map(|b| b.tokens)
+        .unwrap_or(UNBOUNDED_OUTPUT_TOKENS);
+
+    let weigh = |input: u32, output: u32| {
+        (input as f32 + output as f32 * OUTPUT_COST_RATIO).round() as u32
+    };
+    let total_before = weigh(input_before, output_before);
+    let total_after = weigh(input_after, output_after);
+
+    let total_reduction_percent = if total_before == 0 || total_after >= total_before {
+        0
+    } else {
+        (((total_before - total_after) as f32 / total_before as f32) * 100.0).round() as u32
+    };
+
+    TokenEconomics {
+        input_before,
+        input_after,
+        output_before,
+        output_after,
+        bounded_before: before_bound.is_some(),
+        bounded_after: after_bound.is_some(),
+        bound_source: after_bound
+            .or(before_bound)
+            .map(|b| b.source)
+            .or_else(|| added_cap_words.map(|w| format!("at most {w} words"))),
+        total_before,
+        total_after,
+        total_reduction_percent,
+        output_cost_ratio: OUTPUT_COST_RATIO,
+    }
 }
 
 /// The instant, no-model half of the answer: how big is this, for that target.
@@ -2270,12 +2485,22 @@ fn validate(raw: &str) -> AgentResult<()> {
 /// configured, not running, or that fails mid-run is not an error: the
 /// deterministic result is returned with a note saying so, because most of the
 /// saving is already in it and a broken Ollama should not mean no answer.
+///
+/// `output_cap_words` is the one control here that changes what the prompt
+/// *asks for* rather than how it says it, so it is opt-in, never inferred, and
+/// never applied over a bound the prompt already states — a prompt that says
+/// "at most 500 words" has already answered this question, and quietly
+/// tightening it to 200 would be the optimiser overruling a requirement instead
+/// of preserving one. It is also, by a wide margin, the single most effective
+/// thing this function can do to the total cost of a turn: see
+/// [`TokenEconomics`].
 pub async fn optimize(
     settings: &SettingsManager,
     raw: &str,
     target: TargetModel,
     level: OptimizeLevel,
     use_model: bool,
+    output_cap_words: Option<u32>,
 ) -> AgentResult<OptimizedPrompt> {
     validate(raw)?;
 
@@ -2398,6 +2623,59 @@ pub async fn optimize(
         ));
     }
 
+    // ---- the answer-length cap -------------------------------------------
+    let existing_bound = detect_output_bound(raw);
+    let mut applied_cap: Option<u32> = None;
+    match (output_cap_words, &existing_bound) {
+        (Some(words), None) if words > 0 => {
+            // The target's own shape decides where this lands: it is a format
+            // rule, so it goes wherever format rules go.
+            sections
+                .format
+                .push(format!("Answer in at most {words} words"));
+            applied_cap = Some(words);
+            notes.push(format!(
+                "Added a {words}-word cap on the answer. The original set no length bound at all, \
+                 and an unbounded answer is the most expensive thing about a turn \u{2014} output \
+                 tokens bill at roughly {OUTPUT_COST_RATIO:.0}\u{00d7} the input rate, so this one \
+                 line is worth more than every compression above it combined."
+            ));
+        }
+        (Some(words), Some(bound)) => {
+            notes.push(format!(
+                "The {words}-word cap was not applied: the prompt already bounds its answer \
+                 (\u{201c}{}\u{201d}), and overriding a limit you wrote would be the optimiser \
+                 changing a requirement rather than keeping one.",
+                bound.source
+            ));
+        }
+        _ => {}
+    }
+    // Benchmarked: a prompt that is already short *and* already bounds its
+    // answer has almost nothing here to win, and on the bundled corpus the
+    // optimiser made one such case slightly worse — the restructuring cost a
+    // few tokens and there was no output saving to pay for them. Saying so is
+    // better than reporting a small number as if it were a win.
+    if before_tokens < LEAN_PROMPT_TOKENS && existing_bound.is_some() {
+        notes.push(
+            "This prompt was already short and already caps its answer, which is most of what \
+             this tool does \u{2014} so expect very little, and check the result is actually \
+             smaller before switching. The big wins are on long prompts that never say how long \
+             the answer may be."
+                .to_string(),
+        );
+    }
+
+    if output_cap_words.is_none() && existing_bound.is_none() {
+        notes.push(
+            "This prompt puts no bound on how long the answer may be, so the answer will be \
+             whatever length the model feels like \u{2014} typically several times the prompt \
+             itself, billed at the higher output rate. Capping it is the largest single saving \
+             available here, and far larger than anything the compression above achieved."
+                .to_string(),
+        );
+    }
+
     if sections.task.is_empty() && distilled_task.is_some() {
         notes.push(
             "The original never said plainly what it wanted done, so the task line at the top was \
@@ -2409,6 +2687,7 @@ pub async fn optimize(
     let prompt = restore_code(&assembled, &code);
 
     // ---- grade it --------------------------------------------------------
+    let economics = economics(raw, &prompt, target, applied_cap);
     let after_tokens = estimate_tokens(&prompt, target);
     let checks = score_coverage(&requirements, &prompt);
     let kept = checks.iter().filter(|c| c.kept).count();
@@ -2446,6 +2725,7 @@ pub async fn optimize(
         prompt,
         target,
         target_name: profile.display_name.to_string(),
+        economics,
         before_tokens,
         after_tokens,
         reduction_percent,
@@ -3202,6 +3482,7 @@ under 300 words at all times. Thanks so much in advance, I really appreciate you
             TargetModel::Opus5,
             OptimizeLevel::Balanced,
             true,
+            None,
         )
         .await
         .expect("optimising should succeed");
@@ -3236,6 +3517,319 @@ under 300 words at all times. Thanks so much in advance, I really appreciate you
             result.model_used.is_some(),
             "the loopback backend should have been preferred over the primary"
         );
+    }
+
+    // -----------------------------------------------------------------------
+    // The benchmark
+    // -----------------------------------------------------------------------
+
+    /// One benchmark case: a bloated prompt, plus a way to check the answer to
+    /// it without a human or a judge model.
+    ///
+    /// # Why adherence and not "quality"
+    ///
+    /// The obvious benchmark is "is the optimised prompt's answer as good as
+    /// the original's", and the obvious way to measure that is a judge model —
+    /// which, run locally against a 2B model, would be measuring the judge. So
+    /// this measures the part that *is* objective: did the answer actually obey
+    /// the requirements the prompt stated? Word limits, required format,
+    /// forbidden words, required mentions — every one is checkable in code,
+    /// with no model and no opinion involved.
+    ///
+    /// That gives the number that matters: if the optimised prompt costs 60%
+    /// less and its answers obey the same constraints just as often, the
+    /// compression did not cost anything real. If adherence drops, it did.
+    struct BenchCase {
+        name: &'static str,
+        prompt: &'static str,
+        /// Words that must appear in a good answer (lowercased substring).
+        must_mention: &'static [&'static str],
+        /// Words that must not.
+        must_avoid: &'static [&'static str],
+        /// The word limit the prompt states, if any.
+        word_limit: Option<usize>,
+    }
+
+    impl BenchCase {
+        /// Fraction of this case's checks that an answer passed, 0.0–1.0.
+        fn score(&self, answer: &str) -> f32 {
+            let lower = answer.to_lowercase();
+            let mut passed = 0;
+            let mut total = 0;
+
+            for needle in self.must_mention {
+                total += 1;
+                if lower.contains(needle) {
+                    passed += 1;
+                }
+            }
+            for needle in self.must_avoid {
+                total += 1;
+                if !lower.contains(needle) {
+                    passed += 1;
+                }
+            }
+            if let Some(limit) = self.word_limit {
+                total += 1;
+                // 15% grace: a model that lands on 210 words for a 200-word
+                // limit has followed the instruction, and scoring that as a
+                // failure would measure counting rather than obedience.
+                if answer.split_whitespace().count() <= (limit as f32 * 1.15) as usize {
+                    passed += 1;
+                }
+            }
+            if total == 0 {
+                return 1.0;
+            }
+            passed as f32 / total as f32
+        }
+    }
+
+    const BENCH: &[BenchCase] = &[
+        BenchCase {
+            name: "release notes (bounded)",
+            prompt: BLOATED,
+            must_mention: &["4.1.0"],
+            must_avoid: &[],
+            word_limit: Some(300),
+        },
+        BenchCase {
+            name: "bug triage (unbounded)",
+            prompt: "Hi there! I was wondering if you could please help me out with something. \
+                     You are a world-class, incredibly talented senior engineer with over 15 years \
+                     of experience. I would really like you to take a deep breath and think step \
+                     by step about this. Basically, we have a bug where the login page just hangs \
+                     forever on Safari but it works completely fine on Chrome. Due to the fact \
+                     that our users are mostly on Safari, this is very important. In order to make \
+                     sure that we fix this properly, please list the most likely causes. Make sure \
+                     that you never suggest that we simply drop Safari support. Thanks so much in \
+                     advance, I really appreciate your help!",
+            must_mention: &["safari"],
+            must_avoid: &["drop safari support"],
+            word_limit: None,
+        },
+        BenchCase {
+            name: "sql explain (format-bound)",
+            prompt: "Hello! You are an extremely talented, world-class database expert with 20 \
+                     years of experience. I want you to act as a helpful tutor. Could you please \
+                     explain what the query `SELECT user_id, COUNT(*) FROM orders GROUP BY \
+                     user_id HAVING COUNT(*) > 5` actually does? Please think carefully step by \
+                     step before answering. It is really very important that the output must be \
+                     formatted as markdown. Remember that the output must be formatted as \
+                     markdown. Please keep the response under 150 words. Thanks in advance!",
+            must_mention: &["orders", "group by"],
+            must_avoid: &[],
+            word_limit: Some(150),
+        },
+    ];
+
+    /// How many times each arm is sampled.
+    ///
+    /// A single sample per arm measures the model's mood as much as the prompt:
+    /// the same prompt asked twice varies by tens of percent in output length.
+    /// Three is enough to stop one long answer deciding the result, and few
+    /// enough that the whole benchmark still finishes in a couple of minutes.
+    const BENCH_SAMPLES: usize = 3;
+
+    /// Ask the model something and return the answer plus its token counts.
+    ///
+    /// # Why this disables reasoning, and how that was found
+    ///
+    /// The first version of this benchmark did not, and reported output of
+    /// exactly 2048 tokens — `max_tokens` — for eight of its nine rows, with
+    /// adherence scores of 50% almost everywhere. Both numbers were an
+    /// artefact of the same thing: `qwen3.5:2b` is a reasoning model, it spent
+    /// its entire completion budget on the thinking trace, and `content` came
+    /// back *empty*. The benchmark was measuring a truncation ceiling and
+    /// scoring empty strings.
+    ///
+    /// It is worth being explicit that this is a property of the benchmark
+    /// harness rather than of the thing being benchmarked. `tools::promptopt`
+    /// already sets this on its own calls; the benchmark needed it too, for
+    /// the separate reason that an answer cut off at the token ceiling cannot
+    /// be checked for whether it obeyed a word limit.
+    async fn bench_ask(config: &BackendConfig, prompt: &str) -> (String, u32, u32) {
+        let mut config = config.clone();
+        config.reasoning_effort = Some("none".into());
+
+        let response = agent::backend_for(config.kind)
+            .chat(vec![Message::user(prompt)], &config)
+            .await
+            .expect("the benchmark model should answer");
+        let usage = response.usage.unwrap_or_default();
+        assert!(
+            !response.text.trim().is_empty(),
+            "the model returned no content \u{2014} the benchmark would be scoring an empty string"
+        );
+        (
+            response.text,
+            usage.input_tokens.unwrap_or(0),
+            usage.output_tokens.unwrap_or(0),
+        )
+    }
+
+    /// Sample an arm `BENCH_SAMPLES` times and average.
+    async fn bench_sample(config: &BackendConfig, case: &BenchCase, prompt: &str) -> (u32, f32, f32) {
+        let mut input = 0u32;
+        let mut output = 0f32;
+        let mut score = 0f32;
+        for _ in 0..BENCH_SAMPLES {
+            let (answer, sample_in, sample_out) = bench_ask(config, prompt).await;
+            input = sample_in; // identical every time — the prompt does not change
+            output += sample_out as f32;
+            score += case.score(&answer);
+        }
+        let n = BENCH_SAMPLES as f32;
+        (input, output / n, score / n)
+    }
+
+    /// The benchmark: original vs optimised, measured against a real model, on
+    /// tokens *and* on whether the answer still did what was asked.
+    ///
+    /// ```text
+    /// cargo test --lib promptopt::tests::benchmark -- --ignored --nocapture
+    /// ```
+    ///
+    /// Token counts come from the server's own `usage` block, not from
+    /// [`estimate_tokens`] — benchmarking the estimator against itself would
+    /// prove nothing.
+    #[tokio::test]
+    #[ignore = "needs Ollama running locally with qwen3.5:2b"]
+    async fn benchmark() {
+        let backend = BackendConfig {
+            id: "bench".into(),
+            display_name: "Ollama".into(),
+            kind: BackendKind::OpenAiCompatible,
+            base_url: "http://localhost:11434/v1".into(),
+            model: "qwen3.5:2b".into(),
+            max_tokens: 2048,
+            timeout_secs: 300,
+            ..Default::default()
+        };
+        let mut settings = Settings::default();
+        settings.agents.backends.push(backend.clone());
+        let manager = SettingsManager::new(settings);
+
+        // Three arms, so the two levers can be told apart: compression alone,
+        // and compression plus a cap on the answer.
+        let arms: [(&str, Option<u32>); 2] = [("optimised", None), ("optimised + 200w cap", Some(200))];
+
+        println!(
+            "\n{:<26} {:>22} {:>9} {:>9} {:>9} {:>7}",
+            "case / arm", "in", "out", "total*", "vs base", "obeyed"
+        );
+        println!("{}", "-".repeat(88));
+
+        let mut totals: Vec<(String, f32, f32)> = Vec::new();
+
+        for case in BENCH {
+            let (input, output, base_score) = bench_sample(&backend, case, case.prompt).await;
+            let base_total = input as f32 + output * OUTPUT_COST_RATIO;
+            println!(
+                "{:<26} {:>22} {:>9.0} {:>9} {:>9} {:>6.0}%",
+                case.name, format!("{input} (original)"), output,
+                base_total as u32, "\u{2014}", base_score * 100.0
+            );
+
+            for (label, cap) in arms {
+                let optimised = optimize(
+                    &manager,
+                    case.prompt,
+                    TargetModel::Opus5,
+                    OptimizeLevel::Balanced,
+                    true,
+                    cap,
+                )
+                .await
+                .expect("optimising should succeed");
+
+                let (input, output, score) = bench_sample(&backend, case, &optimised.prompt).await;
+                let total = input as f32 + output * OUTPUT_COST_RATIO;
+                let delta = if base_total > 0.0 {
+                    (1.0 - total / base_total) * 100.0
+                } else {
+                    0.0
+                };
+                println!(
+                    "{:<26} {:>22} {:>9.0} {:>9} {:>8.0}% {:>6.0}%",
+                    "", format!("{input} ({label})"), output, total as u32, delta, score * 100.0
+                );
+                totals.push((label.to_string(), delta, score - base_score));
+            }
+        }
+
+        println!("\n* total = input + output \u{00d7} {OUTPUT_COST_RATIO:.0}, in input-token equivalents.");
+        for label in ["optimised", "optimised + 200w cap"] {
+            let rows: Vec<&(String, f32, f32)> =
+                totals.iter().filter(|(l, _, _)| l == label).collect();
+            let saved: f32 = rows.iter().map(|(_, d, _)| d).sum::<f32>() / rows.len() as f32;
+            let drift: f32 = rows.iter().map(|(_, _, s)| s).sum::<f32>() / rows.len() as f32;
+            println!(
+                "{label:<22} mean total saving {saved:>5.0}%   mean adherence change {:>+5.0} pts",
+                drift * 100.0
+            );
+        }
+
+        // Adherence is the property under test. A prompt that is cheaper but
+        // stops obeying its own constraints has not been optimised, it has been
+        // damaged — so the run fails rather than reporting a cheerful number.
+        for (label, _, drift) in &totals {
+            assert!(
+                *drift > -0.34,
+                "{label} lost more than a third of the constraint checks"
+            );
+        }
+    }
+
+    #[test]
+    fn a_stated_answer_bound_is_found_and_the_tightest_one_wins() {
+        assert!(detect_output_bound("Summarise the report.").is_none());
+        assert_eq!(
+            detect_output_bound("keep the response under 300 words")
+                .unwrap()
+                .tokens,
+            (300.0f32 * 1.33).ceil() as u32
+        );
+        // Tightest wins: the looser figure is context, the tighter one is the
+        // requirement.
+        let both = detect_output_bound("Aim for no more than 500 words. It must be under 200 words.")
+            .unwrap();
+        assert_eq!(both.tokens, (200.0f32 * 1.33).ceil() as u32);
+        // Other units.
+        assert!(detect_output_bound("in 3 sentences").is_some());
+        assert!(detect_output_bound("5 bullet points maximum").is_some());
+    }
+
+    /// The arithmetic behind the headline, and the point of the whole change:
+    /// compressing a prompt barely moves the cost of a turn, and capping the
+    /// answer moves it enormously.
+    #[test]
+    fn capping_the_answer_beats_compressing_the_prompt() {
+        let long = "Please could you very kindly write me a detailed summary of the report.";
+        let short = "<task>\nWrite a summary of the report.\n</task>";
+        let capped = "<task>\nWrite a summary of the report.\n</task>\n\n<output_format>\n- Answer in at most 200 words\n</output_format>";
+
+        let compression_only = economics(long, short, TargetModel::Opus5, None);
+        let with_cap = economics(long, capped, TargetModel::Opus5, Some(200));
+
+        assert!(!compression_only.bounded_before);
+        assert_eq!(compression_only.output_before, UNBOUNDED_OUTPUT_TOKENS);
+        assert!(with_cap.bounded_after, "the added cap must be detectable in the output");
+
+        assert!(
+            with_cap.total_reduction_percent > compression_only.total_reduction_percent * 3,
+            "capping the answer must dominate: {}% vs {}%",
+            with_cap.total_reduction_percent,
+            compression_only.total_reduction_percent
+        );
+    }
+
+    #[test]
+    fn an_existing_bound_is_never_overridden_by_a_cap() {
+        // The prompt already answered this question; tightening it silently
+        // would be the optimiser changing a requirement rather than keeping it.
+        let bound = detect_output_bound(BLOATED).expect("BLOATED states 300 words");
+        assert!(bound.source.to_lowercase().contains("300"));
     }
 
     #[test]

@@ -1461,10 +1461,34 @@ export interface RequirementCheck {
   missing: string[];
 }
 
+/**
+ * What one turn actually costs, both halves of it.
+ *
+ * The prompt is the cheap half twice over: output bills at roughly 4× input,
+ * and an unbounded answer runs several times the length of the prompt asking
+ * for it. `totalReductionPercent` is the headline for that reason —
+ * `reductionPercent` (input only) reads as a saving it is not.
+ */
+export interface TokenEconomics {
+  inputBefore: number;
+  inputAfter: number;
+  outputBefore: number;
+  outputAfter: number;
+  /** False means `outputBefore` is an assumption, not read from the prompt. */
+  boundedBefore: boolean;
+  boundedAfter: boolean;
+  boundSource: string | null;
+  totalBefore: number;
+  totalAfter: number;
+  totalReductionPercent: number;
+  outputCostRatio: number;
+}
+
 export interface OptimizedPrompt {
   prompt: string;
   target: TargetModel;
   targetName: string;
+  economics: TokenEconomics;
   beforeTokens: number;
   afterTokens: number;
   reductionPercent: number;
@@ -1484,13 +1508,27 @@ export interface TokenEstimate {
   targetName: string;
 }
 
-/** Optimise a prompt. Slow by nature — several bounded model round trips. */
+/**
+ * Optimise a prompt. Slow by nature — several bounded model round trips.
+ *
+ * `outputCapWords` is the only argument that changes what the prompt *asks
+ * for*, so it is never inferred, and it is ignored when the prompt already
+ * states a length bound of its own.
+ */
 export const promptOptimize = (
   raw: string,
   target: TargetModel,
   level: OptimizeLevel,
   useModel: boolean,
-) => invoke<OptimizedPrompt>("prompt_optimize", { raw, target, level, useModel });
+  outputCapWords: number | null,
+) =>
+  invoke<OptimizedPrompt>("prompt_optimize", {
+    raw,
+    target,
+    level,
+    useModel,
+    outputCapWords,
+  });
 
 /** What a prompt costs on one target. Pure arithmetic, safe to call per
  * keystroke — which is exactly why it is not part of `promptOptimize`. */

@@ -1611,8 +1611,9 @@ pub async fn prompt_optimize(
     target: tools::promptopt::TargetModel,
     level: tools::promptopt::OptimizeLevel,
     use_model: bool,
+    output_cap_words: Option<u32>,
 ) -> Res<tools::promptopt::OptimizedPrompt> {
-    tools::promptopt::optimize(&settings, &raw, target, level, use_model)
+    tools::promptopt::optimize(&settings, &raw, target, level, use_model, output_cap_words)
         .await
         .map_err(|e| e.user_message())
 }
