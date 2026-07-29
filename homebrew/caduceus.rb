@@ -35,6 +35,44 @@ cask "caduceus" do
 
   app "Caduceus.app"
 
+  # Take over a copy that Homebrew did not install.
+  #
+  # Most people meet Caduceus through the curl installer on the website, and
+  # some of them later decide they would rather Homebrew looked after it. Until
+  # this block existed that switch simply failed:
+  #
+  #     Error: It seems there is already an App at '/Applications/Caduceus.app'.
+  #
+  # Homebrew is being careful rather than obtuse — it will not clobber an
+  # application it does not have a record of, because for most casks that
+  # directory could be anything. Here it cannot: the only thing that puts
+  # `Caduceus.app` in `/Applications` is Caduceus, and **nothing the user owns
+  # lives inside the bundle**. Settings, history, notes and workflows are all in
+  # `~/.caduceus` and `~/Library/Application Support/com.caduceus.desktop` — see
+  # the `zap` list below, which is the exhaustive inventory. So replacing the
+  # bundle carries everything across, exactly as the curl installer's own
+  # update path does when it `rm -rf`s the old copy.
+  #
+  # On a genuine `brew upgrade` this is a no-op: Homebrew has already removed
+  # the previous version by the time preflight runs, so the only way the target
+  # still exists here is that Homebrew never owned it.
+  preflight do
+    target = Pathname("#{appdir}/Caduceus.app")
+    next unless target.exist?
+
+    # Quitting first matters: replacing the bundle under a running app leaves
+    # it with its executable pulled out from beneath it. Ask politely, then
+    # insist, and ignore both failing — a copy that is not running is the
+    # outcome we want, and not running is how it got there.
+    system_command "/usr/bin/osascript",
+                   args: ["-e", 'tell application id "com.caduceus.desktop" to quit'],
+                   must_succeed: false
+    system_command "/usr/bin/pkill", args: ["-x", "Caduceus"], must_succeed: false
+    sleep 2
+
+    system_command "/bin/rm", args: ["-rf", target.to_s], must_succeed: true
+  end
+
   # Caduceus is not notarised — there is no Apple Developer certificate behind
   # it — so macOS quarantines the app and refuses to open it. Homebrew carries
   # that flag through from the download, which would leave every cask install
