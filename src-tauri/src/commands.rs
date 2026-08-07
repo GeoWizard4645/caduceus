@@ -149,6 +149,7 @@ pub struct RuntimeInfo {
     /// False on systems with no usable secret storage (headless Linux).
     pub keychain_available: bool,
     pub stt_backends: Vec<voice::SttAvailability>,
+    pub tts_backends: Vec<voice::TtsAvailability>,
     pub browsers: Vec<BrowserInstall>,
     pub clipboard_entries: i64,
     pub clipboard_bytes: i64,
@@ -174,6 +175,7 @@ pub async fn get_runtime_info<R: Runtime>(
         arch: std::env::consts::ARCH.into(),
         keychain_available: secrets::keychain_available(),
         stt_backends: voice::stt::all_availability(&cfg.voice),
+        tts_backends: voice::tts::all_availability(&cfg.voice),
         browsers: shortcuts::detect_browsers(),
         clipboard_entries: store.as_ref().and_then(|s| s.count().ok()).unwrap_or(0),
         clipboard_bytes: store
@@ -239,6 +241,12 @@ pub fn delete_backend_api_key(backend_id: String) -> Res<()> {
 pub fn set_stt_api_key(key: String) -> Res<bool> {
     secrets::set_stt_api_key(key.trim()).map_err(|e| e.to_string())?;
     Ok(secrets::has_stt_api_key())
+}
+
+#[tauri::command]
+pub fn set_tts_api_key(key: String) -> Res<bool> {
+    secrets::set_tts_api_key(key.trim()).map_err(|e| e.to_string())?;
+    Ok(secrets::has_tts_api_key())
 }
 
 // ---------------------------------------------------------------------------
@@ -619,6 +627,30 @@ pub fn agent_start_session<R: Runtime>(
     .map_err(|e| e.user_message())
 }
 
+/// Start an agent session that can call MCP tools.
+///
+/// Distinct from [`agent_start_session`], which hands the task to a
+/// computer-use harness. This one runs Caduceus's own tool-calling loop
+/// against the primary backend, so the tools it can reach are whatever the
+/// MCP host currently has connected. Stopping and approving both go through
+/// `agent_stop_session` / the existing approval command — the session is
+/// registered with the same [`AgentRuntime`].
+#[tauri::command]
+pub fn agent_start_tool_session<R: Runtime>(
+    app: AppHandle<R>,
+    runtime: tauri::State<'_, AgentRuntime>,
+    settings: tauri::State<'_, SettingsManager>,
+    task: String,
+) -> Res<String> {
+    agent::start_tool_session(
+        app.clone(),
+        runtime.inner().clone(),
+        settings.inner().clone(),
+        task,
+    )
+    .map_err(|e| e.user_message())
+}
+
 #[tauri::command]
 pub fn agent_stop_session(runtime: tauri::State<'_, AgentRuntime>, session_id: String) -> bool {
     runtime.stop(&session_id)
@@ -686,6 +718,49 @@ pub async fn agent_list_models(
         // Hermes owns its own model list; `hermes model` is where you change it.
         settings::BackendKind::Hermes | settings::BackendKind::Null => Ok(Vec::new()),
     }
+}
+
+/// Does this backend's model have enough context for tool calling? See
+/// `agent::context`'s module doc for what "enough" means and why it takes a
+/// live probe rather than a hard-coded table to answer.
+#[tauri::command]
+pub async fn agent_context_check<R: Runtime>(
+    app: AppHandle<R>,
+    settings: tauri::State<'_, SettingsManager>,
+    backend_id: String,
+) -> Res<agent::context::ContextCheck> {
+    let backend_config = resolve_backend_config(&settings, &backend_id)?;
+    Ok(agent::context::check(&app, &backend_config.model, &backend_config.base_url).await)
+}
+
+/// Fix a backend whose model was reported [`agent::context::ContextCheck::Insufficient`]
+/// or [`agent::context::ContextCheck::Unknown`] by `agent_context_check` — see
+/// `agent::context::remediate`'s doc for the mechanism (an Ollama model
+/// variant with a raised context window, reused if a suitable one already
+/// exists).
+#[tauri::command]
+pub async fn agent_context_remediate<R: Runtime>(
+    app: AppHandle<R>,
+    settings: tauri::State<'_, SettingsManager>,
+    backend_id: String,
+) -> Res<agent::context::RemediationOutcome> {
+    let backend_config = resolve_backend_config(&settings, &backend_id)?;
+    agent::context::remediate(&app, &backend_config.model, &backend_config.base_url).await
+}
+
+/// Shared by every `agent_*` command that takes a `backend_id` rather than a
+/// full config — `agent_test_backend` and `agent_list_models` above each had
+/// their own copy of this lookup; pulled out here rather than adding a third
+/// (and now fourth) copy for the two context commands.
+fn resolve_backend_config(settings: &SettingsManager, backend_id: &str) -> Res<BackendConfig> {
+    settings
+        .get()
+        .agents
+        .backends
+        .iter()
+        .find(|b| b.id == backend_id)
+        .cloned()
+        .ok_or_else(|| format!("no backend with id \u{201c}{backend_id}\u{201d}"))
 }
 
 /// Pre-filled configurations offered by the "Add backend" flow.
@@ -782,6 +857,45 @@ pub fn voice_cancel<R: Runtime>(app: AppHandle<R>, runtime: tauri::State<'_, voi
 #[tauri::command]
 pub fn voice_is_recording(runtime: tauri::State<'_, voice::VoiceRuntime>) -> bool {
     runtime.is_recording()
+}
+
+// ---------------------------------------------------------------------------
+// Text-to-speech
+// ---------------------------------------------------------------------------
+
+/// Speak `text` aloud with the configured backend.
+///
+/// Resolves once playback finishes or is cut off by a barge-in (see
+/// [`voice::TtsRuntime::speak`]) — the frontend should not block anything
+/// user-visible on this promise. It exists so a caller that *does* want to
+/// know when Caduceus has gone quiet again, to re-enable a "stop talking"
+/// button say, can await it, not because anything here requires waiting.
+#[tauri::command]
+pub async fn speak<R: Runtime>(
+    app: AppHandle<R>,
+    settings: tauri::State<'_, SettingsManager>,
+    tts: tauri::State<'_, voice::TtsRuntime>,
+    text: String,
+) -> Res<()> {
+    let voice_settings = settings.with(|s| s.voice.clone());
+    let _ = app.emit(voice::TTS_STATE_EVENT, voice::TtsState::Speaking);
+    let result = tts.speak(&text, &voice_settings).await;
+    let _ = app.emit(voice::TTS_STATE_EVENT, voice::TtsState::Idle);
+    result.map_err(|e| e.to_string())
+}
+
+/// Cut off whatever is currently being spoken, from a manual "stop talking"
+/// control rather than a barge-in. Safe to call when nothing is speaking.
+#[tauri::command]
+pub fn stop_speaking(tts: tauri::State<'_, voice::TtsRuntime>) {
+    tts.stop();
+}
+
+/// List installed system voices, for the Settings voice picker. Empty on
+/// non-macOS or if `say` could not be run.
+#[tauri::command]
+pub async fn list_speech_voices() -> Vec<String> {
+    voice::tts::list_say_voices().await
 }
 
 /// Type text into whatever app currently has keyboard focus.

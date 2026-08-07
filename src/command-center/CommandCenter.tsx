@@ -409,45 +409,79 @@ function DragHandle() {
 }
 
 /**
- * The corner you drag to resize.
+ * The edges and corners you drag to resize.
  *
  * Same problem as the drag handle: a borderless window has resizable edges and
- * no way of saying so. macOS draws no grow box on a window with no frame, so
- * this is one.
+ * no way of saying so. macOS draws no grow box and — more importantly — no
+ * invisible resize border on a window with no frame, so every edge has to be
+ * built by hand.
+ *
+ * This used to be a single 16x16 grip in the bottom-right corner and nothing
+ * else, which made resizing a game of hitting one 16-pixel square. Eight
+ * handles now cover the whole perimeter: 6px strips down each edge and 14px
+ * squares at each corner, stacked above the edges so a corner always wins the
+ * overlap. That is roughly the affordance a native frame gives you, and it is
+ * why you can now grab any side.
+ *
+ * The handles are transparent — the only thing drawn is the grip glyph in the
+ * south-east corner, kept purely so the window still *says* it is resizable.
  *
  * `startResizeDragging` hands the gesture to the window manager, which is what
  * makes the resize track the pointer at the compositor's frame rate instead of
  * ours — dragging a corner by setting the window size from mouse events looks
  * like it is lagging, because it is.
  */
+const RESIZE_HANDLES = [
+  // Edges. Inset by the corner size at both ends so they never swallow a corner.
+  { dir: "North", className: "left-3.5 right-3.5 top-0 h-1.5 cursor-ns-resize" },
+  { dir: "South", className: "bottom-0 left-3.5 right-3.5 h-1.5 cursor-ns-resize" },
+  { dir: "West", className: "bottom-3.5 left-0 top-3.5 w-1.5 cursor-ew-resize" },
+  { dir: "East", className: "bottom-3.5 right-0 top-3.5 w-1.5 cursor-ew-resize" },
+  // Corners, drawn after the edges so they take the overlap.
+  { dir: "NorthWest", className: "left-0 top-0 h-3.5 w-3.5 cursor-nwse-resize" },
+  { dir: "NorthEast", className: "right-0 top-0 h-3.5 w-3.5 cursor-nesw-resize" },
+  { dir: "SouthWest", className: "bottom-0 left-0 h-3.5 w-3.5 cursor-nesw-resize" },
+  { dir: "SouthEast", className: "bottom-0 right-0 h-3.5 w-3.5 cursor-nwse-resize" },
+] as const;
+
 function ResizeGrip() {
-  const onPointerDown = async (event: React.PointerEvent) => {
-    // Left button only: a right-drag on the corner should open nothing and
+  const startResize = async (event: React.PointerEvent, direction: string) => {
+    // Left button only: a right-drag on an edge should open nothing and
     // resize nothing.
     if (event.button !== 0) return;
     event.preventDefault();
     try {
       const { getCurrentWindow } = await import("@tauri-apps/api/window");
-      await getCurrentWindow().startResizeDragging("SouthEast");
+      // The string cast is the API's own union of the eight compass points,
+      // which `RESIZE_HANDLES` is written against.
+      await getCurrentWindow().startResizeDragging(direction as never);
     } catch {
-      // Not in a Tauri window, or the runtime refused. The window is still
-      // resizable from its edges either way.
+      // Not in a Tauri window, or the runtime refused. Nothing to fall back
+      // to, and nothing that should surface to the user.
     }
   };
 
   return (
-    <div
-      onPointerDown={(event) => void onPointerDown(event)}
-      title="Drag to resize"
-      aria-hidden="true"
-      className="no-drag absolute bottom-0 right-0 z-50 h-4 w-4 cursor-nwse-resize"
-    >
+    <>
+      {RESIZE_HANDLES.map(({ dir, className }) => (
+        <div
+          key={dir}
+          onPointerDown={(event) => void startResize(event, dir)}
+          aria-hidden="true"
+          className={`no-drag absolute z-50 ${className}`}
+        />
+      ))}
       {/* Three lines, shortest at the corner — the shape every resize grip has
-          had since the classic Mac OS grow box. */}
-      <svg viewBox="0 0 16 16" className="h-4 w-4 stroke-ink-faint opacity-50">
+          had since the classic Mac OS grow box. Purely the visual hint; the
+          south-east handle above is what actually catches the drag. */}
+      <svg
+        viewBox="0 0 16 16"
+        aria-hidden="true"
+        className="pointer-events-none absolute bottom-0 right-0 z-50 h-4 w-4 stroke-ink-faint opacity-50"
+      >
         <path d="M15 5 L5 15 M15 9 L9 15 M15 13 L13 15" strokeWidth="1.2" strokeLinecap="round" />
       </svg>
-    </div>
+    </>
   );
 }
 

@@ -29,16 +29,22 @@ pub mod capture;
 pub mod chat;
 pub mod clipboard;
 pub mod commands;
+pub mod computeruse;
 pub mod extensions;
 pub mod fn_keys;
+pub mod gateway;
 pub mod hotkeys;
 pub mod mcp;
 pub mod meeting;
+pub mod memory;
+pub mod native_tools;
 pub mod notes;
 pub mod palette;
 pub mod popbar;
+pub mod scheduler;
 pub mod settings;
 pub mod shortcuts;
+pub mod skills;
 pub mod staff_mark;
 pub mod sysmon;
 pub mod tools;
@@ -80,6 +86,45 @@ pub fn run() {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
 
     tauri::Builder::default()
+        // First, before any other plugin claims something a second copy would
+        // then fight it for.
+        //
+        // # Why one instance is not merely tidy
+        //
+        // A global hotkey can be held by exactly one process. Caduceus is a
+        // resident menu-bar app with no Dock icon and no Force Quit entry, so a
+        // stray second copy is invisible — and `hotkeys::register_all` reacts to
+        // the OS refusing an already-taken accelerator by moving that action to
+        // a fallback and *saving* the move. Two copies therefore do not just
+        // waste memory: whichever loses the race quietly rewrites the user's
+        // Command Center key from Alt+Space to Control+Space in their settings
+        // file, and the shortcut they set stops working with nothing on screen
+        // to explain why.
+        //
+        // With this, a second launch never becomes a second app. The already
+        // running copy is handed the arguments and the newcomer exits, which is
+        // also the behaviour that makes double-clicking Caduceus.app while it is
+        // resident do the useful thing rather than nothing.
+        .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
+            // The login item passes `--minimized` (see the autostart plugin
+            // below): that is the OS starting us, not a person asking for
+            // anything, so it must stay silent. Any other relaunch is somebody
+            // opening the app by hand, and the honest response to "open
+            // Caduceus" is to show them the thing Caduceus is.
+            if argv.iter().any(|arg| arg == "--minimized") {
+                return;
+            }
+            if let Err(e) = window::open_command_center(
+                app,
+                window::CommandCenterOpenPayload {
+                    select_all: true,
+                    source: "other".into(),
+                    ..Default::default()
+                },
+            ) {
+                log::warn!("a second launch could not open the Command Center: {e}");
+            }
+        }))
         .plugin(tauri_plugin_store::Builder::default().build())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
@@ -117,10 +162,14 @@ pub fn run() {
             commands::run_installer_update,
             commands::install_command,
             commands::validate_hotkey,
+            hotkeys::hotkey_health,
+            autostart::autostart_status,
+            autostart::autostart_set_enabled,
             // secrets
             commands::set_backend_api_key,
             commands::delete_backend_api_key,
             commands::set_stt_api_key,
+            commands::set_tts_api_key,
             // shortcuts
             commands::run_shortcut,
             commands::list_browsers,
@@ -246,6 +295,30 @@ pub fn run() {
             mcp::mcp_disconnect_server,
             mcp::mcp_list_tools,
             mcp::mcp_call_tool,
+            // skills (self-evolving, built-in agent tools -- see skills::mod's doc)
+            skills::commands::skills_list,
+            skills::commands::skill_view,
+            skills::commands::skill_manage,
+            // memory (persistent, self-updating agent memory -- see memory::mod's doc)
+            memory::commands::memory_snapshot,
+            memory::commands::memory_write,
+            memory::commands::memory_session_search,
+            // scheduler (scheduled agent jobs -- see scheduler::mod's doc)
+            scheduler::commands::scheduler_list_jobs,
+            scheduler::commands::scheduler_get_job,
+            scheduler::commands::scheduler_create_job,
+            scheduler::commands::scheduler_update_job,
+            scheduler::commands::scheduler_delete_job,
+            scheduler::commands::scheduler_pause_job,
+            scheduler::commands::scheduler_resume_job,
+            scheduler::commands::scheduler_run_now,
+            scheduler::commands::scheduler_list_executions,
+            // computer use (cua-driver)
+            computeruse::computeruse_status,
+            computeruse::computeruse_permission_status,
+            computeruse::computeruse_grant_permissions,
+            computeruse::computeruse_doctor,
+            computeruse::computeruse_open_installer,
             workflows::workflows_stage_from_url,
             workflows::workflows_list_pending,
             workflows::workflows_dismiss_pending,
@@ -344,15 +417,27 @@ pub fn run() {
             // agents
             commands::agent_chat,
             commands::agent_start_session,
+            commands::agent_start_tool_session,
             commands::agent_stop_session,
             commands::agent_stop_all,
             commands::agent_approve,
             commands::agent_active_sessions,
             commands::agent_test_backend,
             commands::agent_list_models,
+            commands::agent_context_check,
+            commands::agent_context_remediate,
             commands::agent_backend_templates,
             commands::hermes_status,
             commands::detect_local_ai,
+            // gateway (remote messaging bridge -- reach the agent from a phone)
+            gateway::gateway_status,
+            gateway::gateway_start,
+            gateway::gateway_stop,
+            gateway::gateway_restart,
+            gateway::gateway_set_telegram_token,
+            gateway::gateway_delete_telegram_token,
+            gateway::gateway_test_telegram_token,
+            gateway::gateway_chat_info,
             // system monitor
             commands::system_snapshot,
             commands::system_kill,
@@ -369,6 +454,9 @@ pub fn run() {
             commands::voice_cancel,
             commands::voice_is_recording,
             commands::toggle_dictation,
+            commands::speak,
+            commands::stop_speaking,
+            commands::list_speech_voices,
             commands::type_text,
             commands::capture_screenshot,
             commands::capture_record_start,
@@ -497,7 +585,11 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     let handle = app.handle().clone();
 
     // macOS: no Dock icon, no app-switcher entry. Caduceus is a menu-bar utility;
-    // the Settings window temporarily switches this back (see window::open_settings).
+    // Settings is a tab inside the same non-activating Command Center panel as
+    // everything else, not a window of its own, so nothing here ever needs to
+    // switch this back. An earlier version did exactly that while Settings was
+    // open and was removed — see `window::macos::keep_in_place` for why: it
+    // threw the user out of whatever full-screen Space they were in.
     #[cfg(target_os = "macos")]
     app.set_activation_policy(tauri::ActivationPolicy::Accessory);
 
@@ -576,6 +668,82 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
+    // --- skills --------------------------------------------------------
+    // Sync happens before registration so a freshly-installed skill is
+    // immediately visible to the tool the very first call can reach —
+    // neither step depends on anything set up above besides `data_dir`.
+    // See `skills::mod`'s doc for the full design; `native_tools` is the
+    // process-global registry `skills::native::register` populates, not
+    // Tauri-managed state, so nothing here needs `app.manage()`.
+    let skills_root = data_dir.join(skills::SKILLS_DIR_NAME);
+    skills::sync_bundled_skills(&skills_root);
+    skills::register_native_tools(skills_root.clone());
+
+    // The deterministic curator sweep — stale at 30 days unused, archived at
+    // 90 — runs once per launch rather than on a timer. Both thresholds are
+    // measured in days, so a resident app checking them more than once a day
+    // would only ever find the same answer, and a machine that is never
+    // restarted is one where nothing is being archived out from under anyone
+    // anyway.
+    //
+    // It is deferred rather than run inline because it walks every skill
+    // directory, and `setup()` is on the path between launching and the staff
+    // appearing. Skills referenced by a scheduled job are passed as protected:
+    // a job that fires monthly would otherwise have its skill archived at the
+    // 90-day mark and fail the next time it ran, which is exactly the kind of
+    // breakage nobody would connect back to a cleanup sweep.
+    let curator_handle = handle.clone();
+    tauri::async_runtime::spawn(async move {
+        let protected = scheduler::referenced_skill_names(&curator_handle);
+        let moved = tauri::async_runtime::spawn_blocking(move || {
+            skills::lifecycle::apply_transitions(&skills_root, chrono::Utc::now(), &protected)
+        })
+        .await;
+        match moved {
+            Ok(changes) if !changes.is_empty() => {
+                log::info!("skills curator: {} skill(s) changed state", changes.len());
+            }
+            Ok(_) => {}
+            Err(e) => log::warn!("skills curator sweep did not finish: {e}"),
+        }
+    });
+
+    // --- memory --------------------------------------------------------
+    // Two bounded, human-editable markdown files (MEMORY.md / USER.md) plus
+    // full-text search over saved conversations — see `memory::mod`'s doc
+    // for the full design. Placed after "saved conversations" above because
+    // `SessionSearchIndex::open` adds triggers to the chat database's
+    // `messages` table (it also guarantees that table exists itself, by
+    // opening a `ChatStore` internally, so this ordering is a nicety here,
+    // not a strict requirement). Both native tools (`memory`,
+    // `session_search`) register into the same process-global
+    // `native_tools` registry `skills` populates above — see
+    // `memory::register_native_tools`.
+    match memory::MemoryStore::open(
+        data_dir.join(memory::MEMORY_DIR),
+        memory::DEFAULT_MEMORY_CHAR_LIMIT,
+        memory::DEFAULT_USER_CHAR_LIMIT,
+    ) {
+        Ok(memory_store) => {
+            app.manage(memory_store.clone());
+            // session_search additionally needs the chat database; a
+            // failure there still leaves the `memory` tool itself working,
+            // matching clipboard/chat's own "a feature, not a prerequisite"
+            // handling above.
+            match memory::SessionSearchIndex::open(data_dir.join(chat::DB_FILE)) {
+                Ok(search_index) => {
+                    app.manage(search_index.clone());
+                    memory::register_native_tools(memory_store, search_index);
+                }
+                Err(e) => {
+                    log::error!("session search is unavailable: {e}");
+                    memory::tool::register(memory_store);
+                }
+            }
+        }
+        Err(e) => log::error!("persistent memory is unavailable: {e}"),
+    }
+
     // --- usage ranking -----------------------------------------------------
     // Loaded before the windows so the palette's first render already has it.
     app.manage(usage::UsageStore::open(data_dir.join(usage::USAGE_FILE)));
@@ -601,8 +769,17 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
 
     // --- agents and voice -------------------------------------------------
     app.manage(agent::AgentRuntime::new());
+    app.manage(gateway::GatewayRuntime::new());
     app.manage(apps::AppIndex::new());
-    app.manage(voice::VoiceRuntime::new());
+    let voice_runtime = voice::VoiceRuntime::new();
+    // Managed under its own type too, so the `speak`/`stop_speaking` commands
+    // can depend on just `TtsRuntime` rather than the whole of `VoiceRuntime`
+    // — but it has to be *this exact instance*, not a second
+    // `TtsRuntime::new()`, or a barge-in triggered by `VoiceRuntime::start`
+    // and a `stop_speaking` call from the frontend would be silencing two
+    // different, unrelated speakers instead of the one that is actually live.
+    app.manage(voice_runtime.tts());
+    app.manage(voice_runtime);
     app.manage(capture::CaptureRuntime::new());
     app.manage(capture::recorder::RecorderRuntime::new());
     app.manage(sysmon::SysMonitor::new());
@@ -625,14 +802,15 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     // window the user actually expects to see is on screen even if restoring a
     // saved widget goes wrong.
     //
-    // A failure here is deliberately swallowed. A widget that cannot be rebuilt
-    // — its saved geometry now off every attached display, say — is not a
-    // reason to take the rest of the app down with it.
+    // Restoration is fire-and-forget from here: it runs on its own staggered
+    // schedule (see WIDGET_RESTORE_STAGGER in widgets.rs) so setup() does not
+    // block on however many widgets the user has, and per-widget failures are
+    // logged and skipped inside restore_saved_widgets itself — a widget that
+    // cannot be rebuilt, its saved geometry now off every attached display
+    // say, is not a reason to take the rest of the app down with it.
     popbar::register_hotkey(&handle);
 
-    if let Err(error) = widgets::restore_saved_widgets(&handle) {
-        log::warn!("could not restore saved widgets: {error}");
-    }
+    widgets::restore_saved_widgets(&handle);
 
     if let Some(w) = handle.get_webview_window(window::COMMAND_CENTER_WINDOW) {
         window::apply_vibrancy(&w);
@@ -672,6 +850,9 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     app.manage(tracker);
 
     // --- hotkeys and tray -------------------------------------------------
+    // Managed before the first `register_all` call, which needs somewhere to
+    // record this session's actual registrations — see `hotkeys::HotkeyRuntime`.
+    app.manage(hotkeys::HotkeyRuntime::new());
     let problems = hotkeys::register_all(&handle, &manager);
     if !problems.is_empty() {
         // Surfaced in Settings rather than as a modal at launch: a clashing
@@ -685,6 +866,40 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     // and then keeps looking on a schedule, announcing a version at most once and
     // honouring whatever the user chose in Settings → Updates.
     update::spawn_update_watcher(handle.clone());
+
+    // Fire-and-forget, same shape as the update watcher above: detecting
+    // cua-driver touches disk and briefly spawns a subprocess (`--version`),
+    // so it must not delay the staff appearing. Silent when cua-driver is
+    // simply not installed — see `computeruse::ensure_registered`.
+    {
+        let handle = handle.clone();
+        tauri::async_runtime::spawn(async move {
+            computeruse::ensure_registered(&handle).await;
+        });
+    }
+
+    // Resume the messaging gateway if it was left running -- fire-and-forget,
+    // same reasoning as the two blocks above: it opens a network connection
+    // and must not delay the staff appearing. See
+    // `gateway::autostart_if_enabled`'s doc for what "was left running" means
+    // and why a failure here only ever shows up as `GatewayStatus::Error`,
+    // never as a startup failure.
+    {
+        let handle = handle.clone();
+        tauri::async_runtime::spawn(async move {
+            gateway::autostart_if_enabled(&handle).await;
+        });
+    }
+
+    // Scheduled agent jobs: a 60s ticker that fires whatever is due, for the
+    // life of the process. Unlike `mcp::McpRuntime`/`widgets::WidgetRuntime`
+    // (lazily managed — see `scheduler::ensure_managed`'s doc), this one
+    // extra line is deliberate: a scheduler that only ticks once someone
+    // happens to open a settings page is not really a scheduler. Its own
+    // setup (the data directory, the audit ledger, reconciling anything left
+    // `claimed`/`running` by a previous session) happens lazily inside the
+    // first tick rather than blocking startup here.
+    scheduler::ticker::spawn(handle.clone());
 
     autostart::sync_with_settings(&handle, loaded.general.launch_at_login);
 
@@ -708,14 +923,21 @@ fn handle_window_event(window: &tauri::Window, event: &WindowEvent) {
         // webview on every open would make the palette feel slow, and Caduceus is
         // only ever really quit from the tray.
         WindowEvent::CloseRequested { api, .. } => {
-            if window.label() != window::STAFF_WINDOW {
-                api.prevent_close();
-                // Closing puts Caduceus back in the menu bar where it lives.
-                // The tabs are still there on the next open — they are written
-                // down as well as held in memory, so even a restart reopens on
-                // what you left.
-                let _ = window.hide();
-            }
+            // The staff used to be excluded from this — closing it would have
+            // destroyed the window instead of hiding it, unlike every other
+            // surface here. Nothing has ever called `.close()` on the staff
+            // (it has no decorations, so there is no OS close button to do it
+            // for you), so the gap was dormant rather than load-bearing — but
+            // a dormant footgun is still a footgun: the first future caller
+            // that does call it would destroy the one window the whole app is
+            // built around. Hide-never-destroy is the contract for every
+            // window, staff included.
+            api.prevent_close();
+            // Closing puts Caduceus back in the menu bar where it lives.
+            // The tabs are still there on the next open — they are written
+            // down as well as held in memory, so even a restart reopens on
+            // what you left.
+            let _ = window.hide();
         }
 
         // Clicking another app dismisses the Command Center (Spotlight-style).

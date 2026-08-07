@@ -60,6 +60,23 @@
 //! in `; rm -rf` style shell metacharacters even if the user's own input
 //! were somehow hostile to itself.
 //!
+//! One narrow, deliberate exception: [`register_server_if_absent`], added
+//! for [`crate::computeruse`]'s cua-driver auto-registration. It still never
+//! *launches* anything without persisted, on-disk consent — it writes a
+//! config exactly [`mcp_add_server`] would, then calls the identical
+//! [`connect_config`] — but it is invoked from Caduceus's own startup path
+//! rather than from a human filling in a form. The consent it relies on is
+//! different in *shape*, not absent: every caller is required to build its
+//! [`McpServerConfig`] from a detection step over the local filesystem for
+//! one specific, hardcoded binary name known at compile time, never from a
+//! model's output, a network response, or anything else untrusted — so
+//! there is still no path by which an agent's own behaviour can add or
+//! choose what gets registered. The user consented by installing that exact
+//! binary, the same way they consent to any other locally-installed tool
+//! Caduceus discovers rather than downloads. See that function's own docs
+//! for the rest of the reasoning, including why an existing entry — enabled
+//! or not — is never touched.
+//!
 //! **(b) A tool call is inspectable before it runs.** [`mcp_list_tools`]
 //! hands back every tool's full JSON-Schema `inputSchema` up front, and
 //! [`mcp_call_tool`] takes the fully-formed `arguments` object as a plain,
@@ -1073,6 +1090,59 @@ pub async fn connect_enabled_servers<R: Runtime>(app: &AppHandle<R>) {
     }
 }
 
+/// The actual idempotency rule behind [`register_server_if_absent`]: add
+/// `candidate` only when nothing already uses its name. Pulled out as a
+/// plain function over a borrowed slice — rather than inlined into the
+/// `AppHandle`-shaped function below — for the same reason [`aggregate_tools`]
+/// and [`find_tool`] are: it is the entire decision, and it is trivially
+/// unit-testable without standing up a Tauri app just to prove that an
+/// existing entry (enabled or not) is left alone.
+fn should_register(existing: &[McpServerConfig], candidate: &McpServerConfig) -> bool {
+    !existing.iter().any(|c| c.name == candidate.name)
+}
+
+/// Register `config` as a new server if, and only if, no server with that
+/// name is already configured. Returns `Ok(true)` when a new config was
+/// written (and connected), `Ok(false)` when a server with this name already
+/// existed and was left completely untouched — not reconnected, not
+/// re-enabled, not compared against `config` for drift.
+///
+/// # Why "already exists" always wins, no matter what it says
+///
+/// This must never overwrite an existing entry — not its command, not its
+/// args, and especially not `enabled`. A user who removed or disabled a
+/// server made a choice, and a background detector re-enabling it on the
+/// next launch would silently undo that choice. [`should_register`] is the
+/// whole rule, and it does not look past the name.
+///
+/// One honest gap this does *not* close: if a user deletes the entry
+/// outright (rather than disabling it), presence-vs-absence in the store is
+/// the only signal this function — or anything else — has, so the next
+/// launch's detection will see "no server named this" and add it back. Only
+/// *disabling* sticks; a full "the user declined this, never offer it
+/// again" memory would need a persisted marker this store does not have
+/// today. Solving that felt like scope the caller did not ask for; this
+/// comment is so the gap is a documented decision rather than a surprise.
+///
+/// # Why this is not a violation of the module header's point (a)
+///
+/// See the module header's addendum to point (a) — this function is the
+/// exception it describes, and the reasoning lives there rather than being
+/// duplicated here.
+pub async fn register_server_if_absent<R: Runtime>(app: &AppHandle<R>, config: McpServerConfig) -> Res<bool> {
+    ensure_managed(app);
+    let mut configs = load_configs(app);
+    if !should_register(&configs, &config) {
+        return Ok(false);
+    }
+    configs.push(config.clone());
+    save_configs(app, &configs)?;
+    if config.enabled {
+        connect_config(app, &config).await;
+    }
+    Ok(true)
+}
+
 // ---------------------------------------------------------------------------
 // Commands
 // ---------------------------------------------------------------------------
@@ -1697,5 +1767,50 @@ mod tests {
         assert!(!valid_server_name("has space"));
         assert!(!valid_server_name("has/slash"));
         assert!(!valid_server_name(&"x".repeat(MAX_SERVER_NAME_LEN + 1)));
+    }
+
+    // -- Idempotent auto-registration ---------------------------------------
+    //
+    // `register_server_if_absent` itself needs a real `AppHandle` (it reads
+    // and writes the store), which nothing in this test module stands up —
+    // see the file header's testing philosophy. `should_register` is the
+    // entire decision pulled out specifically so it does not need one.
+
+    fn stub_config(name: &str, enabled: bool) -> McpServerConfig {
+        McpServerConfig {
+            name: name.into(),
+            command: "/usr/bin/true".into(),
+            args: Vec::new(),
+            env: HashMap::new(),
+            enabled,
+        }
+    }
+
+    #[test]
+    fn an_unconfigured_name_should_be_registered() {
+        let existing: Vec<McpServerConfig> = Vec::new();
+        assert!(should_register(&existing, &stub_config("cua", true)));
+    }
+
+    #[test]
+    fn a_name_already_configured_is_never_registered_again() {
+        let existing = vec![stub_config("cua", true)];
+        assert!(!should_register(&existing, &stub_config("cua", true)));
+    }
+
+    #[test]
+    fn a_disabled_existing_entry_blocks_registration_exactly_like_an_enabled_one() {
+        // The critical case: a user who turned "cua" off must never have it
+        // silently reappear as enabled because a background detector ran
+        // again on the next launch.
+        let existing = vec![stub_config("cua", false)];
+        let candidate = stub_config("cua", true);
+        assert!(!should_register(&existing, &candidate));
+    }
+
+    #[test]
+    fn an_unrelated_existing_server_does_not_block_a_different_name() {
+        let existing = vec![stub_config("weather", true)];
+        assert!(should_register(&existing, &stub_config("cua", true)));
     }
 }

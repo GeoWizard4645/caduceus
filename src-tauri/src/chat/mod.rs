@@ -34,8 +34,14 @@ pub struct ChatReply {
 }
 
 /// One event while a reply is streaming into the chat UI.
+///
+/// `rename_all_fields` is load-bearing, not decoration: `rename_all` on an
+/// enum renames variants only, so without it `Started { conversation_id }`
+/// went out as `conversation_id` while `Chat.tsx` read `chunk.conversationId`
+/// and got `undefined` — a new conversation's id never reached the UI. See
+/// [`crate::agent::types::AgentStep`] for the same trap and its test.
 #[derive(Debug, Clone, Serialize)]
-#[serde(tag = "type", rename_all = "camelCase")]
+#[serde(tag = "type", rename_all = "camelCase", rename_all_fields = "camelCase")]
 pub enum ChatChunk {
     /// The request has been accepted; the timer can start.
     Started { conversation_id: i64 },

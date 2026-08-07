@@ -100,7 +100,7 @@ pub async fn scan() -> LocalAiScan {
 async fn probe(candidate: &'static Candidate) -> DetectedProvider {
     let models = list_models(candidate.base_url).await;
 
-    let (running, detail) = match &models {
+    let (running, mut detail) = match &models {
         Some(found) if found.is_empty() => (
             true,
             format!(
@@ -118,6 +118,31 @@ async fn probe(candidate: &'static Candidate) -> DetectedProvider {
         ),
         None => (false, format!("Not running. {}", candidate.hint)),
     };
+
+    // Ollama specifically has a sharp edge no other candidate here does: tool
+    // calling needs `super::context::MINIMUM_CONTEXT_LENGTH` tokens of context,
+    // most local models default to a few thousand, and the failure mode is not
+    // an error — it just silently answers as if it has no tools (see
+    // `context`'s module doc). Surfacing that here, right where someone is
+    // already looking at what is installed, catches it before they ever pick a
+    // model in Settings. This is a one-call advisory over each model's GGUF
+    // training *ceiling*, not the precise, per-backend answer `context::check`
+    // gives — see `ollama_context_ceilings`'s own doc for why a bulk scan
+    // cannot afford the latter.
+    if candidate.id == "ollama" && running {
+        if let Some(ceilings) = super::context::ollama_context_ceilings(candidate.base_url).await {
+            let too_small =
+                ceilings.iter().filter(|(_, ctx)| *ctx < super::context::MINIMUM_CONTEXT_LENGTH).count();
+            if too_small > 0 {
+                detail.push_str(&format!(
+                    " {too_small} model{} cannot reach Caduceus's {}K tool-calling minimum even with a \
+                     raised context override.",
+                    if too_small == 1 { "" } else { "s" },
+                    super::context::MINIMUM_CONTEXT_LENGTH / 1000,
+                ));
+            }
+        }
+    }
 
     DetectedProvider {
         id: candidate.id.to_string(),

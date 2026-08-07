@@ -19,7 +19,7 @@ Command Center / palette
   • Enter dispatches in Rust (palette.rs) so voice and keyboard share rules.
 
 Settings (persisted JSON, auto-save)
-  • general — hotkeys, staff edge/position, onboarding, personalization quiz, function keys.
+  • general — hotkeys, staff edge/position, onboarding, function keys.
   • shortcuts — staff ring + palette; targets: URL, app, command, AppleScript, built-in views.
   • commandCenter — browser, prefixes, max results.
   • agents — backends (hermes, openai_compatible), primary + computer-use routing, API keys in keychain.

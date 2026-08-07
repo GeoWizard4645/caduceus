@@ -817,18 +817,20 @@ pub async fn workflows_commit_import(
 }
 
 // ---------------------------------------------------------------------------
-// Wiring this module in — everything below is what could not be done inside
-// this file, because it requires touching files this task does not own.
-// See the accompanying report for the full explanation.
+// Wired into the rest of the app
+// ---------------------------------------------------------------------------
 //
-// 1. `src-tauri/Info.plist` (new file, next to `tauri.conf.json` — Tauri
-//    merges it automatically, no `tauri.conf.json` edit needed) must declare
-//    the `caduceus` URL scheme via `CFBundleURLTypes`.
-// 2. `lib.rs`'s `setup()` needs `app.manage(workflows::WorkflowInbox::new());`
-// 3. `lib.rs`'s `.run(|app, event| { … })` needs a `RunEvent::Opened` arm
-//    calling `workflows::handle_deep_link(app, url.as_str())` per URL.
-// 4. `lib.rs`'s `invoke_handler!` needs the four `workflows_*` commands added
-//    to the list.
+// Everything below is what this module could not do inside its own file,
+// because it requires touching files this module does not own. All four are
+// in place:
+//
+// 1. `src-tauri/Info.plist` declares the `caduceus` URL scheme via
+//    `CFBundleURLTypes` (Tauri merges it automatically; no `tauri.conf.json`
+//    edit needed).
+// 2. `lib.rs`'s `setup()` calls `app.manage(workflows::WorkflowInbox::new());`.
+// 3. `lib.rs`'s `.run(|app, event| { … })` has a `RunEvent::Opened` arm that
+//    calls `workflows::handle_deep_link(app, url.as_str())` per URL.
+// 4. `lib.rs`'s `invoke_handler!` lists all four `workflows_*` commands.
 // ---------------------------------------------------------------------------
 
 #[cfg(test)]

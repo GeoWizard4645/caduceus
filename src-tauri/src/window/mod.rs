@@ -191,26 +191,13 @@ const ONBOARDING_CARD_HEIGHT: f64 = 260.0;
 const ONBOARDING_CARD_GAP: f64 = 16.0;
 
 /// Clearance between the outermost pop-out icon and the edge of the window.
-///
-/// This used to be 24px, which was enough when an icon was the last thing drawn
-/// on the arc. Each shortcut now carries a caption chip overlapping its bottom
-/// edge, naming where it goes. The caption used to be a plain word sitting in
-/// flow beneath the icon (narrow, and adding only to the vertical extent); it is
-/// now a pill roughly a hostname wide — up to 116px, centred on the icon rather
-/// than constrained by it — so the icon's own radius is no longer a useful proxy
-/// for how far the visuals reach. The binding case is the smallest icon size
-/// (24px, see `popout_icon_size`'s clamp in `settings::mod::sanitize`) paired
-/// with the widest caption: the chip's half-width extends roughly 45–60px
-/// beyond what `popout_icon_size / 2` alone accounts for, in every direction,
-/// since the arc can place an icon anywhere around the ring. 50px was sized for
-/// the old in-flow caption and left the new chip clipped at the window edge on
-/// the left- and right-most icons. The window is click-through everywhere
-/// except the mark, so the only cost of the extra margin is a slightly larger
-/// invisible square.
-const POPOUT_EDGE_MARGIN: f64 = 64.0;
+/// Labels now occupy one fixed chip inside the ring instead of hanging from all
+/// six icons, so the window only needs room for the target, its shadow and the
+/// expand animation.
+const POPOUT_EDGE_MARGIN: f64 = 32.0;
 
 /// Side length of the staff window. Grows with staff size and pop-out reach so
-/// icons and their captions are never clipped; clamped to a sane range.
+/// icons and the hover label are never clipped; clamped to a sane range.
 ///
 /// While the first-run walkthrough is unfinished the window also has to hold its
 /// card, which is drawn in the top half so the mark at the centre stays visible
@@ -504,6 +491,24 @@ const APPROACH_BANDS: f64 = 7.0;
 /// swallows clicks — on a window the user positioned at the edge of the screen
 /// precisely so nothing else is there.
 const CAPTURE_MARGIN: f64 = 28.0;
+/// Slowest interval once the pointer has been sitting still somewhere that
+/// cannot currently affect the staff — not hovering, not expanded, not over a
+/// registered capture rect — for [`STILL_TICKS_FOR_IDLE`] consecutive ticks.
+///
+/// [`FAR_POLL_MS`] alone caps out a handful of pop-out radii from the staff;
+/// past that the loop never gets any slower, so a pointer sitting untouched on
+/// another monitor is polled exactly as often as one just outside the
+/// approach band. That is the case the "1% of a CPU, forever" doc comment
+/// above is actually about — not a pointer that is merely far, but one that
+/// has stopped moving at all, which is what an idle desktop looks like far
+/// more often than "someone is approaching the staff" does.
+const FAR_IDLE_POLL_MS: u64 = 500;
+/// How many consecutive stationary, inactive ticks before [`FAR_IDLE_POLL_MS`]
+/// kicks in. At [`FAR_POLL_MS`] this is a little under a second — long enough
+/// that a brief pause between mouse movements is not mistaken for having
+/// walked away, short enough that the idle rate is what the app spends nearly
+/// all of its time at.
+const STILL_TICKS_FOR_IDLE: u32 = 16;
 
 /// Poll interval for the next tick, given how far the pointer is from the staff.
 ///
@@ -519,6 +524,24 @@ fn next_delay(distance: f64, popout_radius: f64, fast_ms: u64, active: bool) -> 
     let fast = fast_ms as f64;
     let slow = FAR_POLL_MS.max(fast_ms) as f64;
     (fast + (slow - fast) * ramp).round() as u64
+}
+
+/// Whether the idle rate ([`FAR_IDLE_POLL_MS`]) should override the distance
+/// ramp this tick, and the tick counter to carry into the next one.
+///
+/// `active` is "something time-sensitive is in flight" (`inside`,
+/// `state.expanded`, or `over_capture_rect` at the call site) and `moved` is
+/// whether the cursor's physical position differs from last tick's. Either
+/// one resets the counter to zero, so neither an approach nor a resumed drag
+/// ever inherits leftover idle latency — only a pointer that is both doing
+/// nothing *and* going nowhere accumulates toward the idle rate.
+fn idle_tick(still_ticks: u32, active: bool, moved: bool) -> (bool, u32) {
+    let next = if active || moved {
+        0
+    } else {
+        still_ticks.saturating_add(1)
+    };
+    (next >= STILL_TICKS_FOR_IDLE, next)
 }
 
 /// Handle for stopping the tracker at shutdown.
@@ -622,6 +645,11 @@ pub fn spawn_cursor_tracker<R: Runtime>(
         // After a pop-out click, do not re-open until the pointer leaves the staff.
         let mut block_expand = false;
         let mut last_emitted = state;
+        // Last physical cursor position seen, and how many consecutive ticks
+        // it has gone unchanged while nothing time-sensitive was in progress —
+        // see FAR_IDLE_POLL_MS below.
+        let mut last_cursor: Option<(f64, f64)> = None;
+        let mut still_ticks: u32 = 0;
 
         let emit_state =
             |window: &WebviewWindow<R>, state: &StaffHoverState, last: &mut StaffHoverState| {
@@ -633,12 +661,14 @@ pub fn spawn_cursor_tracker<R: Runtime>(
 
         // Adaptive poll interval. Polling at 30Hz forever costs about 1% of a
         // CPU on an always-on app, which is real battery for something that is
-        // idle almost all the time. Instead the rate scales with how far the
-        // pointer is from the staff: full speed when it is close enough to
-        // matter, and progressively lazier as it gets further away. Approaching
+        // idle almost all the time. The rate scales along two axes: how far
+        // the pointer is from the staff (full speed when it is close enough to
+        // matter, progressively lazier as it gets further away — approaching
         // the staff crosses the intermediate bands first, so by the time the
         // pointer arrives the loop is already running fast and hover still
-        // feels instant.
+        // feels instant), and, further out, whether the pointer is moving at
+        // all (a pointer that has stopped moving anywhere backs off past the
+        // distance ramp's own floor — see FAR_IDLE_POLL_MS).
         let mut delay_ms: u64 = DEFAULT_POLL_MS;
 
         loop {
@@ -653,11 +683,13 @@ pub fn spawn_cursor_tracker<R: Runtime>(
 
             let Some(window) = app.get_webview_window(STAFF_WINDOW) else {
                 delay_ms = IDLE_POLL_MS;
+                last_cursor = None;
                 continue;
             };
             if !window.is_visible().unwrap_or(false) {
                 // Nothing to hover: check back rarely.
                 delay_ms = HIDDEN_POLL_MS;
+                last_cursor = None;
                 if !click_through {
                     let _ = window.set_ignore_cursor_events(true);
                     click_through = true;
@@ -672,6 +704,7 @@ pub fn spawn_cursor_tracker<R: Runtime>(
                 window.scale_factor(),
             ) else {
                 delay_ms = IDLE_POLL_MS;
+                last_cursor = None;
                 continue;
             };
 
@@ -800,15 +833,21 @@ pub fn spawn_cursor_tracker<R: Runtime>(
             }
 
             // --- pick the next poll interval ------------------------------
-            delay_ms = next_delay(
-                distance,
-                popout_radius,
-                general.cursor_poll_ms,
-                // The card can sit further from the mark than the pop-out ring
-                // reaches, so distance alone would drop the loop to its lazy
-                // rate and make its buttons feel unresponsive.
-                inside || state.expanded || over_capture_rect,
-            );
+            // The card can sit further from the mark than the pop-out ring
+            // reaches, so distance alone would drop the loop to its lazy rate
+            // and make its buttons feel unresponsive.
+            let active = inside || state.expanded || over_capture_rect;
+            let moved = last_cursor != Some((cursor.x, cursor.y));
+            last_cursor = Some((cursor.x, cursor.y));
+
+            let (is_idle, next_still_ticks) = idle_tick(still_ticks, active, moved);
+            still_ticks = next_still_ticks;
+
+            delay_ms = if is_idle {
+                FAR_IDLE_POLL_MS
+            } else {
+                next_delay(distance, popout_radius, general.cursor_poll_ms, active)
+            };
         }
     });
 
@@ -1061,20 +1100,6 @@ pub fn set_window_opacity<R: Runtime>(
     }
 }
 
-/// Open the chat window, optionally on a specific thread.
-///
-/// Like Settings, this is a window you read and type in for minutes at a time,
-/// so it gets a Dock icon while it is open — an accessory app's windows are
-/// otherwise unreachable once they lose focus.
-
-/// Called when a window that earned a Dock icon closes: drop back to being a
-/// menu-bar-only app, unless another such window is still open.
-///
-/// `closing` is excluded from the check by label — at the point the close event
-/// fires the window still reports itself visible, so counting it would keep the
-/// Dock icon forever.
-#[cfg(target_os = "macos")]
-
 /// Apply the platform's native background material to a window.
 ///
 /// CSS `backdrop-filter` blurs page content only — it cannot see the desktop
@@ -1223,5 +1248,45 @@ mod tests {
         // A zero radius would be a NaN ramp and an unusable delay.
         let delay = next_delay(10.0, 0.0, 33, false);
         assert!((33..=FAR_POLL_MS).contains(&delay), "got {delay}");
+    }
+
+    #[test]
+    fn idle_only_kicks_in_after_enough_still_inactive_ticks() {
+        let mut ticks = 0;
+        let mut idle;
+        for _ in 0..STILL_TICKS_FOR_IDLE - 1 {
+            (idle, ticks) = idle_tick(ticks, false, false);
+            assert!(!idle, "went idle before the threshold");
+        }
+        (idle, _) = idle_tick(ticks, false, false);
+        assert!(idle, "never went idle despite enough still ticks");
+    }
+
+    #[test]
+    fn movement_resets_the_idle_counter() {
+        // A pointer that is merely far but still being moved — working in
+        // another app, say — must never be mistaken for having walked away.
+        let mut ticks = STILL_TICKS_FOR_IDLE - 1;
+        let (idle, next) = idle_tick(ticks, false, true);
+        assert!(!idle);
+        assert_eq!(next, 0);
+        ticks = next;
+        assert_eq!(ticks, 0);
+    }
+
+    #[test]
+    fn activity_resets_the_idle_counter_even_if_the_pointer_has_not_moved() {
+        // Hovering or expanded with a perfectly still pointer must stay on the
+        // fast ramp — the collapse/expand timers are real-time, not
+        // motion-driven, and would stall if this backed off instead.
+        let (idle, next) = idle_tick(STILL_TICKS_FOR_IDLE, true, false);
+        assert!(!idle);
+        assert_eq!(next, 0);
+    }
+
+    #[test]
+    fn the_idle_counter_never_wraps() {
+        let (_, next) = idle_tick(u32::MAX, false, false);
+        assert_eq!(next, u32::MAX, "saturating_add should clamp, not wrap");
     }
 }

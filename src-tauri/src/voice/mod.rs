@@ -7,22 +7,29 @@
 pub mod recorder;
 pub mod router;
 pub mod stt;
+pub mod tts;
 
 #[cfg(target_os = "macos")]
 pub mod live_macos;
 
 pub use router::{ai_is_configured, route, RoutedText};
 pub use stt::{SttAvailability, SttBackend, SttError};
+pub use tts::{TtsAvailability, TtsBackend, TtsError};
 
 use parking_lot::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
-use crate::settings::{SettingsManager, SttBackendKind};
+use crate::settings::{SettingsManager, SttBackendKind, VoiceSettings};
 
 pub const VOICE_STATE_EVENT: &str = "caduceus://voice-state";
 pub const VOICE_PARTIAL_EVENT: &str = "caduceus://voice-partial";
 pub const VOICE_RESULT_EVENT: &str = "caduceus://voice-result";
+/// Emitted whenever a spoken reply starts or stops, for a speaking indicator
+/// in the UI. Kept separate from `VOICE_STATE_EVENT`: that one describes the
+/// microphone, this one the speaker, and both can legitimately be true for a
+/// moment during barge-in — see `VoiceRuntime::start`.
+pub const TTS_STATE_EVENT: &str = "caduceus://tts-state";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -33,6 +40,14 @@ pub enum VoiceState {
     /// reaching the recogniser.
     Paused,
     Transcribing,
+}
+
+/// Whether a spoken reply is currently playing. See [`TTS_STATE_EVENT`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum TtsState {
+    Idle,
+    Speaking,
 }
 
 enum ActiveRecording {
@@ -54,6 +69,14 @@ pub struct VoiceRuntime {
     abandon: Arc<AtomicBool>,
     /// Whether the live session is currently held. Read by the recording HUD.
     paused: Arc<AtomicBool>,
+    /// Whatever is currently being spoken aloud, if anything. `start` below
+    /// cuts it off the instant a recording begins — "barge-in" — by calling
+    /// straight into this rather than trusting every *caller* of `start`
+    /// (the hotkey handler, the `voice_start` command, the function-key
+    /// dispatcher) to each remember to do it separately. See [`TtsRuntime`]'s
+    /// own doc for why cancellation lives on it rather than on
+    /// [`tts::TtsBackend`].
+    tts: TtsRuntime,
 }
 
 impl VoiceRuntime {
@@ -76,6 +99,13 @@ impl VoiceRuntime {
     where
         F: Fn(String) + Send + Sync + 'static,
     {
+        // Barge-in: whatever Caduceus is saying stops the instant the user
+        // asks to talk. Done first, ahead of every check below — including
+        // the already-recording early return just after — so a press that
+        // turns out to be a no-op for recording purposes still silences a
+        // reply in progress.
+        self.tts.stop();
+
         if self.active.lock().is_some() {
             return Ok(());
         }
@@ -176,6 +206,9 @@ impl VoiceRuntime {
     }
 
     pub fn cancel(&self) {
+        // A dismissal is as much "the user wants quiet" as a fresh recording
+        // is — see `start`'s identical call.
+        self.tts.stop();
         // Tell an in-flight start to throw its session away when it lands. The
         // handshake cannot be interrupted from here, but its result can be.
         if self.starting.load(Ordering::SeqCst) {
@@ -189,6 +222,18 @@ impl VoiceRuntime {
 
     pub fn is_paused(&self) -> bool {
         self.paused.load(Ordering::SeqCst)
+    }
+
+    /// The speech runtime backing spoken replies.
+    ///
+    /// Exposed so `lib.rs` can `app.manage` this *same* instance under its own
+    /// type — letting the `speak`/`stop_speaking` commands depend on just
+    /// `TtsRuntime` rather than the whole of `VoiceRuntime` — while this
+    /// struct's own barge-in calls above keep working on the identical shared
+    /// state. Two independently-constructed `TtsRuntime`s would each think
+    /// nothing was ever speaking on the other's side.
+    pub fn tts(&self) -> TtsRuntime {
+        self.tts.clone()
     }
 
     /// Hold the recording without ending it.
@@ -258,4 +303,126 @@ pub fn route_transcript(transcript: &str, settings: &SettingsManager) -> RoutedT
     let (voice, ai_configured) =
         settings.with(|s| (s.voice.clone(), ai_is_configured(&s.agents)));
     route(transcript, &voice, ai_configured)
+}
+
+// ---------------------------------------------------------------------------
+// Text-to-speech playback
+// ---------------------------------------------------------------------------
+
+/// Orchestrates spoken replies: which backend is currently talking, and how to
+/// cut it off.
+///
+/// This is deliberately a separate, thin layer rather than a method on
+/// [`tts::TtsBackend`] itself, for the same reason capture and transcription
+/// are split above: [`SttBackend`] has no `cancel` of its own either, because
+/// *interrupting something already in progress* is a lifecycle concern, not a
+/// backend-strategy one, and belongs to whatever owns the lifecycle. For
+/// recording that owner is [`VoiceRuntime`] itself; for speech it is this
+/// type, which `VoiceRuntime` keeps one of specifically so that starting a
+/// recording can always reach it — see [`VoiceRuntime::start`].
+///
+/// `TtsBackend::stop` only interrupts the instance it is called on, and
+/// [`tts::backend_for`] hands back a fresh instance every call — the same
+/// stateless-resolver shape as `stt::backend_for`. What makes `stop` useful
+/// despite that is this type keeping the *one* `Arc`-shared instance
+/// currently speaking reachable for exactly as long as it is speaking, so a
+/// `stop()` from anywhere finds the same object `speak()` is awaiting rather
+/// than a disconnected new one.
+#[derive(Clone, Default)]
+pub struct TtsRuntime {
+    active: Arc<Mutex<Option<Arc<dyn tts::TtsBackend>>>>,
+}
+
+impl TtsRuntime {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Speak `text` aloud with the configured backend.
+    ///
+    /// Resolves once playback finishes naturally or is cut off by
+    /// [`Self::stop`] — an interruption is reported as success, not failure,
+    /// because from the caller's point of view both mean the same thing:
+    /// Caduceus has gone quiet. Errors are reserved for cases where nothing
+    /// was ever said at all (TTS disabled, no endpoint configured, the
+    /// backend unavailable).
+    pub async fn speak(&self, text: &str, settings: &VoiceSettings) -> tts::TtsResult<()> {
+        if !settings.tts_enabled {
+            return Err(tts::TtsError::Disabled);
+        }
+
+        let backend: Arc<dyn tts::TtsBackend> = tts::backend_for(settings.tts_backend).into();
+        *self.active.lock() = Some(backend.clone());
+
+        let result = backend.speak(text, settings).await;
+
+        // Clear the slot only if nothing newer has already taken it — two
+        // overlapping `speak` calls should not let the first one's cleanup
+        // erase the second's still-active handle. Nothing in this codebase
+        // calls `speak` concurrently today, but the check is cheap and the
+        // alternative — a `stop()` that silently does nothing because the
+        // wrong instance got cleared — is not worth risking.
+        let mut guard = self.active.lock();
+        if matches!(&*guard, Some(current) if Arc::ptr_eq(current, &backend)) {
+            *guard = None;
+        }
+        drop(guard);
+
+        result
+    }
+
+    /// Cut off whatever is currently being spoken. Safe — and a no-op — when
+    /// nothing is: every push-to-talk press calls this unconditionally (see
+    /// [`VoiceRuntime::start`]), so it cannot be allowed to mind being called
+    /// when there is nothing to interrupt.
+    pub fn stop(&self) {
+        if let Some(backend) = self.active.lock().clone() {
+            backend.stop();
+        }
+    }
+
+    pub fn is_speaking(&self) -> bool {
+        self.active.lock().is_some()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn stop_with_nothing_speaking_does_not_panic() {
+        let tts = TtsRuntime::new();
+        assert!(!tts.is_speaking());
+        tts.stop();
+        assert!(!tts.is_speaking());
+    }
+
+    #[tokio::test]
+    async fn speak_with_tts_disabled_returns_the_disabled_error() {
+        let tts = TtsRuntime::new();
+        let settings = VoiceSettings {
+            tts_enabled: false,
+            ..Default::default()
+        };
+        let err = tts.speak("hello", &settings).await;
+        assert!(matches!(err, Err(tts::TtsError::Disabled)));
+        // And it never registered anything as active in the process.
+        assert!(!tts.is_speaking());
+    }
+
+    #[tokio::test]
+    async fn a_finished_utterance_clears_the_active_slot() {
+        // The disabled backend errors immediately without ever really
+        // "speaking", but it still exercises `speak`'s install-then-clear
+        // path around `backend.speak(...)`.
+        let tts = TtsRuntime::new();
+        let settings = VoiceSettings {
+            tts_enabled: true,
+            tts_backend: crate::settings::TtsBackendKind::Disabled,
+            ..Default::default()
+        };
+        let _ = tts.speak("hello", &settings).await;
+        assert!(!tts.is_speaking());
+    }
 }

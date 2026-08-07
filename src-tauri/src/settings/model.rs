@@ -32,6 +32,11 @@ pub struct Settings {
     pub clipboard: ClipboardSettings,
     pub appearance: AppearanceSettings,
     pub update: UpdateSettings,
+    /// Reaching the agent from outside the desktop — see `crate::gateway`'s
+    /// module doc. Only non-secret configuration lives here; the bot token
+    /// itself is in the OS keychain (rule 3 above) via
+    /// `secrets::telegram_bot_token`.
+    pub gateway: GatewaySettings,
 }
 
 impl Settings {
@@ -55,6 +60,7 @@ impl Default for Settings {
             clipboard: ClipboardSettings::default(),
             appearance: AppearanceSettings::default(),
             update: UpdateSettings::default(),
+            gateway: GatewaySettings::default(),
         }
     }
 }
@@ -114,6 +120,29 @@ pub struct GeneralSettings {
     pub last_launched_version: Option<String>,
 }
 
+/// Default accelerator for [`GeneralSettings::command_center_hotkey`].
+///
+/// Pulled out to a named constant rather than left as a literal in
+/// [`Default for GeneralSettings`](struct.GeneralSettings.html) so `tray.rs`'s
+/// menu label can fall back to the same string instead of a second, easily
+/// stale copy — a tray menu advertising a hotkey the app does not actually
+/// respond to is worse than advertising none.
+///
+/// # Why not `Control+Space`
+///
+/// It used to be, on the stated reasoning that Spotlight holds `Cmd+Space` and
+/// therefore `Ctrl+Space` was free. It is not: `Ctrl+Space` is macOS's *select
+/// the previous input source* shortcut, shipped enabled, and on any Mac with
+/// more than one input source the system consumes the key before any
+/// application sees it. `RegisterEventHotKey` still returns success — this is
+/// the same trap `hotkeys::SYSTEM_RESERVED` exists to document — so the app
+/// looked correctly configured while its one entry point silently did nothing.
+///
+/// `Option+Space` is genuinely unbound on a stock install, and it is what
+/// Spotlight-alikes (Raycast, Alfred) use, so it is also the combination a
+/// user most likely expects to try first.
+pub const DEFAULT_COMMAND_CENTER_HOTKEY: &str = "Alt+Space";
+
 impl Default for GeneralSettings {
     fn default() -> Self {
         Self {
@@ -121,10 +150,10 @@ impl Default for GeneralSettings {
             // table below, so there is exactly one place F-keys are configured.
             // This field still exists for non-F-key accelerators like ⌥⇧S.
             toggle_orb_hotkey: String::new(),
-            // Control+Space is free on a stock macOS install (Spotlight holds
-            // Cmd+Space) and on Windows/Linux, where Alt+Space opens the window
-            // menu in several desktop environments.
-            command_center_hotkey: "Control+Space".into(),
+            // See the constant's doc for why this is Option+Space and not
+            // Control+Space, which macOS itself claims for input-source
+            // switching.
+            command_center_hotkey: DEFAULT_COMMAND_CENTER_HOTKEY.into(),
             staff_visible: true,
             staff_edge: StaffEdge::Right,
             staff_position: None,
@@ -423,6 +452,45 @@ pub struct VoiceSettings {
     /// convenience into launching the wrong application off a mis-transcription.
     /// `HomeTab.tsx`'s auto-open effect documents each guard.
     pub auto_open_short_utterance: bool,
+
+    // ---- Text-to-speech (spoken replies) -----------------------------------
+    // Named `tts_*` rather than nested in their own struct, matching how the
+    // `stt_*` fields above sit directly on `VoiceSettings` — voice input and
+    // voice output are the same feature area, and this file already has one
+    // established way of grouping a backend choice with its config.
+    /// Master switch for text-to-speech. Off by default: push-to-talk input
+    /// only ever runs because a key is physically held, but spoken *output*
+    /// can start on its own the instant a reply arrives — the one voice
+    /// feature that must stay strictly opt-in. An app that starts talking
+    /// without being asked is a bug, not a feature.
+    pub tts_enabled: bool,
+    pub tts_backend: TtsBackendKind,
+    /// OpenAI-compatible speech endpoint, e.g.
+    /// `https://api.openai.com/v1/audio/speech`, or a local server's
+    /// equivalent. Always called with `response_format=wav` — see
+    /// `voice::tts::OpenAiCompatibleTts` for why.
+    pub tts_endpoint: String,
+    pub tts_model: String,
+    /// Backend-specific voice name. Empty means "the backend's own default":
+    /// on macOS, whatever `say` uses with no `-v` flag; for the HTTP backend,
+    /// whatever the server falls back to when `voice` is omitted from the
+    /// request. `say -v ?` lists what is installed locally.
+    pub tts_voice: String,
+    /// Speaking rate, in whichever unit the active backend natively uses —
+    /// `say -r`'s words-per-minute for the system backend, the HTTP backend's
+    /// 0.25-4.0 `speed` multiplier for the other. `0.0` means "leave it at
+    /// the backend's own default" rather than forcing both backends onto one
+    /// shared unit that would be meaningless for at least one of them.
+    pub tts_rate: f32,
+    /// Speak the assistant's replies aloud automatically — the JARVIS-style
+    /// behaviour this feature exists for. Kept distinct from `tts_enabled` so
+    /// a Settings "preview this voice" button can call `speak` on demand
+    /// without also switching on unprompted narration of every reply. Nothing
+    /// in this crate reads this flag yet to decide *when* to call `speak` —
+    /// that decision belongs to whatever assembles a finished reply (the chat
+    /// pipeline), not to voice settings themselves; this is the switch for it
+    /// to consult once it does.
+    pub tts_speak_replies: bool,
 }
 
 impl Default for VoiceSettings {
@@ -441,6 +509,17 @@ impl Default for VoiceSettings {
             max_recording_secs: 60,
             auto_submit: false,
             auto_open_short_utterance: true,
+            // Off by default — see the field doc. Backend/endpoint/model are
+            // still pre-filled with usable values so flipping the switch
+            // alone is enough to hear something, exactly like the STT fields
+            // above are pre-filled for the equivalent reason.
+            tts_enabled: false,
+            tts_backend: TtsBackendKind::SystemNative,
+            tts_endpoint: "https://api.openai.com/v1/audio/speech".into(),
+            tts_model: "tts-1".into(),
+            tts_voice: String::new(),
+            tts_rate: 0.0,
+            tts_speak_replies: false,
         }
     }
 }
@@ -459,6 +538,28 @@ pub enum SttBackendKind {
     /// `OpenAiCompatible` into `open_ai_compatible`, and every other place this
     /// value exists — the TypeScript union, `voice/stt.rs`, the installer —
     /// writes `openai_compatible`. See [`BackendKind::OpenAiCompatible`].
+    #[serde(rename = "openai_compatible", alias = "open_ai_compatible")]
+    OpenAiCompatible,
+}
+
+/// Mirrors [`SttBackendKind`] on the output side — see `voice::tts` for the
+/// backends themselves.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum TtsBackendKind {
+    /// Do not speak anything; `speak` is inert.
+    Disabled,
+    /// `/usr/bin/say`, bundled with every Mac. No helper process to build or
+    /// sign, no entitlement, no permission prompt — see
+    /// `voice::tts::SystemNativeTts`.
+    #[default]
+    SystemNative,
+    /// Any OpenAI-compatible `/audio/speech` endpoint.
+    ///
+    /// Spelled explicitly for the same reason as
+    /// [`SttBackendKind::OpenAiCompatible`] — `rename_all = "snake_case"`
+    /// would otherwise derive `open_ai_compatible` from the Rust casing,
+    /// disagreeing with every other place this project writes the string.
     #[serde(rename = "openai_compatible", alias = "open_ai_compatible")]
     OpenAiCompatible,
 }
@@ -634,6 +735,23 @@ pub struct AgentSettings {
     /// `None` means "let routing decide". An explicit choice must win: a user
     /// who has picked a model is answering the question routing was guessing at.
     pub routing_override_backend_id: Option<String>,
+    /// Prefix conversations with the JARVIS butler persona fragment — see
+    /// [`jarvis_persona_prompt`]. Off by default: the persona changes the
+    /// register of every reply, which is exactly the kind of behavioural
+    /// change that must be asked for rather than assumed, the same reasoning
+    /// as `voice.tts_enabled`. Turning this on is independent of whether
+    /// replies are also spoken aloud (`voice.tts_speak_replies`) — the two
+    /// compose (persona with no speech reads like JARVIS; speech with no
+    /// persona just reads replies aloud plainly) rather than one implying
+    /// the other.
+    pub jarvis_persona_enabled: bool,
+    /// How the persona addresses the user — "sir", "ma'am", a first name,
+    /// anything. Never hardcoded: Caduceus has no way to know how anyone
+    /// wants to be addressed, so this is the one part of the fragment that is
+    /// always a setting rather than a constant. An empty string omits the
+    /// address from the example line entirely rather than leaving something
+    /// stilted like "Quite well, . Ever ready".
+    pub jarvis_honorific: String,
 }
 
 impl Default for AgentSettings {
@@ -650,8 +768,45 @@ impl Default for AgentSettings {
             // without anyone having to configure it.
             auto_routing_enabled: true,
             routing_override_backend_id: None,
+            // Off by default — see the field doc. "sir" is only ever used
+            // once the toggle above is switched on, so pre-filling it here
+            // costs a silent, inactive default rather than an unprompted one.
+            jarvis_persona_enabled: false,
+            jarvis_honorific: "sir".into(),
         }
     }
+}
+
+/// The JARVIS butler persona, as a system-prompt fragment.
+///
+/// Only meaningful when [`AgentSettings::jarvis_persona_enabled`] is on — see
+/// that field's doc for why the default is off. This function only *produces*
+/// the fragment; splicing it into an actual request is the job of whatever
+/// assembles the effective system prompt for a call (today that is `agent`'s
+/// business, not this module's). The intended composition mirrors how a
+/// user-written [`BackendConfig::system_prompt`] already layers onto
+/// Caduceus's behaviour elsewhere rather than replacing it outright: append
+/// this fragment after the backend's own prompt when the toggle is set,
+/// rather than switching the prompt out entirely.
+///
+/// `honorific` is [`AgentSettings::jarvis_honorific`], substituted in
+/// wherever the persona addresses the user directly. An empty honorific drops
+/// the address from the example line rather than leaving "Quite well, . Ever
+/// ready" — nobody asked to be addressed as nothing.
+pub fn jarvis_persona_prompt(honorific: &str) -> String {
+    let honorific = honorific.trim();
+    let greeting = if honorific.is_empty() {
+        "Quite well. Ever ready to assist you.".to_string()
+    } else {
+        format!("Quite well, {honorific}. Ever ready to assist you.")
+    };
+    format!(
+        "Adopt the register of a poised, unflappable butler in the JARVIS mould: warm, \
+         precise, and economical with words rather than chatty. Acknowledge requests \
+         plainly and get on with them — for instance, asked how you are, you might say: \
+         \u{201c}{greeting}\u{201d} Never break this register to explain that you are an \
+         AI playing a role."
+    )
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -784,6 +939,46 @@ pub fn openai_compatible_template(id: impl Into<String>) -> BackendConfig {
         model: "llama3.2".into(),
         max_tokens: 2048,
         ..Default::default()
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Gateway (remote messaging bridge)
+// ---------------------------------------------------------------------------
+//
+// One nested struct per platform, the same shape `VoiceSettings` already uses
+// for its `stt_*`/`tts_*` fields — except a platform's config genuinely
+// differs in shape from another's (a bot token versus, say, a phone-number
+// pairing), so each gets its own struct rather than forcing a shared shape
+// nothing needs yet. See `crate::gateway`'s module doc for how these are used
+// and the security model around them.
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(default, rename_all = "camelCase")]
+pub struct GatewaySettings {
+    pub telegram: TelegramGatewaySettings,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct TelegramGatewaySettings {
+    /// Persisted intent — "should this be running" — read once at launch by
+    /// `gateway::autostart_if_enabled` so a restart resumes where it left
+    /// off. Independent of the live connection state, which always starts at
+    /// `Stopped` on a fresh process and is never itself persisted (the same
+    /// split `crate::mcp::ServerStatus` keeps from a server's persisted
+    /// `enabled` flag).
+    pub enabled: bool,
+    /// Telegram numeric user ids allowed to talk to the bot. Mandatory and
+    /// deny-by-default: empty — the out-of-the-box value — means nobody is
+    /// allowed, not everybody. See `crate::gateway`'s module doc, security
+    /// rule 1.
+    pub allowed_user_ids: Vec<i64>,
+}
+
+impl Default for TelegramGatewaySettings {
+    fn default() -> Self {
+        Self { enabled: false, allowed_user_ids: Vec::new() }
     }
 }
 
@@ -999,5 +1194,63 @@ impl Default for UpdateSettings {
             last_checked_at: None,
             last_announced_version: None,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The one assertion this whole feature exists to guarantee: a fresh
+    /// install — or an existing one that just upgraded — must not start
+    /// talking, or adopt a persona, without being asked. Both toggles are
+    /// additive fields on structs that are `#[serde(default)]`, so an old
+    /// settings file missing them entirely lands here too, not just a
+    /// brand-new one.
+    #[test]
+    fn speech_and_the_jarvis_persona_are_off_by_default() {
+        let voice = VoiceSettings::default();
+        assert!(!voice.tts_enabled);
+        assert!(!voice.tts_speak_replies);
+
+        let agents = AgentSettings::default();
+        assert!(!agents.jarvis_persona_enabled);
+    }
+
+    /// Backend/endpoint/model are still pre-filled even though the master
+    /// switch is off, so turning `tts_enabled` on alone is enough to hear
+    /// something — the same shape as the STT fields it sits beside.
+    #[test]
+    fn tts_is_pre_configured_despite_being_off() {
+        let voice = VoiceSettings::default();
+        assert_eq!(voice.tts_backend, TtsBackendKind::SystemNative);
+        assert!(!voice.tts_endpoint.is_empty());
+        assert!(!voice.tts_model.is_empty());
+    }
+
+    #[test]
+    fn tts_backend_kind_uses_the_shared_openai_compatible_spelling() {
+        let json = serde_json::to_string(&TtsBackendKind::OpenAiCompatible).unwrap();
+        assert_eq!(json, "\"openai_compatible\"");
+
+        let parsed: TtsBackendKind = serde_json::from_str("\"openai_compatible\"").unwrap();
+        assert_eq!(parsed, TtsBackendKind::OpenAiCompatible);
+
+        // Files written while Rust and the UI could disagree (see
+        // `SttBackendKind`'s identical alias) must still load.
+        let legacy: TtsBackendKind = serde_json::from_str("\"open_ai_compatible\"").unwrap();
+        assert_eq!(legacy, TtsBackendKind::OpenAiCompatible);
+    }
+
+    #[test]
+    fn jarvis_persona_prompt_uses_the_configured_honorific() {
+        assert!(jarvis_persona_prompt("sir").contains("Quite well, sir."));
+        assert!(jarvis_persona_prompt("ma'am").contains("Quite well, ma'am."));
+
+        // An empty honorific must not leave a dangling ", ." in the example.
+        let bare = jarvis_persona_prompt("");
+        assert!(bare.contains("Quite well."));
+        assert!(!bare.contains(", ."));
+        assert!(!bare.contains(",."));
     }
 }

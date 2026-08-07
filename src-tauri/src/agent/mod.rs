@@ -17,16 +17,24 @@
 //! `docs/PLUGIN_GUIDE.md`.
 
 pub mod backend;
+pub mod context;
 pub mod discover;
 pub mod hermes;
 mod http;
 pub mod null;
 pub mod openai;
+pub mod toolloop;
 pub mod types;
 
 pub use backend::{
     AgentBackend, AgentLoopContext, ApprovalAsker, ApprovalGate, CancelToken, StepSink,
 };
+/// The MCP tool-calling loop's entry point and its iteration cap — re-exported
+/// here the same way every other backend-adjacent capability in this module
+/// is, so a caller reaches it as `agent::run_tool_loop` rather than needing to
+/// know it lives in a specific submodule. See `toolloop`'s module doc for how
+/// to invoke it.
+pub use toolloop::{run_tool_loop, MAX_ITERATIONS};
 /// Re-exported so other subsystems (e.g. speech-to-text) can render provider
 /// error bodies the same way.
 pub use http::extract_error_message as http_error_message;
@@ -172,7 +180,7 @@ pub fn resolve_backend(
         }));
     };
 
-    settings
+    let mut config = settings
         .agents
         .backends
         .iter()
@@ -183,7 +191,38 @@ pub fn resolve_backend(
                 "The selected backend (\u{201c}{id}\u{201d}) no longer exists. \
                  Pick another one in Settings \u{2192} Agent Backends."
             ))
-        })
+        })?;
+
+    apply_persona(&mut config, &settings.agents);
+    Ok(config)
+}
+
+/// Fold the JARVIS persona into a resolved backend's system prompt.
+///
+/// # Why here and not in `build_payload`
+///
+/// Every path that talks to a model — one-shot chat, the streaming chat used by
+/// the composer, and the tool-calling loop — goes through [`resolve_backend`]
+/// to get its [`BackendConfig`], and each of them reads `system_prompt` from
+/// that config. Applying the persona at the single point where the config is
+/// produced means none of them can forget to, and a provider added later
+/// inherits it without knowing the setting exists. Doing it inside one
+/// provider's payload builder would give the persona to that provider only.
+///
+/// The persona is *appended* rather than substituted: a system prompt the user
+/// wrote is instructions about the task, and a register to speak in does not
+/// replace them. Appending also keeps the persona last, which is where a
+/// tone instruction survives best.
+fn apply_persona(config: &mut BackendConfig, agents: &crate::settings::AgentSettings) {
+    if !agents.jarvis_persona_enabled {
+        return;
+    }
+    let persona = crate::settings::jarvis_persona_prompt(&agents.jarvis_honorific);
+    if config.system_prompt.trim().is_empty() {
+        config.system_prompt = persona;
+    } else {
+        config.system_prompt = format!("{}\n\n{persona}", config.system_prompt.trim_end());
+    }
 }
 
 pub const COMPUTER_USE_NOT_CONFIGURED: &str = "\
@@ -258,7 +297,12 @@ where
 /// an empty string is well-defined (see `routing::classify`'s tests) and
 /// simply falls out as [`crate::tools::routing::TaskClass::Micro`], so this
 /// never needs to be an error.
-fn latest_user_content(messages: &[Message]) -> &str {
+///
+/// `pub(crate)` rather than private: [`toolloop::run_tool_loop`] reuses it
+/// for the same reason `resolve_chat_backend` does — the `AgentStep::Started`
+/// event needs *something* to show as "the task", and the newest user turn is
+/// the same reasonable stand-in in both places.
+pub(crate) fn latest_user_content(messages: &[Message]) -> &str {
     messages
         .iter()
         .rev()
@@ -409,10 +453,146 @@ pub fn start_session<R: Runtime>(
     Ok(session_id)
 }
 
+/// Start a tool-calling session against the primary backend.
+///
+/// The sibling of [`start_session`], and deliberately shaped the same way:
+/// returns immediately with a session id, reports progress as
+/// [`AGENT_STEP_EVENT`] events, and runs to completion on the async runtime
+/// even if every window closes. The Stop button and the approval gate work
+/// through the same [`AgentRuntime`] registration, so `agent_stop_session` and
+/// `agent_approve` need no variant for this path.
+///
+/// # Why this is not `start_session` with a flag
+///
+/// The two differ in what they resolve and what they can refuse.
+/// [`start_session`] resolves [`BackendRole::ComputerUse`] and rejects a
+/// backend that does not advertise `supports_computer_use`, because it hands
+/// the whole task to a harness that drives the screen. This one resolves
+/// [`BackendRole::Primary`] and has no such requirement: tools arrive from the
+/// MCP host, so any endpoint that can emit `tool_calls` qualifies — including
+/// a local model that would fail the computer-use check outright.
+///
+/// A backend with no MCP servers configured is not an error here. The loop
+/// sends no `tools` array, the model answers in prose, and the session ends
+/// after one turn — the same answer the chat path would have given.
+pub fn start_tool_session<R: Runtime>(
+    app: AppHandle<R>,
+    runtime: AgentRuntime,
+    settings: SettingsManager,
+    task: String,
+) -> AgentResult<String> {
+    let snapshot = settings.get();
+    let config = resolve_backend(&snapshot, BackendRole::Primary)?;
+
+    let session_id = uuid::Uuid::new_v4().to_string();
+    let cancel = CancelToken::default();
+    let approval_rx = runtime.register(session_id.clone(), cancel.clone());
+
+    let approval = if snapshot.agents.confirm_before_first_action {
+        ApprovalGate::Ask(Arc::new(FrontendApproval {
+            rx: Mutex::new(Some(approval_rx)),
+        }))
+    } else {
+        ApprovalGate::AutoApprove
+    };
+
+    let emit_app = app.clone();
+    let on_step: StepSink = Arc::new(move |step: AgentStep| {
+        if let Err(e) = emit_app.emit(AGENT_STEP_EVENT, &step) {
+            log::warn!("could not emit agent step: {e}");
+        }
+    });
+
+    let ctx = AgentLoopContext {
+        session_id: session_id.clone(),
+        on_step: on_step.clone(),
+        cancel,
+        approval,
+    };
+
+    let id_for_task = session_id.clone();
+    let loop_app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        let messages = vec![Message::user(task)];
+        let result = toolloop::run_tool_loop(&loop_app, &config, messages, ctx).await;
+        if let Err(e) = result {
+            log::error!("tool session {id_for_task} failed: {e}");
+            on_step(AgentStep::Error {
+                message: e.user_message(),
+            });
+            on_step(AgentStep::Finished {
+                outcome: AgentOutcome {
+                    session_id: id_for_task.clone(),
+                    completed: false,
+                    steps: 0,
+                    final_message: e.user_message(),
+                    stop_reason: StopReason::Error,
+                    usage: None,
+                },
+            });
+        }
+        runtime.unregister(&id_for_task);
+    });
+
+    Ok(session_id)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::settings::Settings;
+
+    /// The persona is opt-in, so an untouched install must send exactly the
+    /// system prompt the user configured — a default that quietly changed the
+    /// model's voice would be a bug, not a feature.
+    #[test]
+    fn the_persona_is_absent_until_it_is_switched_on() {
+        let mut config = BackendConfig {
+            system_prompt: "You are terse.".into(),
+            ..Default::default()
+        };
+        let agents = crate::settings::AgentSettings::default();
+        assert!(!agents.jarvis_persona_enabled, "persona must default to off");
+
+        apply_persona(&mut config, &agents);
+        assert_eq!(config.system_prompt, "You are terse.");
+    }
+
+    /// Appended, never substituted: the user's prompt is instructions about the
+    /// task, and a register to speak in does not replace them.
+    #[test]
+    fn the_persona_is_appended_to_a_configured_system_prompt() {
+        let mut config = BackendConfig {
+            system_prompt: "You are terse.".into(),
+            ..Default::default()
+        };
+        let agents = crate::settings::AgentSettings {
+            jarvis_persona_enabled: true,
+            jarvis_honorific: "sir".into(),
+            ..Default::default()
+        };
+
+        apply_persona(&mut config, &agents);
+        assert!(config.system_prompt.starts_with("You are terse."));
+        assert!(config.system_prompt.contains("sir"));
+    }
+
+    /// An empty honorific is a real choice — not everyone wants to be called
+    /// anything — so it must not leave a dangling comma in the greeting.
+    #[test]
+    fn an_empty_honorific_still_produces_a_clean_persona() {
+        let mut config = BackendConfig::default();
+        let agents = crate::settings::AgentSettings {
+            jarvis_persona_enabled: true,
+            jarvis_honorific: "  ".into(),
+            ..Default::default()
+        };
+
+        apply_persona(&mut config, &agents);
+        assert!(!config.system_prompt.is_empty());
+        assert!(!config.system_prompt.contains(" ,"));
+        assert!(!config.system_prompt.contains(",\u{201d}"));
+    }
 
     #[test]
     fn every_backend_kind_resolves_to_an_implementation() {

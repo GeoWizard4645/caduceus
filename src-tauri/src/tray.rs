@@ -8,6 +8,8 @@ use tauri::menu::{Menu, MenuEvent, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Manager, Runtime};
 
+use crate::hotkeys;
+use crate::settings;
 use crate::settings::SettingsManager;
 use crate::tools::timekeeping::{Phase, TimekeepingRuntime};
 use crate::window;
@@ -198,13 +200,32 @@ fn pomodoro_status_label<R: Runtime>(app: &AppHandle<R>) -> Option<String> {
     ))
 }
 
-/// Show the user's actual Command Center hotkey in the menu, so the menu never
-/// advertises a binding they have changed.
+/// Show the hotkey the Command Center is actually reachable on, so the menu
+/// never advertises a shortcut that does nothing.
+///
+/// # Why this prefers the runtime over settings
+///
+/// These two can legitimately disagree. If another application already holds
+/// the configured accelerator, [`hotkeys::register_all`] moves the Command
+/// Center to a working fallback **for this run** and deliberately does not
+/// write that back into settings, so the user's chosen key returns the moment
+/// whatever took it goes away. That is the right behaviour for the setting and
+/// the wrong thing to print in a menu: what belongs here is the key that will
+/// actually open the window if you press it.
+///
+/// Settings are the fallback for the window between app start and the first
+/// registration, and [`settings::DEFAULT_COMMAND_CENTER_HOTKEY`] for the
+/// window before settings load — one constant rather than a literal, so the
+/// menu and the default can never drift apart.
 fn accelerator_hint<R: Runtime>(app: &AppHandle<R>) -> String {
-    app.try_state::<SettingsManager>()
-        .map(|s| s.with(|s| s.general.command_center_hotkey.clone()))
+    app.try_state::<hotkeys::HotkeyRuntime>()
+        .and_then(|r| r.active_command_center())
+        .or_else(|| {
+            app.try_state::<SettingsManager>()
+                .map(|s| s.with(|s| s.general.command_center_hotkey.clone()))
+        })
         .filter(|s| !s.is_empty())
-        .unwrap_or_else(|| "Alt+Space".into())
+        .unwrap_or_else(|| settings::DEFAULT_COMMAND_CENTER_HOTKEY.into())
 }
 
 /// Rebuild the menu so the Show/Hide label matches reality.

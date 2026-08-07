@@ -7,8 +7,15 @@
 //! `AddClipboardFormatListener` and Linux has selection ownership events, but
 //! `arboard` — the cross-platform clipboard crate Caduceus uses — does not surface
 //! either. Rather than three platform-specific code paths plus a polling
-//! fallback, Caduceus polls on all three. At the default 700ms the cost is
-//! unmeasurable (one clipboard read, and a hash only when the content changed).
+//! fallback, Caduceus polls on all three.
+//!
+//! The poll itself is cheap on macOS: [`pasteboard_change_count`] reads
+//! AppKit's own `changeCount` directly — bypassing `arboard`, which does not
+//! expose it — and the loop skips `get_text`/`get_image` entirely on any tick
+//! where that counter has not moved, which is nearly all of them. Windows and
+//! Linux have no equivalent through `arboard`, so they pay for a real read
+//! (and a hash, to tell whether it is actually new content) on every tick;
+//! at the default 700ms that remains unmeasurable.
 //!
 //! The interval is a setting, so anyone who wants 200ms responsiveness or 5s
 //! frugality can have it.
@@ -78,6 +85,11 @@ pub fn spawn<R: tauri::Runtime>(
             // happens to still be on the clipboard.
             let mut last_hash = store.latest_hash().unwrap_or_default();
             let mut prune_countdown: u32 = 0;
+            // Seeded `None` so the very first tick always does a real read
+            // (see the `pasteboard_change_count` gate below) — the dedup
+            // against `last_hash` already makes that first read a no-op if
+            // the clipboard still holds whatever is already in the database.
+            let mut last_change_count: Option<isize> = None;
 
             loop {
                 if stop_flag.should_stop() {
@@ -92,6 +104,21 @@ pub fn spawn<R: tauri::Runtime>(
                     std::thread::sleep(interval);
                     continue;
                 }
+
+                // Cheap gate before the expensive read: if the platform can
+                // tell us the pasteboard's own change counter is exactly what
+                // it was last tick, the clipboard has not changed and there is
+                // no reason to pay for get_text/get_image (which round-trip
+                // the actual bytes) just to throw the result away. `None`
+                // means no cheap counter is available on this platform, and
+                // this falls through to a read on every tick exactly as it
+                // did before this check existed.
+                let change_count = pasteboard_change_count();
+                if change_count.is_some() && change_count == last_change_count {
+                    std::thread::sleep(interval);
+                    continue;
+                }
+                last_change_count = change_count;
 
                 match read_clipboard(&mut clipboard, &cfg) {
                     Ok(Some(candidate)) if candidate.hash != last_hash => {
@@ -304,6 +331,33 @@ fn is_excluded(cfg: &crate::settings::ClipboardSettings, source: Option<&str>) -
 // ---------------------------------------------------------------------------
 // Platform probes (all best-effort — see docs/PLATFORM_SUPPORT.md)
 // ---------------------------------------------------------------------------
+
+/// Cheap check for whether the pasteboard has changed at all, without reading
+/// its contents.
+///
+/// `NSPasteboard.changeCount` is a plain integer AppKit already maintains and
+/// bumps on every write, from any app — reading it is orders of magnitude
+/// cheaper than `get_text`/`get_image`, which both round-trip the actual
+/// bytes through the pasteboard server. `arboard` does not expose this (see
+/// the module docs), so this reaches AppKit directly through `objc2-app-kit`
+/// — already a workspace dependency for `window/macos.rs`'s vibrancy/panel
+/// work and `popbar.rs`'s click-away watcher, just not previously used in
+/// this file. Unlike the shell-out probes below, this is a direct in-process
+/// call with no subprocess to hang, so it needs no [`PROBE_TIMEOUT`].
+///
+/// `None` means "no cheap answer available" — every non-macOS target — and
+/// the caller falls back to reading the clipboard on every tick, exactly as
+/// it did before this existed.
+#[cfg(target_os = "macos")]
+fn pasteboard_change_count() -> Option<isize> {
+    use objc2_app_kit::NSPasteboard;
+    Some(NSPasteboard::generalPasteboard().changeCount())
+}
+
+#[cfg(not(target_os = "macos"))]
+fn pasteboard_change_count() -> Option<isize> {
+    None
+}
 
 /// How long a probe gets before its answer is given up on.
 ///

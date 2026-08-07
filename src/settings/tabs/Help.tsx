@@ -53,12 +53,6 @@ export function HelpTab({
     draft.update((d) => (d.general.onboardingDone = false));
   };
 
-  const retakeQuiz = () => {
-    draft.update((d) => {
-      d.general.onboardingQuizDone = false;
-    });
-  };
-
   return (
     <>
       <Section
@@ -84,16 +78,15 @@ export function HelpTab({
 
       <Section
         title="Walkthroughs"
-        description="Two of them: a two-minute tour on the staff itself, and a full reference below."
+        description="Two of them: the first-run setup on the staff itself, and a full reference below."
       >
         <div className="space-y-2">
           <div className="row items-start justify-between gap-4 rounded-lg border border-line bg-base/20 px-3.5 py-3">
             <div className="min-w-0">
-              <p className="text-[13px] font-medium text-ink">The two-minute tour</p>
+              <p className="text-[13px] font-medium text-ink">First-run setup</p>
               <p className="mt-1 text-2xs leading-relaxed text-ink-mute">
-                The first-run overlay: hover the staff, open the Command Center, use the
-                shortcut, then what the search bar understands. Each step waits for you to
-                actually do it.
+                Three short, skippable steps: permissions, your Command Center hotkey, and a model
+                for AI features. Nothing here blocks the rest of Caduceus.
               </p>
             </div>
             <Button size="sm" tone="primary" onClick={replay}>
@@ -105,26 +98,6 @@ export function HelpTab({
             <Callout tone="info">
               It is running on the staff right now. If the staff is hidden, press{" "}
               {staffKey ? <Kbd>{staffKey}</Kbd> : "the toggle key"} or use the menu-bar icon.
-            </Callout>
-          )}
-
-          <div className="row items-start justify-between gap-4 rounded-lg border border-line bg-base/20 px-3.5 py-3">
-            <div className="min-w-0">
-              <p className="text-[13px] font-medium text-ink">Personalization quiz</p>
-              <p className="mt-1 text-2xs leading-relaxed text-ink-mute">
-                Three quick questions: developer or not, what you use your Mac for, and which
-                features you wanted to try. Answers update your Favorites section and how commands
-                rank in search.
-              </p>
-            </div>
-            <Button size="sm" tone="default" onClick={retakeQuiz}>
-              {settings.general.onboardingQuizDone === false ? "Showing now" : "Retake"}
-            </Button>
-          </div>
-
-          {settings.general.onboardingQuizDone === false && (
-            <Callout tone="info">
-              The quiz is on the staff now. Show the staff to answer it before the two-minute tour.
             </Callout>
           )}
         </div>
@@ -422,8 +395,8 @@ function topics({ ccKey, staffKey }: { ccKey: string; staffKey: string }): Topic
             nothing falls through to the fallback route, which is your AI model by default.
           </p>
           <p>
-            The first run asks for Microphone and Speech Recognition. If you said no, the
-            Learn tab can reopen those panes.
+            The first run asks for Microphone up front; dictation also needs Speech Recognition,
+            which the Learn tab can open for you.
           </p>
         </>
       ),

@@ -495,6 +495,18 @@ fn flatten(messages: &[Message], system_prompt: &str) -> String {
                 out.push_str(m.content.trim());
                 out.push_str(")\n");
             }
+            // Hermes drives its own tools internally (see `COMPUTER_USE_TOOLSET`)
+            // and `-z` takes plain text, so there is no wire representation for
+            // a tool turn to preserve — folding it into the flattened prompt as
+            // a labelled aside is the closest Hermes can get to "here is what a
+            // tool already answered" if it is ever handed history that has one,
+            // which nothing in this codebase does today (the MCP tool loop in
+            // `agent::toolloop` only targets the OpenAI-compatible backend).
+            Role::Tool => {
+                out.push_str("(tool result: ");
+                out.push_str(m.content.trim());
+                out.push_str(")\n");
+            }
         }
     }
     out.trim().to_string()

@@ -1,9 +1,33 @@
 /**
- * How onboarding answers nudge palette ranking — local only, same file as settings.
+ * How `settings.general.personalization` nudges palette ranking — local only,
+ * same file as settings.
+ *
+ * The data this reads used to be written by a first-run quiz (three
+ * questions: developer or not, primary focus, a handful of favorite
+ * commands). The quiz is gone — asking someone what kind of user they are
+ * before they have used the product tested badly — but this scoring function
+ * and the `favoritesProvider` result group in `providers.ts` are still very
+ * much alive, and still read whatever is in `personalization` today:
+ *
+ * - An existing install that completed the quiz in an earlier version keeps
+ *   its answers and keeps getting the same boosts; nothing here erases them.
+ * - A fresh install has an all-default profile (`primaryFocus: ""`, no
+ *   favorites), which resolves to the "launcher" bucket below — a small,
+ *   fixed nudge toward three general-purpose commands, not a personalized
+ *   one. That was already true for every install between "first launched"
+ *   and "finished the quiz" before the quiz was removed; removing it just
+ *   makes that the permanent state for new installs instead of a brief one.
+ *
+ * Nothing writes fresh values here any more. `PrimaryFocus` is defined in
+ * this file rather than imported from the deleted quiz component because
+ * this scoring function is the only thing left that needs it.
  */
 
 import type { PersonalizationProfile, Settings } from "./types";
-import type { PrimaryFocus } from "./onboardingQuiz";
+
+/** `settings.general.personalization.primaryFocus`, before it is serialised
+ *  to a bare `string` for the Rust side. */
+export type PrimaryFocus = "launcher" | "clipboard" | "windows" | "system" | "ai" | "developer";
 
 const DEV_COMMAND_PREFIXES = ["tool.", "dev."];
 const DEV_COMMAND_IDS = new Set([
@@ -48,7 +72,7 @@ function profileOf(settings: Settings): PersonalizationProfile {
   };
 }
 
-/** Extra score for browse/search ranking from the onboarding quiz. */
+/** Extra score for browse/search ranking from `personalization`. */
 export function personalizationBoost(settings: Settings, commandId: string): number {
   const p = profileOf(settings);
   let boost = 0;

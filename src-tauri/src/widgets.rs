@@ -59,13 +59,16 @@
 //! `Moved`/`Resized` events, debounced so a drag does not write the file on
 //! every frame.
 //!
-//! # What is *not* here
+//! # Wired into `lib.rs`
 //!
-//! Nothing in this file is wired into `generate_handler!` or `setup()` — see
-//! the crate owner's notes on that. [`restore_saved_widgets`] in particular is
-//! a plain function, not a command: it exists for `lib.rs::setup` to call once
-//! at launch, the same moment it positions and shows the staff, so widgets
-//! open in a previous session come back where they were left.
+//! The `#[tauri::command]`s below are in `generate_handler!` like everything
+//! else. [`restore_saved_widgets`] is not a command — it is a plain function
+//! `lib.rs::setup` calls once at launch, the same moment it positions and
+//! shows the staff, so widgets open in a previous session come back where
+//! they were left. The one thing that stays lazy on purpose is
+//! [`WidgetRuntime`]: nothing calls `app.manage` for it up front, so
+//! [`ensure_managed`] runs the first time something here actually needs the
+//! capture-rect tracker's state — for most widgets, shipped so far, never.
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -390,16 +393,44 @@ fn ensure_tracker<R: Runtime>(app: &AppHandle<R>) {
     });
 }
 
-/// Recreate every widget window from its saved layout. Meant to be called
-/// once at launch, after the staff and Command Center are set up — the
-/// widget equivalent of `window::position_staff` / `window::should_show_staff`
-/// in `lib.rs::setup`, just for a list of windows instead of one. See the
-/// module docs for why this is a plain function rather than a command.
-pub fn restore_saved_widgets<R: Runtime>(app: &AppHandle<R>) -> Res<()> {
-    for layout in load_layouts(app) {
-        spawn_widget_window(app, &layout)?;
-    }
-    Ok(())
+/// Gap between restoring one saved widget and the next at launch.
+///
+/// Each widget is a full OS-level webview, and building/showing all of them
+/// back-to-back on the same tick is a thundering herd that spikes launch-time
+/// CPU and memory in direct proportion to how many widgets the user has —
+/// competing for the same cycles the staff itself is trying to come up on.
+/// Spacing them out costs nothing perceptible (a widget is not something you
+/// interact with the instant it appears) and the whole set still lands within
+/// a couple of seconds of launch either way.
+const WIDGET_RESTORE_STAGGER: Duration = Duration::from_millis(150);
+
+/// Recreate every widget window from its saved layout, one at a time on a
+/// staggered schedule rather than all at once — see [`WIDGET_RESTORE_STAGGER`].
+/// Meant to be called once at launch, after the staff and Command Center are
+/// set up — the widget equivalent of `window::position_staff` /
+/// `window::should_show_staff` in `lib.rs::setup`, just for a list of windows
+/// instead of one, and asynchronous where those are not because the stagger
+/// needs somewhere to await between them. See the module docs for why this is
+/// a plain function rather than a command.
+///
+/// Every widget still ends up built, visible, and on screen exactly as before
+/// — this only smooths out *when* within the first couple of seconds that
+/// happens, not whether it does. A widget the user has saved is a widget they
+/// expect to see after login; nothing here defers that indefinitely or skips
+/// it. A widget that fails to rebuild — its saved geometry now off every
+/// attached display, say — is logged and skipped rather than aborting the
+/// rest: one bad layout is not a reason to leave every other widget the user
+/// actually has un-restored.
+pub fn restore_saved_widgets<R: Runtime>(app: &AppHandle<R>) {
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        for layout in load_layouts(&app) {
+            if let Err(error) = spawn_widget_window(&app, &layout) {
+                log::warn!("could not restore widget {}: {error}", layout.id);
+            }
+            tokio::time::sleep(WIDGET_RESTORE_STAGGER).await;
+        }
+    });
 }
 
 // ---------------------------------------------------------------------------

@@ -124,6 +124,8 @@ export const deleteBackendApiKey = (backendId: string) =>
 
 export const setSttApiKey = (key: string) => invoke<boolean>("set_stt_api_key", { key });
 
+export const setTtsApiKey = (key: string) => invoke<boolean>("set_tts_api_key", { key });
+
 // --- shortcuts -------------------------------------------------------------
 
 export const runShortcut = (id: string, query?: string) =>
@@ -372,6 +374,18 @@ export const agentChat = (prompt: string) => invoke<AgentResponse>("agent_chat",
 
 export const agentStartSession = (task: string) => invoke<string>("agent_start_session", { task });
 
+/**
+ * Start a tool-calling agent session against the primary backend.
+ *
+ * The sibling of {@link agentStartSession}: same session id / step-event /
+ * stop / approve machinery (`caduceus://agent-step`, `agentStopSession`,
+ * `agentApprove`), but this one calls MCP tools through the primary backend
+ * rather than driving the screen through a computer-use backend — see
+ * `agent::start_tool_session`'s doc for exactly how the two differ.
+ */
+export const agentStartToolSession = (task: string) =>
+  invoke<string>("agent_start_tool_session", { task });
+
 export const agentStopSession = (sessionId: string) =>
   invoke<boolean>("agent_stop_session", { sessionId });
 
@@ -447,6 +461,30 @@ export const toggleDictation = () => invoke<void>("toggle_dictation");
  * caret. Needs the Accessibility permission (System Events).
  */
 export const typeText = (text: string) => invoke<void>("type_text", { text });
+
+// --- text-to-speech ----------------------------------------------------------
+// Off by default (`voice.ttsEnabled`) and rejected by Rust when it is — see
+// `voice::TtsRuntime::speak`. A caller offering a "preview this voice" action
+// still just calls `speak` directly; there is no separate "am I allowed to"
+// check to run first, the rejection itself is the answer.
+
+/**
+ * Speak `text` aloud with the configured backend.
+ *
+ * Resolves once playback finishes or is cut off by {@link stopSpeaking} (a
+ * barge-in is reported as success, not failure — see `TtsBackend::speak`'s
+ * doc). Two calls in flight at once are not safe against each other — call
+ * {@link stopSpeaking} before starting a new one if a previous call might
+ * still be running, so a fast-arriving second reply cannot talk over the
+ * first.
+ */
+export const speak = (text: string) => invoke<void>("speak", { text });
+
+/** Cut off whatever is currently being spoken. Safe to call when nothing is. */
+export const stopSpeaking = () => invoke<void>("stop_speaking");
+
+/** Installed system voices for the Settings voice picker. Empty off macOS. */
+export const listSpeechVoices = () => invoke<string[]>("list_speech_voices");
 
 // --- misc ------------------------------------------------------------------
 

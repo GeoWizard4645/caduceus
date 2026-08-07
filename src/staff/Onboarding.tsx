@@ -1,72 +1,85 @@
 /**
- * The first-run walkthrough.
+ * The first-run setup.
  *
  * Rendered inside the staff window because that is the one surface always on
- * screen — a separate window would need its own always-on-top handling and
- * would cover the very thing it is pointing at.
+ * screen — a separate window would need its own always-on-top handling, and
+ * this one can sit directly over the thing a permission prompt or a hotkey
+ * press is actually about.
  *
- * # Three phases, one flow
+ * # Three steps, and only three
  *
- * `onFinish` (which the caller uses to flip `onboardingDone`) only fires once
- * this component's own two phases are both behind the user:
+ * The previous version of this component was an eight-step tour that taught
+ * hovering the staff, clicking it, the hotkey, dictation and the palette's
+ * whole syntax before it let go of you, preceded by a three-question survey
+ * before that. It was rebuilt from scratch around a narrower brief:
+ * permissions, a hotkey, a model. Nothing else about using Caduceus needs
+ * teaching up front — the staff and the Command Center are meant to be
+ * discovered, not lectured about — and everything discoverable already lives
+ * in Settings → Help, replayable on demand.
  *
- * 1. **Permissions.** Microphone, Speech Recognition and Accessibility used to
- *    get asked for piecemeal, the moment some feature first needed them —
- *    which meant a brand-new user could see a macOS permission prompt before
- *    they had even worked out what the staff was. Now they are asked for once,
- *    here, before the tour starts, via `PermissionCoach`. Declining is a
- *    dead end nowhere in this app: `onSkip` moves straight on to the tour, the
- *    same as `onAllGranted` does.
- * 2. **Tour.** The walkthrough proper — `buildSteps` below.
+ * 1. **Permissions.** Accessibility, Screen Recording and Microphone, asked
+ *    for once via `PermissionCoach` rather than piecemeal the first time some
+ *    feature happens to need one. Declining is a dead end nowhere in this
+ *    app: `PermissionCoach`'s own "Skip for now" moves on to the hotkey step,
+ *    the same as granting everything does.
+ * 2. **Hotkey.** Shows whatever accelerator is actually configured — never a
+ *    hardcoded guess, since a taken combination gets silently rebound to a
+ *    fallback at startup (see `hotkeys::register_all`) — lets it be changed
+ *    right there, and waits for a real press of it before calling itself
+ *    confirmed. A hotkey that *looks* bound and does not fire is a worse
+ *    first impression than one that plainly asks to be tried.
+ * 3. **Model.** Only the `/` and `/c` prefixes need one; everything else —
+ *    the launcher, clipboard, dictation, system monitor, search — already
+ *    works. Scans for a local runtime already running (Ollama, LM Studio,
+ *    llama.cpp, Jan, vLLM — see `agent::discover`) and offers to wire up
+ *    whatever it finds in one click, with "connect a cloud model later" as
+ *    the honest alternative to picking one now.
  *
- * The quiz that precedes this component lives in `OnboardingQuiz.tsx` and is
- * gated by a separate settings flag in `Staff.tsx`; by the time `Onboarding`
- * mounts at all, the quiz is already done. Keeping the permission step as an
- * internal phase of this component, rather than a third flag Staff.tsx has to
- * know about, is what makes survey → permissions → tour read as one
- * continuous thing instead of three screens that happen to run back to back.
+ * # What "skippable" means here
  *
- * # Two rules make the tour a walkthrough rather than a slideshow
+ * Every phase can be abandoned two different ways, on purpose: the header's
+ * Skip and Escape from anywhere both end onboarding outright (`onFinish`),
+ * while a phase-local action — declining permissions, "Connect a cloud model
+ * later" — only moves past *that* phase. The header never means "skip to the
+ * next question"; it always means "stop asking me things".
  *
- * 1. **Steps advance on the real action.** "Hover the staff" completes when the
- *    staff is actually hovered, not when you press Next. A tutorial you can
- *    click through without touching the product teaches nothing.
- * 2. **It never blocks the thing it is teaching.** Only the first two steps —
- *    hover, then click — need the real mark reachable under the card, so only
- *    those two are drawn in a strip along the top with a spotlight punched
- *    through the scrim at the mark. Every other step is prose, or a global
- *    keyboard shortcut that works "from anywhere", so nothing about the staff
- *    itself needs to stay visible, and the card is free to grow to a proper,
- *    centred modal for the rest of the tour.
+ * Nothing here blocks the app. `Staff.tsx` mounts this only while
+ * `onboardingDone` is false, and every path through it — finishing normally,
+ * a phase's own escape, the header Skip, Escape itself — ends up calling
+ * `onFinish` exactly once.
  *
- * # Why a step used to disappear before anyone read it
+ * # The quiz that used to precede this
  *
- * The very first release of this walkthrough auto-advanced the moment
- * `step.done(signals)` turned true, with nothing else gating it. If the
- * pointer already happened to be resting over the staff when the tour opened
- * — entirely possible, since the staff is what you clicked or hovered a
- * moment earlier to get here — `signals.hovered` was already `true` on the
- * very first render, and the step vanished in half a second flat. Every step
- * now also has to survive `MIN_STEP_DWELL_MS` of wall-clock time before it can
- * be marked satisfied, whether that satisfaction comes from a real signal or
- * from the user clicking Next. Pre-existing signal state can no longer skip a
- * step the user has not actually had a chance to read.
+ * A three-question preference survey used to run before the tour, in its own
+ * component (`OnboardingQuiz.tsx`, now deleted) gated by its own settings
+ * flag. It is gone: asking someone what kind of user they are before they
+ * have used the product is the exact pattern that made the old flow feel
+ * like a form to fill out rather than a tool to use. Its scoring function
+ * (`shared/personalization.ts`) is not deleted alongside it, though — that
+ * still runs on every palette keystroke, ranking a `favoriteCommandIds` list
+ * and a developer/focus bias nobody will ever populate again from scratch,
+ * but which an install that already answered the old quiz still has and
+ * still benefits from. `onboardingDone` is the only flag left to gate this
+ * component on.
  */
 
 import type { ReactNode } from "react";
 import { useEffect, useRef, useState } from "react";
 
 import * as api from "@/shared/api";
-import { commandCenterKey, hotkeyLabel } from "@/shared/hotkeyLabel";
+import { hotkeyLabel } from "@/shared/hotkeyLabel";
 import { PermissionCoach } from "@/shared/PermissionCoach";
-import type { Settings } from "@/shared/types";
-import { Button, cx } from "@/shared/ui";
+import type { BackendConfig, DetectedProvider, LocalAiScan, Settings } from "@/shared/types";
+import { Button, Callout, Field, HotkeyInput, Select, Spinner, cx } from "@/shared/ui";
 
 export interface OnboardingSignals {
-  hovered: boolean;
-  expanded: boolean;
-  commandCenterOpened: boolean;
-  hotkeyUsed: boolean;
+  /**
+   * Bumped once for every Command Center open that `commandCenterShown` (see
+   * `Staff.tsx`) attributes to the global hotkey. A counter rather than a
+   * boolean so the hotkey step can tell "confirmed before I last changed it"
+   * apart from "confirmed since" — see `HotkeyStep`.
+   */
+  hotkeyPressCount: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -74,8 +87,8 @@ export interface OnboardingSignals {
 //
 // Text alone ("press Control-Space") makes people hunt across their physical
 // keyboard for a symbol they may not recognise (⌃? ⌥?). This draws a small
-// keyboard and lights up the exact keys a step is asking for, held keys
-// (modifiers) glowing steadily and the key that gets tapped pulsing on a
+// keyboard and lights up the exact keys the hotkey step is asking for, held
+// keys (modifiers) glowing steadily and the key that gets tapped pulsing on a
 // loop, the way you would actually press the combination: hold, then tap.
 // ---------------------------------------------------------------------------
 
@@ -87,7 +100,7 @@ interface KeyCombo {
   main: string | null;
 }
 
-/** Keys a step names but this illustration does not lay out physically. */
+/** Keys the hotkey names but this illustration does not lay out physically. */
 const NAMED_KEY_LABELS: Record<string, string> = {
   space: "Space",
   escape: "Esc",
@@ -188,10 +201,10 @@ function MiniKeyboard({ combo, className }: { combo: KeyCombo; className?: strin
 
   // A single alphanumeric character sits inside the letter/number grid; any
   // other named key (Escape, Return, an arrow…) has nowhere to live in that
-  // grid, so it gets its own labelled pill instead. Nothing in this app's two
-  // taught shortcuts — the Command Center hotkey and push-to-talk — currently
-  // needs that path, but a user can rebind either to anything the OS accepts,
-  // and a shortcut this illustration silently failed to depict would be worse
+  // grid, so it gets its own labelled pill instead. The Command Center hotkey
+  // — the only shortcut this illustrates now — defaults to Space and so never
+  // needs that path, but it can be rebound to anything the OS accepts, and a
+  // combination this illustration silently failed to depict would be worse
   // than one drawn slightly off-layout.
   const mainIsGridChar = !!combo.main && /^[a-z0-9]$/.test(combo.main);
   const mainGridId = mainIsGridChar ? combo.main!.toUpperCase() : null;
@@ -285,125 +298,400 @@ function MiniKeyboard({ combo, className }: { combo: KeyCombo; className?: strin
 }
 
 // ---------------------------------------------------------------------------
-// Tour steps
+// Phases
 // ---------------------------------------------------------------------------
 
-interface Step {
-  title: string;
-  body: string;
-  /** Completed when this returns true; undefined means "advance on Next". */
-  done?: (s: OnboardingSignals) => boolean;
-  /** Shown instead of Next while incomplete. */
-  waiting?: string;
-  /** Drawn under the body when this step is teaching a keyboard shortcut. */
-  keys?: KeyCombo;
+type Phase = "permissions" | "hotkey" | "model";
+
+const PHASES: Phase[] = ["permissions", "hotkey", "model"];
+
+const PHASE_TITLE: Record<Phase, string> = {
+  permissions: "Permissions",
+  hotkey: "Hotkey",
+  model: "Model",
+};
+
+const PHASE_ARIA_LABEL: Record<Phase, string> = {
+  permissions: "Grant permissions",
+  hotkey: "Set your Command Center hotkey",
+  model: "Pick a model",
+};
+
+function ProgressHeader({ phase, onSkip }: { phase: Phase; onSkip: () => void }) {
+  const index = PHASES.indexOf(phase);
+  return (
+    <div className="row items-center justify-between">
+      <div className="row items-center gap-2.5">
+        <span className="text-2xs font-medium uppercase tracking-[0.1em] text-accent">
+          {index + 1} of {PHASES.length} · {PHASE_TITLE[phase]}
+        </span>
+        <div className="row gap-1">
+          {PHASES.map((p, i) => (
+            <span
+              key={p}
+              aria-hidden="true"
+              className={cx(
+                "h-1 w-1 rounded-full transition-colors",
+                i === index ? "bg-accent" : i < index ? "bg-ink-faint" : "bg-overlay",
+              )}
+            />
+          ))}
+        </div>
+      </div>
+      {/* Always ends onboarding outright — see the doc comment at the top of
+          this file for why that is a different action from any phase's own
+          "skip this one" control. */}
+      <button
+        type="button"
+        onClick={onSkip}
+        className="rounded px-1.5 py-0.5 text-2xs text-ink-faint transition-colors hover:bg-raised hover:text-ink"
+      >
+        Skip
+      </button>
+    </div>
+  );
 }
 
-function buildSteps(settings: Settings): Step[] {
-  const rawHotkey = commandCenterKey(settings);
-  const hotkey = hotkeyLabel(rawHotkey);
-  const rawPushToTalk = settings.voice.pushToTalkHotkey;
-  const pushToTalk = hotkeyLabel(rawPushToTalk);
+// ---------------------------------------------------------------------------
+// Step 2: Hotkey
+// ---------------------------------------------------------------------------
 
-  return [
-    {
-      title: "This is the staff",
-      body: "It floats above everything, on every space. Hover it — your shortcuts fan out around it.",
-      done: (s) => s.expanded || s.hovered,
-      waiting: "Hover the staff…",
-    },
-    {
-      title: "Click it to search",
-      body: "A single click opens the Command Center. Give it a click now.",
-      done: (s) => s.commandCenterOpened,
-      waiting: "Click the staff…",
-    },
-    {
-      title: "Close it, then use the key",
-      body: hotkey
-        ? `Escape closes the Command Center. Now press ${hotkey} — it opens from anywhere, whatever app you are in.`
-        : "Escape closes the Command Center. No global shortcut is bound right now — set one in Settings → General, then this step will name it.",
-      // Without a bound shortcut this step is unsatisfiable, which would trap
-      // the walkthrough on a screen with no way forward.
-      done: (s) => s.hotkeyUsed || !hotkey,
-      waiting: hotkey ? `Press ${hotkey}…` : undefined,
-      keys: rawHotkey ? parseAccelerator(rawHotkey) : undefined,
-    },
-    {
-      title: "Type anything",
-      body: "Search apps by name, or type a question. Enter runs whatever is highlighted.",
-    },
-    {
-      title: "Hold to dictate",
-      body: pushToTalk
-        ? `Anywhere text can go, hold ${pushToTalk} and talk. Release the key and what you said is typed in for you.`
-        : "Push-to-talk dictation needs a key of its own — bind one in Settings → Voice, then this step will name it.",
-      keys: rawPushToTalk ? parseAccelerator(rawPushToTalk) : undefined,
-    },
-    {
-      title: "What the bar understands",
-      body: "chrome → launches the app · 2+2 → answers inline · your text → searches the web · / → asks your AI · /v → your clipboard history · /c → an agent that drives your Mac",
-    },
-    {
-      title: "154 features, each with its own page",
-      body: "Notes, meeting recording, colours, conversions, disk cleanup, window snapping — pick one and it opens as a tab with an interface built for it. Nothing needs you to know a syntax. ⌘T for another tab, ⌘1–⌘9 to switch. Searching by the app you came from works too — amphetamine, cleanshot, cleanmymac, stickies all find their counterpart here.",
-    },
-    {
-      title: "One last thing",
-      body: "The / and /c prefixes need a model. Nothing else does — the launcher, clipboard, dictation, system monitor and search all work as they are. Want to configure AI features? Settings → Learn walks you through it and can find what is already on your Mac.",
-    },
-  ];
+function HotkeyStep({
+  settings,
+  pressCount,
+  onBack,
+  onContinue,
+}: {
+  settings: Settings;
+  pressCount: number;
+  onBack: () => void;
+  onContinue: () => void;
+}) {
+  // Shown immediately on change, ahead of the save round-trip that actually
+  // confirms it — see `changeHotkey`. `null` defers to the settings prop.
+  const [override, setOverride] = useState<string | null>(null);
+  const [warning, setWarning] = useState<string | null>(null);
+  // The press count observed the moment the accelerator now on screen took
+  // effect. A press only counts as confirmation if it happened at or after
+  // that point — otherwise proving key A works and then rebinding to key B
+  // would keep showing "confirmed" for a binding nobody has actually pressed.
+  // Starts at 0, not the live count, so a binding already proven earlier this
+  // session — replaying this from Settings → Help, say — still reads as
+  // confirmed without demanding a fresh press before anything has changed.
+  const [baseline, setBaseline] = useState(0);
+
+  const accelerator = override ?? settings.general.commandCenterHotkey;
+  const label = hotkeyLabel(accelerator);
+  const confirmed = pressCount > baseline;
+
+  const changeHotkey = async (next: string) => {
+    setOverride(next);
+    setWarning(null);
+    setBaseline(pressCount);
+    const draft = structuredClone(settings);
+    draft.general.commandCenterHotkey = next;
+    try {
+      const report = await api.updateSettings(draft);
+      // The accelerator that actually took effect — `next`, unless another
+      // app already held it, in which case Rust moved it to a free fallback
+      // (see `hotkeys::register_all`). Correcting the display to match beats
+      // showing a combination that silently does nothing.
+      setOverride(report.settings.general.commandCenterHotkey);
+      if (report.hotkeyProblems.length > 0) setWarning(report.hotkeyProblems.join(" "));
+    } catch (e) {
+      setOverride(null);
+      setWarning(api.errorMessage(e));
+    }
+  };
+
+  return (
+    <>
+      <p className="text-[20px] font-semibold leading-snug text-ink">Open Caduceus from anywhere</p>
+      <p className="mt-2.5 text-[14px] leading-relaxed text-ink-mute">
+        This key opens the Command Center no matter what app is in front — Caduceus does not need to
+        be focused, or even visible.
+      </p>
+
+      <div className="mt-5">
+        <Field label="Command Center hotkey" hint="Works globally, even when Caduceus is not the focused app.">
+          <HotkeyInput value={accelerator} onChange={(v) => void changeHotkey(v)} />
+        </Field>
+      </div>
+      {warning && <p className="mt-2 text-2xs leading-relaxed text-caution">{warning}</p>}
+
+      {accelerator ? (
+        <>
+          <MiniKeyboard combo={parseAccelerator(accelerator)} className="mt-5" />
+          <div className="mt-4" aria-live="polite">
+            {confirmed ? (
+              <Callout tone="positive" title="Confirmed">
+                {label} reaches Caduceus — that is the same key from anywhere on the Mac.
+              </Callout>
+            ) : (
+              <div className="row gap-2 rounded-lg border border-line bg-base/20 px-3.5 py-3 text-[13px] text-ink-mute">
+                <Spinner className="text-accent" />
+                <span>Press {label} now to make sure it reaches Caduceus.</span>
+              </div>
+            )}
+          </div>
+        </>
+      ) : (
+        <p className="mt-5 text-[13px] leading-relaxed text-ink-mute">
+          Nothing is bound, so only clicking the staff opens the Command Center. Set a key above, or
+          continue and bind one later in Settings → General.
+        </p>
+      )}
+
+      <div className="row mt-6 justify-between">
+        <Button tone="ghost" size="md" onClick={onBack}>
+          Back
+        </Button>
+        <Button tone="primary" size="md" onClick={onContinue}>
+          Continue
+        </Button>
+      </div>
+    </>
+  );
 }
+
+// ---------------------------------------------------------------------------
+// Step 3: Model
+// ---------------------------------------------------------------------------
 
 /**
- * How long a step must be on screen before it can be marked satisfied, either
- * by its own `done` signal or by the user pressing Next. Long enough to rule
- * out "the pointer already happened to be there"; short enough that reading a
- * two-line step and moving on never feels throttled.
+ * Vision-tagged Ollama models (…-vl, …vision, llava, minicpm-v) reject the
+ * plain chat schema Caduceus sends for `/` and `/c`, so they are filtered out
+ * of the picker — the same heuristic `useChatModels.ts` applies to the chat
+ * composer's own "Connect" rows. Duplicated rather than imported: that module
+ * ships in the Command Center's bundle, this one in the staff window's, and
+ * neither window's code should have to load the other's.
  */
-const MIN_STEP_DWELL_MS = 1100;
+function looksVisionOnly(tag: string): boolean {
+  const t = tag.toLowerCase();
+  return (
+    /(^|[:/\-_.])vl([:/\-_.]|$)/.test(t) ||
+    t.includes("vision") ||
+    t.includes("llava") ||
+    t.includes("minicpm-v")
+  );
+}
 
-/** Only these two steps need the real staff mark reachable under the card. */
-const MARK_DEPENDENT_STEPS = new Set([0, 1]);
+interface ModelCandidate {
+  key: string;
+  provider: DetectedProvider;
+  model: string;
+}
+
+function candidatesFromScan(scan: LocalAiScan | null): ModelCandidate[] {
+  if (!scan) return [];
+  const rows: ModelCandidate[] = [];
+  for (const provider of scan.providers) {
+    if (!provider.running) continue;
+    for (const model of provider.models) {
+      if (looksVisionOnly(model)) continue;
+      rows.push({ key: `${provider.id}::${model}`, provider, model });
+    }
+  }
+  return rows;
+}
+
+function ModelStep({
+  settings,
+  onBack,
+  onFinish,
+}: {
+  settings: Settings;
+  onBack: () => void;
+  onFinish: () => void;
+}) {
+  const [scan, setScan] = useState<LocalAiScan | null>(null);
+  const [scanning, setScanning] = useState(true);
+  const [scanError, setScanError] = useState<string | null>(null);
+  const [selectedKey, setSelectedKey] = useState("");
+  const [connecting, setConnecting] = useState(false);
+  const [connectError, setConnectError] = useState<string | null>(null);
+
+  const runScan = () => {
+    setScanning(true);
+    setScanError(null);
+    void api
+      .detectLocalAi()
+      .then((result) => {
+        setScan(result);
+        const found = candidatesFromScan(result);
+        setSelectedKey((current) => (found.some((c) => c.key === current) ? current : found[0]?.key ?? ""));
+      })
+      .catch((e) => setScanError(api.errorMessage(e)))
+      .finally(() => setScanning(false));
+  };
+
+  // Scan once, on mount — this step's only job, so there is nothing else to
+  // gate it on. `runScan` is stable enough for this: it closes over nothing
+  // that changes between mount and the "Rescan" button being clicked by hand.
+  useEffect(runScan, []);
+
+  const candidates = candidatesFromScan(scan);
+  const selected = candidates.find((c) => c.key === selectedKey) ?? candidates[0];
+
+  const providerNames = [...new Set(candidates.map((c) => c.provider.displayName))];
+  const summary =
+    providerNames.length === 1
+      ? `${providerNames[0]} is running, with ${candidates.length} model${candidates.length === 1 ? "" : "s"} ready.`
+      : `${providerNames.join(" and ")} are running, with ${candidates.length} models between them.`;
+
+  const useLocalModel = async () => {
+    if (!selected) return;
+    setConnecting(true);
+    setConnectError(null);
+    try {
+      const { provider, model } = selected;
+      const id = `local-${provider.id}`;
+      const config: BackendConfig = {
+        id,
+        displayName: `${provider.displayName} — ${model}`,
+        kind: "openai_compatible",
+        baseUrl: provider.baseUrl,
+        model,
+        hasApiKey: false,
+        maxTokens: 4096,
+        temperature: null,
+        systemPrompt: "",
+        supportsComputerUse: false,
+        extraHeaders: [],
+        timeoutSecs: 600,
+        reasoningEffort: null,
+      };
+      const next = structuredClone(settings);
+      const index = next.agents.backends.findIndex((b) => b.id === id);
+      if (index >= 0) next.agents.backends[index] = config;
+      else next.agents.backends.push(config);
+      next.agents.primaryBackendId = id;
+      next.agents.routingOverrideBackendId = id;
+      await api.updateSettings(next);
+      // `Staff.tsx`'s `onFinish` re-reads settings from Rust before flipping
+      // `onboardingDone`, rather than closing over whatever props this
+      // component was last rendered with, so the save above is guaranteed to
+      // still be there once that runs even though the two calls are
+      // independent saves rather than one combined write.
+      onFinish();
+    } catch (e) {
+      setConnectError(api.errorMessage(e));
+      setConnecting(false);
+    }
+  };
+
+  return (
+    <>
+      <p className="text-[20px] font-semibold leading-snug text-ink">Pick a model</p>
+      <p className="mt-2.5 text-[14px] leading-relaxed text-ink-mute">
+        Only <span className="font-mono text-ink-soft">/</span> and{" "}
+        <span className="font-mono text-ink-soft">/c</span> need one — the launcher, clipboard,
+        dictation, system monitor and search already work without it.
+      </p>
+
+      <div className="mt-5 rounded-cad border border-line bg-surface/50 p-4" aria-live="polite">
+        {scanning ? (
+          <div className="row gap-2 text-[13px] text-ink-mute">
+            <Spinner className="text-accent" />
+            <span>Looking for a model already running on this Mac…</span>
+          </div>
+        ) : scanError ? (
+          <Callout tone="warn" title="Could not scan">
+            {scanError}
+          </Callout>
+        ) : candidates.length > 0 && selected ? (
+          <>
+            <p className="text-[13px] font-medium text-ink">{summary}</p>
+            <div className="mt-3">
+              <Field label="Model" hint="Detected automatically — change it if you would rather use a different one.">
+                <Select
+                  value={selected.key}
+                  onChange={setSelectedKey}
+                  options={candidates.map((c) => ({
+                    value: c.key,
+                    label: `${c.provider.displayName} · ${c.model}`,
+                  }))}
+                />
+              </Field>
+            </div>
+          </>
+        ) : (
+          <>
+            <p className="text-[13px] leading-relaxed text-ink-mute">
+              Nothing local answered. Install{" "}
+              <button
+                type="button"
+                className="text-accent underline decoration-dotted underline-offset-2"
+                onClick={() => void api.openExternalUrl("https://ollama.com")}
+              >
+                Ollama
+              </button>
+              , pull a model, and rescan — or connect a cloud provider any time in Settings.
+            </p>
+            <Button tone="ghost" size="sm" className="mt-3" onClick={runScan}>
+              Rescan
+            </Button>
+          </>
+        )}
+        {connectError && <p className="mt-2 text-2xs text-danger">{connectError}</p>}
+      </div>
+
+      <div className="row mt-6 justify-between">
+        <Button tone="ghost" size="md" onClick={onBack}>
+          Back
+        </Button>
+        <div className="row gap-2">
+          <Button tone="ghost" size="md" onClick={onFinish}>
+            Connect a cloud model later
+          </Button>
+          {candidates.length > 0 && (
+            <Button tone="primary" size="md" disabled={connecting} onClick={() => void useLocalModel()}>
+              {connecting ? "Connecting…" : "Use local model"}
+            </Button>
+          )}
+        </div>
+      </div>
+    </>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Shell
+// ---------------------------------------------------------------------------
+
+/** Matches `PermissionCoach` buttons, `HotkeyInput`, `Select`, links — everything the trap below can hand focus to. */
+const FOCUSABLE_SELECTOR =
+  'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 export function Onboarding({
   signals,
   settings,
-  staffSize,
   onFinish,
 }: {
   signals: OnboardingSignals;
   settings: Settings;
-  /** Used to park the compact card clear of the mark, and to size the spotlight. */
-  staffSize: number;
+  /** Ends onboarding. The header's Skip, Escape, and every phase's own final
+      action all funnel through this one prop; `Staff.tsx`'s implementation is
+      what actually flips `onboardingDone`. */
   onFinish: () => void;
 }) {
-  const [phase, setPhase] = useState<"permissions" | "tour">("permissions");
-  const [index, setIndex] = useState(0);
-  // Read at render, not baked in: startup may have rebound either hotkey to a
-  // fallback because another app held the configured key.
-  const STEPS = buildSteps(settings);
-
+  const [phase, setPhase] = useState<Phase>("permissions");
   const cardRef = useRef<HTMLDivElement>(null);
+  const restoreFocusTo = useRef<HTMLElement | null>(null);
 
-  // The staff window is click-through except right at the staff and this
+  // The staff window is click-through except right at the mark and this
   // card's own bounds, so the card has to tell the Rust side where it is on
-  // every phase and step change — its size and position both move as the
-  // content does. Registering the card's own rect rather than forcing the
-  // entire window clickable is what leaves the staff draggable and whatever
-  // sits behind the window reachable for the length of onboarding.
+  // every phase change — its size and position both move as the content
+  // does. Registering the card's own rect rather than forcing the entire
+  // window clickable is what leaves the staff draggable and whatever sits
+  // behind the window reachable for as long as onboarding is up.
   useEffect(() => {
     const el = cardRef.current;
     if (!el) return;
 
     const publish = () => {
       const r = el.getBoundingClientRect();
-      void api.setStaffCaptureRect({
-        x: r.left,
-        y: r.top,
-        width: r.width,
-        height: r.height,
-      });
+      void api.setStaffCaptureRect({ x: r.left, y: r.top, width: r.width, height: r.height });
     };
 
     publish();
@@ -416,279 +704,112 @@ export function Onboarding({
       window.removeEventListener("resize", publish);
       void api.setStaffCaptureRect(null);
     };
-  }, [phase, index]);
+  }, [phase]);
 
-  const step = STEPS[index];
-  const isLast = index === STEPS.length - 1;
-  const markDependent = phase === "tour" && MARK_DEPENDENT_STEPS.has(index);
-
-  // See the doc comment at the top of the file for why this exists: without
-  // it, a step whose `done` signal is already true the moment it mounts —
-  // because the user was already hovering or had just clicked the staff to
-  // get here — vanishes before it can be read.
-  const [dwellPassed, setDwellPassed] = useState(false);
+  // Real focus management, not just a visual overlay: whatever had focus
+  // before onboarding opened gets it back once onboarding is gone, rather
+  // than leaving focus on whatever DOM node happened to be under it.
   useEffect(() => {
-    setDwellPassed(false);
-    const timer = setTimeout(() => setDwellPassed(true), MIN_STEP_DWELL_MS);
-    return () => clearTimeout(timer);
-  }, [phase, index]);
+    restoreFocusTo.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    return () => restoreFocusTo.current?.focus();
+  }, []);
 
-  const satisfied = dwellPassed && (step.done ? step.done(signals) : true);
-
-  const go = (delta: number) =>
-    setIndex((i) => Math.min(Math.max(i + delta, 0), STEPS.length - 1));
-
-  // Free movement in both directions, unlike Next, which waits for the step's
-  // action (and now for its dwell time too). Re-reading a step you have
-  // already done should not require redoing it, and being unable to go back
-  // at all was the complaint that added this. Scoped to the tour: the
-  // permission phase's own controls live inside PermissionCoach.
+  // And every phase change moves focus onto the new card, so a screen reader
+  // announces the new `aria-label` and Tab starts from a predictable place
+  // rather than from a button that just unmounted underneath the cursor.
   useEffect(() => {
-    if (phase !== "tour") return;
+    cardRef.current?.focus({ preventScroll: true });
+  }, [phase]);
+
+  // Escape always means "stop asking me things", regardless of which control
+  // inside the card currently has focus — except while `HotkeyInput` is mid
+  // capture, where its own listener (registered in the capture phase, on
+  // `window`) already claims Escape to cancel the capture and stops it from
+  // reaching this one.
+  useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "ArrowLeft") {
+      if (e.key === "Escape") {
         e.preventDefault();
-        go(-1);
-      } else if (e.key === "ArrowRight") {
-        e.preventDefault();
-        go(1);
+        onFinish();
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase, STEPS.length]);
+  }, [onFinish]);
 
-  // Auto-advance the moment the real action happens (and the step has been up
-  // long enough), so completing a step feels like the product responding
-  // rather than a form being submitted.
-  useEffect(() => {
-    if (phase !== "tour") return;
-    if (!dwellPassed) return;
-    if (!step.done || !step.done(signals)) return;
-    const timer = setTimeout(() => setIndex((i) => Math.min(i + 1, STEPS.length - 1)), 550);
-    return () => clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase, dwellPassed, signals.hovered, signals.expanded, signals.commandCenterOpened, signals.hotkeyUsed, index]);
-
-  // Combined numbering across both phases — permissions is "1 of N", the tour
-  // steps pick up from "2 of N" — so the progress dots read as one sequence
-  // rather than resetting partway through, which is the whole point of
-  // folding permissions into this component instead of bolting it on before.
-  const TOTAL = 1 + STEPS.length;
-  const position = phase === "permissions" ? 1 : 2 + index;
-
-  // Half the window must fit: top gap, the card, a gap, and the mark's
-  // radius. Mirrors the budget `staff_window_side` reserves in
-  // `src-tauri/src/window/mod.rs` for the compact top-strip card.
-  const staffClearance = Math.round(staffSize / 2) + 16;
-
-  // A rough stand-in for the pop-out reach: this component is only handed
-  // `staffSize`, not the popout radius/icon size `staff_window_side` uses, so
-  // this cannot be exact. It only has to be generous enough that the fanned-
-  // out shortcuts from "hover the staff" land inside the clear circle.
-  const spotlightRadius = markDependent ? Math.min(Math.max(staffSize * 1.9, 90), 190) : 0;
-
-  const header = (
-    <div className="row items-center justify-between">
-      <div className="row items-center gap-2.5">
-        <span className="text-2xs font-medium uppercase tracking-[0.1em] text-accent">
-          {position} of {TOTAL}
-        </span>
-        <div className="row gap-1">
-          {Array.from({ length: TOTAL }).map((_, i) => (
-            <span
-              key={i}
-              aria-hidden="true"
-              className={cx(
-                "h-1 w-1 rounded-full transition-colors",
-                i === position - 1 ? "bg-accent" : i < position - 1 ? "bg-ink-faint" : "bg-overlay",
-              )}
-            />
-          ))}
-        </div>
-      </div>
-      <button
-        type="button"
-        onClick={phase === "permissions" ? () => setPhase("tour") : onFinish}
-        className="rounded px-1.5 py-0.5 text-2xs text-ink-faint transition-colors hover:bg-raised hover:text-ink"
-      >
-        Skip
-      </button>
-    </div>
-  );
+  // A minimal Tab trap. This overlay sits on top of the staff button rather
+  // than replacing it in the DOM, so without this, Tab would eventually walk
+  // focus onto a control the scrim is actively hiding.
+  const trapTab = (e: React.KeyboardEvent) => {
+    if (e.key !== "Tab") return;
+    const root = cardRef.current;
+    if (!root) return;
+    const focusable = Array.from(root.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)).filter(
+      (n) => n.offsetParent !== null,
+    );
+    if (focusable.length === 0) return;
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (e.shiftKey && document.activeElement === first) {
+      e.preventDefault();
+      last.focus();
+    } else if (!e.shiftKey && document.activeElement === last) {
+      e.preventDefault();
+      first.focus();
+    }
+  };
 
   return (
     <div className="pointer-events-none absolute inset-0 z-40">
-      {/* The scrim. A 0×0 circle with a 9999px spread still darkens the whole
-          window evenly, so this one element covers both "plain backdrop" and
-          "backdrop with a hole punched in it" — the radius just animates
-          between the two, which is what makes the step-2-to-3 handoff (mark
-          exposed → mark irrelevant) read as a deliberate widening rather than
-          a jump cut. */}
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full transition-[width,height] duration-300 ease-cad"
-        style={{
-          width: spotlightRadius * 2,
-          height: spotlightRadius * 2,
-          boxShadow: "0 0 0 9999px rgb(0 0 0 / 0.55)",
-        }}
-      />
+      {/* A plain scrim. Every phase here is a centred card with nothing on
+          the staff itself worth keeping visible underneath, unlike the old
+          tour's first two steps — so there is no punched-hole spotlight to
+          animate, just a constant backdrop that mounts once and stays put
+          across phase changes. */}
+      <div aria-hidden="true" className="pointer-events-none absolute inset-0 bg-black/55 animate-fade-rise" />
 
-      {phase === "permissions" && (
-        <div
-          key="permissions-card"
-          ref={cardRef}
-          role="dialog"
-          aria-modal="true"
-          aria-label="Grant permissions"
-          className={cx(
-            "pointer-events-auto absolute inset-x-4 top-1/2 mx-auto -translate-y-1/2",
-            "w-[min(560px,calc(100%-32px))] overflow-y-auto rounded-cad-lg",
-            "glass px-8 py-7 shadow-float animate-fade-rise",
-          )}
-          style={{ maxHeight: "calc(100% - 32px)" }}
-        >
-          {/* `PermissionCoach` in its "onboarding" variant already carries its
-              own eyebrow, heading and explanation per permission — adding
-              another title above it here would just repeat "let's get you set
-              up" in different words, so this phase's card contributes only
-              the progress chrome every phase shares and then gets out of the
-              way. */}
-          {header}
-          <div className="mt-5">
+      <div
+        key={phase}
+        ref={cardRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label={PHASE_ARIA_LABEL[phase]}
+        tabIndex={-1}
+        onKeyDown={trapTab}
+        className={cx(
+          "pointer-events-auto absolute inset-x-4 top-1/2 mx-auto -translate-y-1/2",
+          "w-[min(560px,calc(100%-32px))] overflow-y-auto rounded-cad-lg",
+          "glass px-8 py-7 shadow-float animate-fade-rise",
+        )}
+        style={{ maxHeight: "calc(100% - 32px)" }}
+      >
+        <ProgressHeader phase={phase} onSkip={onFinish} />
+
+        <div className="mt-5">
+          {phase === "permissions" && (
+            // `PermissionCoach`'s "onboarding" variant already carries its own
+            // eyebrow, heading and per-permission explanation — this phase
+            // contributes only the progress chrome every phase shares.
             <PermissionCoach
-              ids={["microphone", "speech-recognition", "accessibility"]}
-              onAllGranted={() => setPhase("tour")}
-              onSkip={() => setPhase("tour")}
+              ids={["accessibility", "screen-recording", "microphone"]}
+              onAllGranted={() => setPhase("hotkey")}
+              onSkip={() => setPhase("hotkey")}
               variant="onboarding"
             />
-          </div>
-        </div>
-      )}
-
-      {phase === "tour" && markDependent && (
-        <div
-          key="compact-card"
-          ref={cardRef}
-          role="dialog"
-          aria-modal="true"
-          aria-label="Caduceus walkthrough"
-          className={cx(
-            "pointer-events-auto absolute inset-x-3 top-3 mx-auto",
-            "w-[min(440px,calc(100%-24px))] overflow-y-auto rounded-cad-lg",
-            "glass px-6 py-5 shadow-float animate-fade-rise",
           )}
-          style={{ maxHeight: `calc(50% - ${staffClearance}px)` }}
-        >
-          {header}
-          <p className="mt-3 text-[17px] font-semibold leading-snug text-ink">{step.title}</p>
-          <p className="mt-2 text-[13px] leading-relaxed text-ink-mute">{step.body}</p>
-
-          <div className="row mt-4 justify-between">
-            <div className="row gap-2">
-              <Button
-                tone="ghost"
-                size="sm"
-                disabled={index === 0}
-                onClick={() => go(-1)}
-                title="Previous step (←)"
-              >
-                Back
-              </Button>
-              <Button
-                tone="ghost"
-                size="sm"
-                disabled={isLast}
-                onClick={() => go(1)}
-                title="Next step (→)"
-              >
-                Forward
-              </Button>
-            </div>
-
-            {satisfied ? (
-              <Button tone="primary" size="sm" onClick={() => setIndex((i) => i + 1)}>
-                Next
-              </Button>
-            ) : (
-              <span className="self-center text-2xs text-ink-faint">{step.waiting}</span>
-            )}
-          </div>
-        </div>
-      )}
-
-      {phase === "tour" && !markDependent && (
-        <div
-          key="big-card"
-          ref={cardRef}
-          role="dialog"
-          aria-modal="true"
-          aria-label="Caduceus walkthrough"
-          className={cx(
-            "pointer-events-auto absolute inset-x-4 top-1/2 mx-auto -translate-y-1/2",
-            "flex w-[min(560px,calc(100%-32px))] flex-col overflow-y-auto rounded-cad-lg",
-            "glass px-8 py-7 shadow-float animate-fade-rise",
+          {phase === "hotkey" && (
+            <HotkeyStep
+              settings={settings}
+              pressCount={signals.hotkeyPressCount}
+              onBack={() => setPhase("permissions")}
+              onContinue={() => setPhase("model")}
+            />
           )}
-          style={{ maxHeight: "calc(100% - 32px)" }}
-        >
-          {header}
-          <p className="mt-4 text-[20px] font-semibold leading-snug text-ink">{step.title}</p>
-          <p className="mt-2.5 text-[14px] leading-relaxed text-ink-mute">{step.body}</p>
-
-          {step.keys && <MiniKeyboard combo={step.keys} className="mt-5" />}
-
-          <div className="row mt-6 justify-between">
-            <div className="row gap-2">
-              <Button
-                tone="ghost"
-                size="md"
-                disabled={index === 0}
-                onClick={() => go(-1)}
-                title="Previous step (←)"
-              >
-                Back
-              </Button>
-              {!isLast && (
-                <Button
-                  tone="ghost"
-                  size="md"
-                  disabled={isLast}
-                  onClick={() => go(1)}
-                  title="Next step (→)"
-                >
-                  Forward
-                </Button>
-              )}
-            </div>
-
-            {isLast ? (
-              <div className="row gap-2">
-                <Button
-                  tone="primary"
-                  size="md"
-                  onClick={() => {
-                    onFinish();
-                    void api.openSettingsWindow("help");
-                  }}
-                >
-                  Set up AI
-                </Button>
-                <Button tone="ghost" size="md" onClick={onFinish}>
-                  Done
-                </Button>
-              </div>
-            ) : satisfied ? (
-              <Button tone="primary" size="md" onClick={() => setIndex((i) => i + 1)}>
-                Next
-              </Button>
-            ) : (
-              <span className="self-center text-2xs text-ink-faint">{step.waiting}</span>
-            )}
-          </div>
+          {phase === "model" && (
+            <ModelStep settings={settings} onBack={() => setPhase("hotkey")} onFinish={onFinish} />
+          )}
         </div>
-      )}
+      </div>
     </div>
   );
 }

@@ -10,7 +10,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AgentPanel } from "@/command-center/AgentPanel";
 import * as api from "@/shared/api";
 import { useSettings, useTauriEvent } from "@/shared/hooks";
-import type { ChatChunk, ChatMessage, Conversation, Settings } from "@/shared/types";
+import type { AgentStep, ChatChunk, ChatMessage, Conversation, Settings, TtsState } from "@/shared/types";
 import type { Tab } from "@/shared/tabs";
 import { EVENTS } from "@/shared/types";
 import { Spinner, cx } from "@/shared/ui";
@@ -66,7 +66,15 @@ export function Chat({
   const [stream, setStream] = useState<StreamStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [flash, setFlash] = useState<string | null>(null);
-  const [agentSession, setAgentSession] = useState<{ id: string; task: string } | null>(null);
+  const [agentSession, setAgentSession] = useState<
+    { id: string; task: string; kind: "computer" | "tool" } | null
+  >(null);
+  // Whether a spoken reply is currently playing — drives the "Speaking… Stop"
+  // control. Kept separate from `pending`/`stream`: a reply can finish
+  // generating and rendering while it is still partway through being read
+  // aloud, and the reverse (agent sessions have no `stream` at all but can
+  // still speak a final message — see the `agentStep` listener below).
+  const [ttsState, setTtsState] = useState<TtsState>("idle");
   const [attachMeta, setAttachMeta] = useState<PickedAttachment[]>([]);
   const attachFiles = useRef<File[]>([]);
 
@@ -163,6 +171,45 @@ export function Chat({
     }
   });
 
+  useTauriEvent<TtsState>(EVENTS.ttsState, setTtsState);
+
+  /**
+   * Speak a finished reply aloud, if both voice switches say to.
+   *
+   * `ttsEnabled` gates `speak` itself (Rust rejects the call outright when it
+   * is off — see `voice::TtsRuntime::speak`); `ttsSpeakReplies` is the
+   * separate "narrate automatically" switch this consumes. `stopSpeaking`
+   * runs first and is not awaited: it only interrupts whatever the *previous*
+   * `speak` call installed as the active backend, which is a distinct
+   * instance from the one about to start (see `TtsRuntime::speak`'s
+   * ptr-equality guard) — so this is what stops a fast-arriving reply from
+   * talking over one still being read, without delaying the new one.
+   */
+  const speakReply = useCallback(
+    (text: string) => {
+      if (!settings?.voice.ttsEnabled || !settings.voice.ttsSpeakReplies) return;
+      const clean = text.trim();
+      if (!clean) return;
+      void api.stopSpeaking();
+      void api.speak(clean).catch(() => {
+        // The reply itself already landed and is on screen either way; a
+        // backend that turned out to be misconfigured is not a chat error.
+      });
+    },
+    [settings],
+  );
+
+  // Speak a tool/computer-use session's closing message the same way a plain
+  // chat reply is spoken — see `speakReply`. Matched by session id because
+  // `AgentStep::Finished` (unlike `AwaitingApproval`) carries one on its
+  // `outcome`, not on the step itself; every other step type carries neither,
+  // which is also why this listener only ever looks at `finished`.
+  useTauriEvent<AgentStep>(EVENTS.agentStep, (step) => {
+    if (step.type === "finished" && agentSession && step.outcome.sessionId === agentSession.id) {
+      speakReply(step.outcome.finalMessage);
+    }
+  });
+
   useEffect(() => {
     if (activeId == null && conversations.length > 0) setActiveId(conversations[0].id);
   }, [conversations, activeId]);
@@ -185,6 +232,11 @@ export function Chat({
     if (!prompt && attachFiles.current.length === 0) return;
     if (pending || agentSession) return;
 
+    // A new question moving on is as much "the user wants quiet" as
+    // push-to-talk barging in is — see `speakReply`'s doc. Unconditional and
+    // unawaited: `stopSpeaking` is a documented no-op when nothing is playing.
+    void api.stopSpeaking();
+
     let full = prompt;
     if (attachFiles.current.length > 0) {
       const attachmentBlock = await attachmentsToPrompt(attachFiles.current);
@@ -196,11 +248,12 @@ export function Chat({
     attachFiles.current = [];
     setError(null);
 
-    if (mode === "computer") {
+    if (mode === "computer" || mode === "agent") {
       setPending(full);
       try {
-        const sessionId = await api.agentStartSession(full);
-        setAgentSession({ id: sessionId, task: full });
+        const sessionId =
+          mode === "computer" ? await api.agentStartSession(full) : await api.agentStartToolSession(full);
+        setAgentSession({ id: sessionId, task: full, kind: mode === "computer" ? "computer" : "tool" });
       } catch (e) {
         setError(String(e));
       } finally {
@@ -220,6 +273,7 @@ export function Chat({
         usage: reply.usage,
         active: false,
       });
+      speakReply(reply.text);
       await loadMessages(reply.conversationId);
       await loadConversations();
       setStream(null);
@@ -295,7 +349,7 @@ export function Chat({
           <CaduceusMark height={22} title="Caduceus" className="shrink-0" />
           <div className="min-w-0">
             <p className="truncate text-[13px] font-semibold tracking-[-0.01em] text-ink">Caduceus AI</p>
-            <p className="truncate text-[11px] text-ink-faint">Chat & Cowork</p>
+            <p className="truncate text-[11px] text-ink-faint">Chat, Agent & Cowork</p>
           </div>
         </div>
 
@@ -378,13 +432,36 @@ export function Chat({
       </aside>
 
       <main className="flex min-w-0 flex-1 flex-col">
-        <div className="drag h-11 shrink-0" />
+        {/* A dedicated row rather than folding this into the composer toolbar:
+            that toolbar does not exist while an agent session is showing
+            below, and a reply's closing message can still be mid-sentence
+            aloud in that state — see the `agentStep` listener above. Living
+            on the shared drag bar means the control stays reachable
+            regardless of which of the two is rendered underneath it. */}
+        <div className="drag flex h-11 shrink-0 items-center justify-end px-4">
+          {ttsState === "speaking" && (
+            <button
+              type="button"
+              onClick={() => void api.stopSpeaking()}
+              aria-label="Stop the spoken reply"
+              title="Stop the spoken reply"
+              className="no-drag inline-flex items-center gap-1.5 rounded-full border border-accent/30 bg-accent/10 px-2.5 py-1 text-[12px] font-medium text-accent transition-colors hover:bg-accent/16"
+            >
+              <span aria-hidden="true" className="relative flex h-1.5 w-1.5 shrink-0">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-accent opacity-60" />
+                <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-accent" />
+              </span>
+              Speaking… Stop
+            </button>
+          )}
+        </div>
 
         {agentSession ? (
           <div className="flex min-h-0 flex-1 flex-col px-4 pb-4">
             <AgentPanel
               sessionId={agentSession.id}
               task={agentSession.task}
+              sessionKind={agentSession.kind}
               onClose={() => setAgentSession(null)}
             />
           </div>
@@ -400,7 +477,8 @@ export function Chat({
                     {timeGreeting()}, {name}
                   </h1>
                   <p className="mt-2 max-w-md text-center text-[14px] leading-relaxed text-ink-mute">
-                    Ask anything, attach files, or switch to Cowork to act on your Mac. Routing via{" "}
+                    Ask anything, attach files, switch to Agent to use your connected tools, or
+                    Cowork to act on your Mac. Routing via{" "}
                     <span className="text-ink-soft">{modelLabel}</span>.
                   </p>
                   {choices.length === 0 && (
@@ -465,7 +543,9 @@ export function Chat({
                     placeholder={
                       mode === "computer"
                         ? "Tell Caduceus what to do on your Mac…"
-                        : `Ask Caduceus anything · Search: ${paletteAiHint}`
+                        : mode === "agent"
+                          ? "Tell Caduceus what to do with your connected tools…"
+                          : `Ask Caduceus anything · Search: ${paletteAiHint}`
                     }
                     className={cx(
                       "no-drag w-full resize-none bg-transparent px-4 pt-4 text-[15px] leading-relaxed",
@@ -491,9 +571,15 @@ export function Chat({
                         +
                       </button>
 
-                      <div className="inline-flex rounded-lg border border-line bg-base/50 p-0.5 text-[12px]">
+                      <div
+                        role="group"
+                        aria-label="Response mode"
+                        className="inline-flex rounded-lg border border-line bg-base/50 p-0.5 text-[12px]"
+                      >
                         <button
                           type="button"
+                          aria-pressed={mode === "chat"}
+                          title="Plain conversation, no tools"
                           onClick={() => setMode("chat")}
                           className={cx(
                             "rounded-md px-2.5 py-1 font-medium transition-colors",
@@ -504,6 +590,20 @@ export function Chat({
                         </button>
                         <button
                           type="button"
+                          aria-pressed={mode === "agent"}
+                          title="Calls tools connected in Settings → MCP"
+                          onClick={() => setMode("agent")}
+                          className={cx(
+                            "rounded-md px-2.5 py-1 font-medium transition-colors",
+                            mode === "agent" ? "bg-accent/15 text-accent" : "text-ink-mute hover:text-ink",
+                          )}
+                        >
+                          Agent
+                        </button>
+                        <button
+                          type="button"
+                          aria-pressed={mode === "computer"}
+                          title="Drives your screen directly"
                           onClick={() => setMode("computer")}
                           className={cx(
                             "rounded-md px-2.5 py-1 font-medium transition-colors",

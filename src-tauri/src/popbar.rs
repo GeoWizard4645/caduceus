@@ -50,12 +50,14 @@
 //! bounds, rather than waiting for an AppKit notification that will never
 //! arrive.
 //!
-//! # Everything here is deliberately *not* wired into `generate_handler!`
+//! # Wired into `lib.rs`
 //!
-//! Per the crate owner's file split, this module owns only itself; the
-//! `#[tauri::command]`s below and [`register_hotkey`]/[`handle_shortcut`]
-//! are complete and self-contained, but nothing calls them yet. See the
-//! doc comment on [`handle_shortcut`] for exactly what `lib.rs` needs to add.
+//! [`register_hotkey`] is called once from `setup()`, and [`handle_shortcut`]
+//! is tried first in the global-shortcut plugin's one `.with_handler(...)`
+//! closure, ahead of `hotkeys::handle` — see the doc comment on
+//! [`handle_shortcut`] for the exact shape of that wiring. The
+//! `#[tauri::command]`s below are in `generate_handler!` alongside everything
+//! else.
 
 use std::str::FromStr;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -388,34 +390,27 @@ fn unregister_dismiss_key<R: Runtime>(app: &AppHandle<R>) {
 
 /// Entry point for the global-shortcut plugin's single handler.
 ///
-/// # What still needs to be wired in `lib.rs`
+/// # How this is wired into `lib.rs`
 ///
 /// The `tauri_plugin_global_shortcut` builder takes exactly one handler for
-/// *every* shortcut anyone registers, installed once when the plugin is
-/// built (`lib.rs::run`, the `.with_handler(...)` call, which currently
-/// forwards straight to `hotkeys::handle`). This module deliberately leaves
-/// that closure alone — it is outside the one-line budget this module has in
-/// `lib.rs` — so two calls are missing from wherever the crate owner does the
-/// integration pass:
+/// *every* shortcut anyone registers, installed once when the plugin is built
+/// (`lib.rs::run`, the `.with_handler(...)` call). That closure tries this
+/// function first and only falls through to `hotkeys::handle` when it returns
+/// `false`, so Escape and `Control+Shift+H` never reach the general hotkey
+/// dispatcher:
 ///
-/// 1. In `setup()`, alongside the other one-shot startup calls:
-///    `popbar::register_hotkey(&handle);`
-/// 2. In the `.with_handler(...)` closure itself, tried before (or after —
-///    order does not matter, the two hotkey sets do not overlap)
-///    `hotkeys::handle`:
-///    ```ignore
-///    .with_handler(|app, shortcut, event| {
-///        if popbar::handle_shortcut(app, shortcut, event.state()) {
-///            return;
-///        }
-///        hotkeys::handle(app, shortcut, event.state());
-///    })
-///    ```
+/// ```ignore
+/// .with_handler(|app, shortcut, event| {
+///     if popbar::handle_shortcut(app, shortcut, event.state()) {
+///         return;
+///     }
+///     hotkeys::handle(app, shortcut, event.state());
+/// })
+/// ```
 ///
-/// Until both land, `Control+Shift+H` registers successfully (step 1, once
-/// added) but nothing answers when it fires, the same "registered but dead"
-/// failure shape `hotkeys.rs` warns about for OS-reserved combinations —
-/// just for a different reason.
+/// [`register_hotkey`] is the other half of the wiring, called once from
+/// `setup()` so `Control+Shift+H` is actually registered before anything
+/// could fire it.
 pub fn handle_shortcut<R: Runtime>(app: &AppHandle<R>, shortcut: &Shortcut, state: ShortcutState) -> bool {
     if state != ShortcutState::Pressed {
         return false;
@@ -517,11 +512,9 @@ fn start_click_away_watch<R: Runtime>(_app: &AppHandle<R>) {}
 // Commands
 // ---------------------------------------------------------------------------
 //
-// Complete and callable on their own; not yet in `generate_handler!`. See
-// the doc comment on `handle_shortcut` for the hotkey side of the same gap.
-// The four names below are what the crate owner's integration pass needs to
-// add there: `popbar::popbar_pending`, `popbar::popbar_run`,
-// `popbar::popbar_dismiss`.
+// All three — `popbar_pending`, `popbar_run`, `popbar_dismiss` — are in
+// `generate_handler!` in `lib.rs`, alongside everything else. See the module
+// docs for the hotkey side of the same wiring.
 
 /// Whatever the most recent hotkey press captured, for the frontend to read
 /// on mount.

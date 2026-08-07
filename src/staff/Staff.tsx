@@ -15,7 +15,6 @@ import * as api from "@/shared/api";
 import { StaffMark } from "@/shared/StaffMark";
 import { CaduceusMark } from "@/shared/CaduceusMark";
 import { Onboarding, type OnboardingSignals } from "./Onboarding";
-import { OnboardingQuiz } from "./OnboardingQuiz";
 import { StaffResizeFrame } from "./StaffResize";
 import { useSettings, useTauriEvent } from "@/shared/hooks";
 import { ShortcutIcon } from "@/shared/ShortcutIcon";
@@ -24,7 +23,12 @@ import type { StaffHoverState, Shortcut, VoiceState } from "@/shared/types";
 import { EVENTS, STAFF_POPOUT_LIMIT } from "@/shared/types";
 
 /** How far the arc spreads either side of straight-out-from-the-edge. */
-const ARC_SPREAD_DEG = 76;
+const ARC_SPREAD_DEG = 84;
+
+/** Resize chrome is useful, but drawing it the instant the launcher opens makes
+ * the mark compete with its own shortcuts. A short linger keeps resizing easy
+ * to discover while leaving the normal pop-out visually quiet. */
+const RESIZE_REVEAL_MS = 650;
 
 /** Pointer travel, in px, before a press becomes a drag rather than a click. */
 const DRAG_THRESHOLD = 4;
@@ -49,7 +53,7 @@ const POPOUT_FADE_MS = 90;
 const POPOUT_STAGGER_MS = 10;
 
 export function Staff() {
-  const { settings, reload } = useSettings();
+  const { settings } = useSettings();
   const [hover, setHover] = useState<StaffHoverState>({ hovering: false, expanded: false });
   const [side, setSide] = useState<"left" | "right">("right");
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -63,14 +67,11 @@ export function Staff() {
   /** Live size while a corner-drag is in progress; null means use settings. */
   const [liveStaffSize, setLiveStaffSize] = useState<number | null>(null);
   const [resizing, setResizing] = useState(false);
-  // First-run walkthrough. Steps complete on the real interaction, so the staff
-  // records what has actually happened rather than what has been read.
-  const [signals, setSignals] = useState<OnboardingSignals>({
-    hovered: false,
-    expanded: false,
-    commandCenterOpened: false,
-    hotkeyUsed: false,
-  });
+  const [resizeReady, setResizeReady] = useState(false);
+  const resizeRevealTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // First-run setup's hotkey step needs proof a binding actually reaches the
+  // app, not just that Rust registered it — see `Onboarding.tsx`.
+  const [signals, setSignals] = useState<OnboardingSignals>({ hotkeyPressCount: 0 });
   const sideWhileExpanded = useRef<"left" | "right">("right");
   const popoutRadiusWhileExpanded = useRef(0);
   const settingsRef = useRef(settings);
@@ -83,21 +84,10 @@ export function Staff() {
   useTauriEvent<VoiceState>(EVENTS.voiceState, setVoice);
 
   useTauriEvent<string>(EVENTS.commandCenterShown, (source) => {
-    setSignals((current) => ({
-      ...current,
-      commandCenterOpened: true,
-      hotkeyUsed: current.hotkeyUsed || source === "hotkey",
-    }));
+    if (source === "hotkey") {
+      setSignals((current) => ({ hotkeyPressCount: current.hotkeyPressCount + 1 }));
+    }
   });
-
-  useEffect(() => {
-    if (!hover.hovering && !hover.expanded) return;
-    setSignals((current) =>
-      current.hovered && current.expanded
-        ? current
-        : { ...current, hovered: true, expanded: current.expanded || hover.expanded },
-    );
-  }, [hover.hovering, hover.expanded]);
 
   useEffect(() => {
     if (hover.expanded) {
@@ -201,9 +191,30 @@ export function Staff() {
   useEffect(
     () => () => {
       if (doubleClickWindow.current) clearTimeout(doubleClickWindow.current);
+      if (resizeRevealTimer.current) clearTimeout(resizeRevealTimer.current);
     },
     [],
   );
+
+  const armResizeControls = useCallback(() => {
+    if (resizeRevealTimer.current || resizeReady) return;
+    resizeRevealTimer.current = setTimeout(() => {
+      resizeRevealTimer.current = null;
+      setResizeReady(true);
+    }, RESIZE_REVEAL_MS);
+  }, [resizeReady]);
+
+  const cancelResizeReveal = useCallback(() => {
+    if (!resizeRevealTimer.current) return;
+    clearTimeout(resizeRevealTimer.current);
+    resizeRevealTimer.current = null;
+  }, []);
+
+  useEffect(() => {
+    if (hover.hovering || resizing) return;
+    cancelResizeReveal();
+    setResizeReady(false);
+  }, [cancelResizeReveal, hover.hovering, resizing]);
 
   const runShortcut = async (shortcut: Shortcut) => {
     void api.collapseStaffPopout();
@@ -290,14 +301,10 @@ export function Staff() {
   const { popoutRadius, popoutIconSize, staffIdleOpacity, staffIdleAnimation } =
     settings.appearance;
   const staffSize = liveStaffSize ?? settings.appearance.staffSize;
-  // Not gated on `!hover.expanded`. The pop-out expands on the same tick as
-  // hover at the default delay of 0ms, so that condition was never true while
-  // the pointer was on the mark and the knobs could not be reached at all. The
-  // knob square sits ~72px out at the default size and the pop-out icons ~96px,
-  // so both can be on screen without fighting — and the tracker already widens
-  // its capture radius to `resize_reach` whenever hovering, which only makes
-  // sense if the knobs are visible then.
-  const showResize = hover.hovering || resizing;
+  // Once revealed, keep the controls stable while the pointer travels from the
+  // mark to a corner knob. Entering a shortcut hides them again so the launcher
+  // never shows two competing interaction layers.
+  const showResize = (resizeReady && !namedId) || resizing;
   const expanded = hover.expanded;
   const onArc = expanded || arcHeld;
   const named = expanded ? staffShortcuts.find((s) => s.id === namedId) : undefined;
@@ -338,26 +345,11 @@ export function Staff() {
           const { x, y } = arcPosition(index, staffShortcuts.length, arcSide, arcRadius);
           const isBusy = busyId === shortcut.id;
           const visible = expanded && !fadingOut;
-          const caption = shortcutCaption(shortcut);
 
           return (
-            // The arc transform used to live on the button itself, centred by a
-            // `-50%` that is relative to the button's own box. It now lives on
-            // this wrapper instead, so the caption rides along with the icon as
-            // it flies in and out. Positioning by an explicit pixel offset
-            // instead of a `-50%` transform — the arc point minus half the
-            // icon's own size — puts the wrapper's top-left exactly where the
-            // button's top-left used to land, so the icon is pixel-identical to
-            // before. That still matters even though the caption chip below is
-            // no longer a flow sibling: the wrapper is deliberately left sized
-            // to the button alone (the chip is `absolute`, so it does not add to
-            // the wrapper's box), which means a `-50%` transform here would once
-            // again be safe today — but pixel maths costs nothing extra and
-            // stays correct even if a future flow child changes that. The
-            // wrapper never takes pointer events — only the button re-enables
-            // them, and only while expanded — so wrapping it can never widen the
-            // staff's click-through hole beyond what the cursor tracker in
-            // `src-tauri/src/window/mod.rs` already carves out for it.
+            // Keep the wrapper sized to the button alone. Only the button takes
+            // pointer events, so the transparent staff window never steals a
+            // larger portion of the desktop than the visible target.
             <div
               key={shortcut.id}
               style={{
@@ -382,8 +374,16 @@ export function Staff() {
                 title={`${shortcut.label}${shortcut.description ? ` — ${shortcut.description}` : ""}`}
                 aria-label={shortcut.label}
                 onClick={() => void runShortcut(shortcut)}
-                onPointerEnter={() => setNamedId(shortcut.id)}
+                onPointerEnter={() => {
+                  setResizeReady(false);
+                  setNamedId(shortcut.id);
+                }}
                 onPointerLeave={() => setNamedId((current) => (current === shortcut.id ? null : current))}
+                onFocus={() => {
+                  setResizeReady(false);
+                  setNamedId(shortcut.id);
+                }}
+                onBlur={() => setNamedId((current) => (current === shortcut.id ? null : current))}
                 style={{
                   width: popoutIconSize,
                   height: popoutIconSize,
@@ -411,43 +411,6 @@ export function Staff() {
                   />
                 </span>
               </button>
-
-              {/* --- destination caption ------------------------------------
-                  What clicking this button actually does, in the fewest honest
-                  characters: a URL's host, an app's name, or the shortcut's own
-                  label for everything else (see `shortcutCaption` below).
-                  This window is transparent and click-through, so bare text
-                  drawn in normal flow renders straight over the user's
-                  wallpaper — muted grey on an arbitrary desktop is unreadable
-                  no matter the weight or size. The fix is to give it its own
-                  opaque surface: the same `.staff-popout` chip material the
-                  button itself is drawn in, so the two read as one object
-                  rather than a label floating separately underneath.
-                  Absolutely positioned rather than a flow sibling — with the
-                  button as the wrapper's only flow child, the wrapper's box is
-                  exactly the button's box, so this can hang its top a few
-                  pixels above the button's bottom edge and read as "set into"
-                  the ring instead of hovering below it. `pointer-events-none`
-                  keeps it from ever intercepting a click meant for the button
-                  underneath — the button re-enables its own pointer events
-                  independently — and the wider `max-w` (roughly a hostname's
-                  worth) still truncates rather than wraps, so a long one can
-                  never widen the ring or push a neighbour off its spot on the
-                  arc. `POPOUT_EDGE_MARGIN` in
-                  `src-tauri/src/window/mod.rs::staff_window_side` reserves
-                  enough window to keep this chip from clipping at the edge. */}
-              <span
-                aria-hidden="true"
-                title={caption}
-                style={{ top: popoutIconSize - 8 }}
-                className={cx(
-                  "staff-popout shadow-float pointer-events-none absolute left-1/2 z-10",
-                  "-translate-x-1/2 max-w-[116px] truncate rounded-full px-2 py-0.5",
-                  "text-center text-xs font-medium leading-none text-ink",
-                )}
-              >
-                {caption}
-              </span>
             </div>
           );
         })}
@@ -462,7 +425,7 @@ export function Staff() {
             onResizingChange={setResizing}
           />
 
-          {(hover.hovering || hover.expanded) && (
+          {showResize && (
             <button
               type="button"
               aria-label="Hide staff"
@@ -488,6 +451,8 @@ export function Staff() {
             onPointerDown={onPointerDown}
             onPointerMove={onPointerMove}
             onPointerUp={onPointerUp}
+            onPointerEnter={armResizeControls}
+            onPointerLeave={cancelResizeReveal}
             onContextMenu={(e) => {
               e.preventDefault();
               void api.openSettingsWindow();
@@ -548,25 +513,20 @@ export function Staff() {
         </div>
       </div>
 
-      {settings.general.onboardingQuizDone === false && (
-        <OnboardingQuiz
-          staffSize={staffSize}
-          settings={settings}
-          onComplete={() => void reload()}
-        />
-      )}
-
-      {settings.general.onboardingQuizDone !== false && settings.general.onboardingDone === false && (
+      {settings.general.onboardingDone === false && (
         <Onboarding
           signals={signals}
           settings={settings}
-          staffSize={staffSize}
-          onFinish={() =>
-            void api.updateSettings({
-              ...settings,
-              general: { ...settings.general, onboardingDone: true },
-            })
-          }
+          onFinish={() => {
+            // Re-read from Rust rather than closing over this render's
+            // `settings`: the model step's own save (a detected local
+            // runtime, wired up as the primary backend) can still be
+            // in-flight-to-broadcast when this fires, and building the
+            // "done" write from a stale snapshot would silently revert it.
+            void api
+              .getSettings()
+              .then((fresh) => api.updateSettings({ ...fresh, general: { ...fresh.general, onboardingDone: true } }));
+          }}
         />
       )}
 
@@ -608,77 +568,4 @@ export function arcPosition(
     x: Math.cos(radians) * radius,
     y: Math.sin(radians) * radius,
   };
-}
-
-/** A shortcut's own name, falling back to its Command Center subtitle, falling
- * back to a neutral placeholder for the one case both can be blank: a
- * hand-edited shortcut whose fields were never filled in. */
-function shortcutNameOrDescription(shortcut: Shortcut): string {
-  return shortcut.label.trim() || shortcut.description.trim() || "Shortcut";
-}
-
-/**
- * The host a URL shortcut opens, with the scheme and any path dropped.
- *
- * `target` is not always a well-formed absolute URL by itself — a search
- * shortcut's target is a template like `https://google.com/search?q={query}`,
- * and a handful of legacy shortcuts store a bare host with no scheme at all —
- * so a missing scheme is assumed to be `https://` before parsing, and a
- * `target` the URL parser still rejects (empty, or not URL-shaped) yields
- * `null` rather than throwing, so the caller can fall back to something honest.
- */
-function hostnameFromUrl(target: string): string | null {
-  const trimmed = target.trim();
-  if (!trimmed) return null;
-  const withScheme = /^[a-z][a-z0-9+.-]*:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
-  try {
-    return new URL(withScheme).hostname || null;
-  } catch {
-    return null;
-  }
-}
-
-/**
- * The application name a launch shortcut's `target` implies, or `null` when
- * the target does not carry one a client can read honestly.
- *
- * A filesystem path ending `.app` names itself (`/Applications/Google
- * Chrome.app` → `Google Chrome`), and so does a bare executable
- * (`google-chrome`, `chrome.exe`). A macOS bundle id (`com.google.Chrome`)
- * does not — resolving one to "Google Chrome" needs Launch Services, which
- * means a round trip to Rust for every shortcut on every render, and this is
- * a caption, not worth the cost. `null` here means "ask the caller's fallback
- * instead", which is the shortcut's own label — already the human name
- * someone chose when they made the shortcut.
- */
-function appNameFromTarget(target: string): string | null {
-  const trimmed = target.trim();
-  if (!trimmed) return null;
-  const appBundle = trimmed.match(/([^/\\]+)\.app[/\\]?$/i);
-  if (appBundle) return appBundle[1];
-  const looksLikeBundleId = trimmed.includes(".") && !trimmed.includes("/") && !trimmed.includes("\\");
-  if (looksLikeBundleId) return null;
-  const base = trimmed.split(/[/\\]/).pop() ?? trimmed;
-  return base.replace(/\.exe$/i, "");
-}
-
-/**
- * The small caption drawn under each pop-out icon: what the button actually
- * links to, not what it is called.
- *
- * A URL shortcut names its host (`gemini.google.com`), an app shortcut names
- * the application, and everything else — a shell command, an AppleScript, a
- * built-in feature page — falls back to the shortcut's own label or its
- * Command Center subtitle, both of which are already short and written by a
- * person for exactly this purpose.
- */
-export function shortcutCaption(shortcut: Shortcut): string {
-  switch (shortcut.kind) {
-    case "open_url":
-      return hostnameFromUrl(shortcut.target) ?? shortcutNameOrDescription(shortcut);
-    case "open_app":
-      return appNameFromTarget(shortcut.target) ?? shortcutNameOrDescription(shortcut);
-    default:
-      return shortcutNameOrDescription(shortcut);
-  }
 }

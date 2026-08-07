@@ -1,7 +1,7 @@
 {
   "name": "caduceus",
   "private": true,
-  "version": "4.1.2",
+  "version": "4.2.0",
   "type": "module",
   "description": "Caduceus \u2014 a fast, local-first AI command center for your desktop.",
   "license": "GPL-3.0-or-later",

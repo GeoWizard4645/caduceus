@@ -1064,6 +1064,7 @@ export function HomeTab({
         <AgentPanel
           sessionId={session.id}
           task={session.task}
+          sessionKind="computer"
           onClose={() => setSession(null)}
         />
       ) : (

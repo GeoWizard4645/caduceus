@@ -15,8 +15,8 @@
  * This component owns its own read/write of `settings.update` via
  * `useSettings()` rather than the Settings window's shared draft — the same
  * pattern already used elsewhere for a narrow, self-contained write (see
- * `General.tsx`'s restart button, `OnboardingQuiz.tsx`) — because it is not
- * passed the draft as a prop.
+ * `General.tsx`'s restart button) — because it is not passed the draft as a
+ * prop.
  *
  * Updating still runs the same one-liner the website hands out, in Terminal,
  * for a Homebrew-free install — see the doc comment on `update::run_installer`

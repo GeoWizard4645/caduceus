@@ -8,7 +8,14 @@ import * as api from "@/shared/api";
 import { useSettings } from "@/shared/hooks";
 import type { BackendConfig, DetectedProvider, LocalAiScan, RuntimeInfo, Settings } from "@/shared/types";
 
-export type ChatMode = "chat" | "computer";
+/**
+ * `"agent"` calls MCP tools through the primary backend (`agent_start_tool_session`);
+ * `"computer"` drives the screen through a computer-use backend
+ * (`agent_start_session`). Both resolve backends and write settings the same
+ * way `"chat"` does except where noted below — only `"computer"` needs its own
+ * branch, since it is the one mode restricted to a computer-use-capable backend.
+ */
+export type ChatMode = "chat" | "agent" | "computer";
 
 export interface ModelChoice {
   /** Stable value for the &lt;select&gt;. */
@@ -212,7 +219,10 @@ export function useChatModels(mode: ChatMode) {
         const next = structuredClone(settings);
         const hermes = next.agents.backends.find((b) => b.id === choice.backendId);
         if (hermes) hermes.model = choice.hermesModel;
-        if (mode === "chat") {
+        // "agent" behaves exactly like "chat" here — both resolve the primary
+        // backend, not the computer-use one — so this branches on the one
+        // mode that differs rather than enumerating the two that don't.
+        if (mode !== "computer") {
           next.agents.primaryBackendId = choice.backendId;
           // Pin so auto-routing cannot silently send micro chat to a different
           // local backend than the one the user just picked in this dropdown.
@@ -249,7 +259,8 @@ export function useChatModels(mode: ChatMode) {
             };
         if (existing) Object.assign(existing, config);
         else next.agents.backends.push(config);
-        if (mode === "chat") {
+        // Same "agent" ≡ "chat" branch as above.
+        if (mode !== "computer") {
           next.agents.primaryBackendId = id;
           next.agents.routingOverrideBackendId = id;
         } else {
@@ -262,7 +273,8 @@ export function useChatModels(mode: ChatMode) {
       }
 
       const next = structuredClone(settings);
-      if (mode === "chat") {
+      // Same "agent" ≡ "chat" branch as above.
+      if (mode !== "computer") {
         next.agents.primaryBackendId = choice.backendId;
         next.agents.routingOverrideBackendId = choice.backendId;
       } else {

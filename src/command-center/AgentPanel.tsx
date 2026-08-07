@@ -1,11 +1,18 @@
 /**
- * Live view of a computer-use session.
+ * Live view of an agent session — either driving the screen (computer use,
+ * `agent_start_session`) or calling MCP tools (`agent_start_tool_session`).
+ * Both stream the identical `AgentStep` union on `caduceus://agent-step` and
+ * share `AgentRuntime` for stop/approve, so one feed renders either; only the
+ * approval copy needs to know which it is — see `sessionKind` below.
  *
  * Two things here are not decoration:
  *
- * 1. **The approval gate.** Nothing touches the mouse or keyboard until the user
- *    presses Allow. The prompt names the specific first action rather than
- *    asking for blanket permission.
+ * 1. **The approval gate.** Nothing runs — no click, keystroke, or tool call —
+ *    until the user presses Allow. The prompt names the specific first action
+ *    and, since "an agent" can now mean two very different kinds of access,
+ *    says which one this session has (screen control vs. connected tools)
+ *    rather than a single generic warning that would be misleading for half
+ *    of what can trigger it.
  * 2. **The stop control.** Always visible while a session runs, and it takes
  *    effect at the next step boundary (mid-action stops could leave a mouse
  *    button held down).
@@ -27,13 +34,26 @@ interface FeedEntry {
   image?: string;
 }
 
+/** What kind of access this session's approval gate is actually asking for. */
+type SessionKind = "computer" | "tool";
+
+const SESSION_LABEL: Record<SessionKind, string> = {
+  computer: "Screen control",
+  tool: "Tool-calling agent",
+};
+
 export function AgentPanel({
   sessionId,
   task,
+  sessionKind,
   onClose,
 }: {
   sessionId: string;
   task: string;
+  /** "computer" drives the mouse/keyboard; "tool" calls MCP tools. Only
+   *  changes the approval copy and the header label — the feed itself
+   *  renders whatever steps arrive either way. */
+  sessionKind: SessionKind;
   onClose: () => void;
 }) {
   const [feed, setFeed] = useState<FeedEntry[]>([]);
@@ -42,6 +62,7 @@ export function AgentPanel({
   const [outcome, setOutcome] = useState<AgentOutcome | null>(null);
   const [stopping, setStopping] = useState(false);
   const feedRef = useRef<HTMLDivElement>(null);
+  const allowRef = useRef<HTMLButtonElement>(null);
   const counter = useRef(0);
 
   useTauriEvent<AgentStep>(EVENTS.agentStep, (step) => {
@@ -87,6 +108,15 @@ export function AgentPanel({
     if (nearBottom) el.scrollTop = el.scrollHeight;
   }, [feed]);
 
+  // The approval gate is the one moment this panel truly needs someone's
+  // attention — everything stops until it is answered — so focus moves to
+  // its primary action instead of waiting for a click or a Tab press to find
+  // it. Allow, not Cancel: declining is one Tab plus Enter away, which is a
+  // safer default lean than a stray Enter approving something unread.
+  useEffect(() => {
+    if (pendingApproval) allowRef.current?.focus();
+  }, [pendingApproval]);
+
   const running = outcome === null;
 
   const stop = async () => {
@@ -124,7 +154,7 @@ export function AgentPanel({
         <div className="min-w-0 flex-1">
           <p className="truncate text-[13px] font-medium text-ink">{task}</p>
           <p className="text-2xs text-ink-faint">
-            {status.label}
+            {SESSION_LABEL[sessionKind]} · {status.label}
             {outcome ? ` · ${outcome.steps} step${outcome.steps === 1 ? "" : "s"}` : ""}
             {outcome?.usage?.outputTokens ? ` · ${outcome.usage.outputTokens} out tokens` : ""}
           </p>
@@ -142,16 +172,28 @@ export function AgentPanel({
 
       {/* --- approval gate --------------------------------------------- */}
       {pendingApproval && (
-        <div className="border-b border-caution/30 bg-caution/[0.08] px-5 py-4">
+        <div
+          role="alertdialog"
+          aria-label={
+            sessionKind === "tool"
+              ? "Let Caduceus use tools on your behalf?"
+              : "Let Caduceus control this computer?"
+          }
+          className="border-b border-caution/30 bg-caution/[0.08] px-5 py-4"
+        >
           <p className="text-[13px] font-semibold text-ink">
-            Let Caduceus control this computer?
+            {sessionKind === "tool"
+              ? "Let Caduceus use tools on your behalf?"
+              : "Let Caduceus control this computer?"}
           </p>
           <p className="mt-1 text-2xs leading-relaxed text-ink-soft">
-            The agent wants to start by: <span className="text-ink">{pendingApproval}</span>. It will
-            keep taking screenshots and acting until the task is done or you press Stop.
+            The agent wants to start by: <span className="text-ink">{pendingApproval}</span>.{" "}
+            {sessionKind === "tool"
+              ? "It can keep calling any tool connected in Settings → MCP until the task is done or you press Stop."
+              : "It will keep taking screenshots and acting until the task is done or you press Stop."}
           </p>
           <div className="row mt-3">
-            <Button tone="primary" size="sm" onClick={() => void approve(true)}>
+            <Button ref={allowRef} tone="primary" size="sm" onClick={() => void approve(true)}>
               Allow
             </Button>
             <Button size="sm" onClick={() => void approve(false)}>

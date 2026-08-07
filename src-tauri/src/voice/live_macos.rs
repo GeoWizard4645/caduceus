@@ -609,13 +609,30 @@ mod tests {
             }
         }
 
-        /// A cheap unique-enough suffix without pulling in the `uuid` crate
-        /// for tests.
-        fn uuid_ish() -> u128 {
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
+        /// A unique suffix without pulling in the `uuid` crate for tests.
+        ///
+        /// # Why this is a counter and not a timestamp
+        ///
+        /// This used to be `SystemTime::now().as_nanos()`, which is not
+        /// unique: despite the nanosecond *unit*, macOS's wall clock advances
+        /// in microsecond *steps* — 20,000 successive reads yield roughly
+        /// 1,200 distinct values. The test harness runs these cases on several
+        /// threads at once, so two `TempScript::new` calls landing in the same
+        /// microsecond built the same path. One script then overwrote the
+        /// other's body, or one `Drop` deleted the file the other was about to
+        /// exec, and a test asserting on "helper exits before ready" would
+        /// instead run "helper says ready then dies" and fail. It reproduced
+        /// about one run in five, on a different test each time, which is
+        /// exactly what it looks like when the temp path is the shared
+        /// resource.
+        ///
+        /// A process-wide atomic counter cannot collide no matter how coarse
+        /// the clock is, and the pid still separates concurrent `cargo test`
+        /// invocations.
+        fn uuid_ish() -> u64 {
+            use std::sync::atomic::{AtomicU64, Ordering};
+            static NEXT: AtomicU64 = AtomicU64::new(0);
+            NEXT.fetch_add(1, Ordering::Relaxed)
         }
     }
 

@@ -63,7 +63,18 @@ export interface Point {
   y: number;
 }
 
-/** First-run quiz answers — stored locally, never sent anywhere. */
+/**
+ * Answers from the first-run personalization quiz.
+ *
+ * The quiz that used to write this is gone — asking what kind of user
+ * someone is before they have used the product tested badly — but
+ * `shared/personalization.ts` still reads it on every ranking pass, and
+ * `favoriteCommandIds` still seeds its own "Favorites" result group. Nothing
+ * writes fresh values here any more, but an install that completed the old
+ * quiz keeps whatever it answered, and keeps getting the same ranking nudges
+ * from it; a fresh install just sees the all-default profile forever. See
+ * `personalization.ts`'s own doc comment for what that default resolves to.
+ */
 export interface PersonalizationProfile {
   isDeveloper: boolean;
   /** launcher | clipboard | windows | system | ai | developer */
@@ -80,10 +91,12 @@ export interface GeneralSettings {
   hoverExpandDelayMs: number;
   collapseIdleMs: number;
   launchAtLogin: boolean;
-  /** False until the first-run walkthrough is finished or skipped. */
+  /** False until the first-run setup is finished or skipped. */
   onboardingDone: boolean;
-  /** False until the three-question personalization quiz is done. */
+  /** Unused — the quiz that wrote this is gone. Nothing reads it any more. */
   onboardingQuizDone: boolean;
+  /** Still read for ranking — see `PersonalizationProfile`'s doc comment;
+   *  nothing writes a fresh value here any more. */
   personalization: PersonalizationProfile;
   cursorPollMs: number;
   functionKeys: FunctionKeyBinding[];
@@ -145,6 +158,8 @@ export interface CommandCenterSettings {
 }
 
 export type SttBackendKind = "disabled" | "system_native" | "openai_compatible";
+/** Mirrors `settings::TtsBackendKind` — the output-side twin of {@link SttBackendKind}. */
+export type TtsBackendKind = "disabled" | "system_native" | "openai_compatible";
 export type KeywordMatch = "leading_words" | "anywhere";
 export type RouteTarget =
   | "web_search"
@@ -181,6 +196,29 @@ export interface VoiceSettings {
   autoSubmit: boolean;
   /** Open an unambiguous result on its own after a short utterance settles. */
   autoOpenShortUtterance: boolean;
+
+  // ---- Text-to-speech (spoken replies) -----------------------------------
+  // Named `tts*` rather than nested, mirroring how the Rust struct sits the
+  // output-side fields directly on `VoiceSettings` beside the `stt*` ones —
+  // see `settings::model::VoiceSettings` for the full reasoning.
+  /** Master switch for text-to-speech. Off by default — see the Rust field
+   *  doc: an app that starts talking without being asked is a bug. */
+  ttsEnabled: boolean;
+  ttsBackend: TtsBackendKind;
+  /** OpenAI-compatible speech endpoint. Always called with `response_format=wav`. */
+  ttsEndpoint: string;
+  ttsModel: string;
+  /** Backend-specific voice name; empty means the backend's own default. */
+  ttsVoice: string;
+  /** Speaking rate in whichever unit the active backend natively uses —
+   *  words-per-minute for `system_native`, a 0.25–4.0 multiplier for
+   *  `openai_compatible`. `0` means "leave it at the backend's default". */
+  ttsRate: number;
+  /** Speak the assistant's replies aloud automatically once they finish —
+   *  the JARVIS-style behaviour. Independent of `ttsEnabled` so a Settings
+   *  "preview this voice" action can call `speak` on demand without also
+   *  switching on unprompted narration of every reply. */
+  ttsSpeakReplies: boolean;
 }
 
 export type BackendKind = "null" | "openai_compatible" | "hermes";
@@ -213,6 +251,15 @@ export interface AgentSettings {
   autoRoutingEnabled: boolean;
   /** A hand-picked backend that always beats the classifier. */
   routingOverrideBackendId: string | null;
+  /** Prefix conversations with the JARVIS butler persona fragment. Off by
+   *  default — the persona changes the register of every reply, which needs
+   *  to be asked for, same as `voice.ttsEnabled`. Independent of whether
+   *  replies are also spoken aloud: the two compose rather than imply one
+   *  another. */
+  jarvisPersonaEnabled: boolean;
+  /** How the persona addresses the user — "sir", "ma'am", a first name, or
+   *  empty to omit the address entirely. */
+  jarvisHonorific: string;
 }
 
 export interface ClipboardSettings {
@@ -286,6 +333,14 @@ export interface Settings {
 // ---------------------------------------------------------------------------
 
 export interface SttAvailability {
+  id: string;
+  displayName: string;
+  available: boolean;
+  detail: string;
+}
+
+/** Mirrors `voice::tts::TtsAvailability` — the output-side twin of {@link SttAvailability}. */
+export interface TtsAvailability {
   id: string;
   displayName: string;
   available: boolean;
@@ -391,6 +446,7 @@ export interface RuntimeInfo {
   arch: string;
   keychainAvailable: boolean;
   sttBackends: SttAvailability[];
+  ttsBackends: TtsAvailability[];
   browsers: BrowserInstall[];
   clipboardEntries: number;
   clipboardBytes: number;
@@ -541,6 +597,9 @@ export type AgentStep =
 
 export type VoiceState = "idle" | "recording" | "paused" | "transcribing";
 
+/** Whether a spoken reply is currently playing. Mirrors `voice::TtsState`. */
+export type TtsState = "idle" | "speaking";
+
 export interface RoutedText {
   route: RouteTarget;
   text: string;
@@ -586,6 +645,8 @@ export const EVENTS = {
   voiceState: "caduceus://voice-state",
   voicePartial: "caduceus://voice-partial",
   voiceResult: "caduceus://voice-result",
+  /** A spoken reply started or stopped playing. See `voice::TTS_STATE_EVENT`. */
+  ttsState: "caduceus://tts-state",
   hotkeyProblems: "caduceus://hotkey-problems",
   chatChanged: "caduceus://chat-changed",
   chatChunk: "caduceus://chat-chunk",

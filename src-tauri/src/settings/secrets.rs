@@ -25,6 +25,9 @@ const CLIPBOARD_KEY_ACCOUNT: &str = "clipboard-encryption-key";
 /// Account name for the speech-to-text endpoint key.
 const STT_KEY_ACCOUNT: &str = "stt-api-key";
 
+/// Account name for the text-to-speech endpoint key.
+const TTS_KEY_ACCOUNT: &str = "tts-api-key";
+
 /// Keychain account name for a TOTP account's shared secret.
 fn totp_account(id: &str) -> String {
     format!("totp.{id}.secret")
@@ -132,6 +135,78 @@ pub fn get_stt_api_key_opt() -> Option<String> {
 
 pub fn has_stt_api_key() -> bool {
     get_stt_api_key_opt().is_some()
+}
+
+// ---------------------------------------------------------------------------
+// Text-to-speech key
+// ---------------------------------------------------------------------------
+//
+// Identical shape to the speech-to-text key above, kept as its own account
+// rather than reusing `STT_KEY_ACCOUNT`: the two are configured independently
+// (different endpoint, quite possibly a different provider entirely — a local
+// Whisper server for input, OpenAI for the voice), so sharing one key would
+// mean setting either one silently overwrote the other.
+
+pub fn set_tts_api_key(key: &str) -> SecretResult<()> {
+    if key.is_empty() {
+        return match entry(TTS_KEY_ACCOUNT)?.delete_credential() {
+            Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
+            Err(e) => Err(SecretError::from(e)),
+        };
+    }
+    entry(TTS_KEY_ACCOUNT)?
+        .set_password(key)
+        .map_err(SecretError::from)
+}
+
+pub fn get_tts_api_key_opt() -> Option<String> {
+    match entry(TTS_KEY_ACCOUNT).and_then(|e| e.get_password().map_err(SecretError::from)) {
+        Ok(k) if !k.is_empty() => Some(k),
+        _ => None,
+    }
+}
+
+pub fn has_tts_api_key() -> bool {
+    get_tts_api_key_opt().is_some()
+}
+
+// ---------------------------------------------------------------------------
+// Telegram gateway bot token
+// ---------------------------------------------------------------------------
+//
+// Same get/set/delete/has shape as the STT/TTS keys above, and the same
+// reasoning: the token is the entire credential for the bot — anyone who has
+// it can send and receive as it — so it lives here, never in the settings
+// JSON file. See `crate::gateway`'s module doc for the full security model
+// this is one piece of.
+
+const TELEGRAM_BOT_TOKEN_ACCOUNT: &str = "gateway.telegram.bot_token";
+
+pub fn set_telegram_bot_token(token: &str) -> SecretResult<()> {
+    if token.is_empty() {
+        return delete_telegram_bot_token();
+    }
+    entry(TELEGRAM_BOT_TOKEN_ACCOUNT)?
+        .set_password(token)
+        .map_err(SecretError::from)
+}
+
+pub fn get_telegram_bot_token_opt() -> Option<String> {
+    match entry(TELEGRAM_BOT_TOKEN_ACCOUNT).and_then(|e| e.get_password().map_err(SecretError::from)) {
+        Ok(t) if !t.is_empty() => Some(t),
+        _ => None,
+    }
+}
+
+pub fn has_telegram_bot_token() -> bool {
+    get_telegram_bot_token_opt().is_some()
+}
+
+pub fn delete_telegram_bot_token() -> SecretResult<()> {
+    match entry(TELEGRAM_BOT_TOKEN_ACCOUNT)?.delete_credential() {
+        Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
+        Err(e) => Err(SecretError::from(e)),
+    }
 }
 
 // ---------------------------------------------------------------------------

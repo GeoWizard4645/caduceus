@@ -7,7 +7,7 @@
  * the other's internals.
  */
 
-import type { ReactNode } from "react";
+import type { Ref, ReactNode } from "react";
 import { useEffect, useId, useRef, useState } from "react";
 
 export function cx(...values: (string | false | null | undefined)[]): string {
@@ -29,6 +29,7 @@ export function Button({
   size = "md",
   title,
   className,
+  ref,
 }: {
   children: ReactNode;
   onClick?: () => void;
@@ -38,6 +39,14 @@ export function Button({
   size?: "sm" | "md";
   title?: string;
   className?: string;
+  /**
+   * React 19 passes `ref` as a plain prop — no `forwardRef` needed — but a
+   * function component still has to name it and wire it up itself. Optional
+   * and unused by most callers; it exists for the handful (an approval
+   * gate's primary action, say) that need to move focus to a specific button
+   * imperatively rather than relying on tab order.
+   */
+  ref?: Ref<HTMLButtonElement>;
 }) {
   const tones: Record<ButtonTone, string> = {
     primary:
@@ -51,6 +60,7 @@ export function Button({
 
   return (
     <button
+      ref={ref}
       type={type}
       title={title}
       onClick={onClick}

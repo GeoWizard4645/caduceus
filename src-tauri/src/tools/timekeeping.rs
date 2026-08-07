@@ -61,6 +61,7 @@ use chrono::{DateTime, Datelike, Duration as ChronoDuration, NaiveDate, NaiveDat
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 
+#[cfg(not(test))]
 use super::apple;
 
 // ---------------------------------------------------------------------------
@@ -76,6 +77,30 @@ use super::apple;
 /// the AppleScript line into script. `escape_applescript` is the fix; skipping
 /// it for "just a timer name" is exactly the kind of shortcut that made this a
 /// real bug here before.
+///
+/// # Why this is compiled out of test builds
+///
+/// Because a unit test that reaches here posts a **real** banner on the
+/// developer's own desktop, and — for a pomodoro — does not stop at one. The
+/// tests below start eleven sessions between them and stop almost none, and
+/// every started session arms a reaper that re-arms itself at each phase
+/// boundary for the life of the process. Normally that is harmless: the test
+/// binary exits seconds later and takes its tasks with it.
+///
+/// It stopped being harmless when a test in another module hung. The `cargo
+/// test` process never finished, got reparented to `launchd`, and sat there
+/// for six days still cycling every pomodoro its tests had started — a
+/// notification every few minutes, around the clock, from a binary with no
+/// Dock icon, no tray icon and no entry in the Force Quit window. From the
+/// outside that is indistinguishable from "Caduceus is sending me random
+/// Pomodoro notifications while it is not even running", which is exactly how
+/// it was reported.
+///
+/// A `#[cfg]` makes that whole class of bug unrepresentable instead of merely
+/// unlikely: there is no build of the test suite in which a test can reach the
+/// user's Notification Center at all. [`TimekeepingRuntime`]'s `Drop` handles
+/// the other half — the leaked reaper itself.
+#[cfg(not(test))]
 fn notify(title: &str, body: &str) {
     let script = format!(
         "display notification \"{}\" with title \"{}\"",
@@ -88,6 +113,12 @@ fn notify(title: &str, body: &str) {
     let _ = apple::run_script(&script);
 }
 
+/// The test-build stand-in for [`notify`] — deliberately inert. See the note on
+/// the real one for what a test that actually notified turned out to cost.
+#[cfg(test)]
+fn notify(_title: &str, _body: &str) {}
+
+#[cfg(not(test))]
 fn truncate(text: &str, chars: usize) -> String {
     if text.chars().count() <= chars {
         text.to_string()
@@ -788,6 +819,28 @@ pub struct TimekeepingRuntime {
     /// runtime at all, and tests can plug in their own callback to observe
     /// exactly when a change happens (see the reaper tests below).
     on_pomodoro_change: Mutex<Option<Arc<dyn Fn() + Send + Sync>>>,
+}
+
+/// Dropping the runtime ends whatever it was still counting.
+///
+/// Every reaper — pomodoro and countdown alike — holds its own `Arc` to the
+/// state it will act on, so it outlives the `TimekeepingRuntime` that spawned
+/// it. Without this, a dropped runtime's pomodoro carries on advancing phases
+/// and notifying with nothing left in the program that could stop it: no
+/// session to see in `pomodoro_status`, no tray item, no `pomodoro_stop` caller.
+/// In the app that window is the process's whole lifetime and so never mattered;
+/// in a test binary each `TimekeepingRuntime::new()` is a fresh runtime dropped
+/// seconds later, and the leak is the bug documented on [`notify`].
+///
+/// Clearing the state is the entire fix, because it is what the reapers already
+/// check: the next one to wake finds `None` (or an id no longer in the list) and
+/// returns without notifying, exactly as it does after a `pomodoro_stop` or a
+/// dismissed timer. Nothing here has to *cancel* a task.
+impl Drop for TimekeepingRuntime {
+    fn drop(&mut self) {
+        *self.pomodoro.lock() = None;
+        self.timers.lock().clear();
+    }
 }
 
 impl TimekeepingRuntime {
@@ -1672,5 +1725,60 @@ mod tests {
         let status = runtime.pomodoro_status();
         assert_eq!(status.total_secs, live.total_secs);
         assert_eq!(status.cycle, 1);
+    }
+
+    #[test]
+    fn a_dropped_runtime_takes_its_session_with_it() {
+        // The regression test for the bug in `notify`'s doc comment: a runtime
+        // that goes out of scope while a session is running must leave its
+        // reaper nothing to act on. Every test above that starts a session and
+        // never stops it relies on this — otherwise each one leaks a phase
+        // chain onto the shared async runtime that outlives the test, and in a
+        // process that fails to exit those chains notify for as long as it
+        // lives.
+        let calls = Arc::new(AtomicU64::new(0));
+
+        // Both handles are cloned out before the runtime drops, standing in for
+        // the `Arc`s a spawned reaper is already holding at that moment.
+        let (session, timers, on_change) = {
+            let runtime = TimekeepingRuntime::new();
+            let counter = Arc::clone(&calls);
+            runtime.set_on_pomodoro_change(move || {
+                counter.fetch_add(1, Ordering::SeqCst);
+            });
+            runtime.pomodoro_start(config(25, 5, 15, 4, 0)).unwrap();
+            runtime.start_timer("tea".into(), 600).unwrap();
+            assert!(runtime.pomodoro.lock().is_some(), "session should be live");
+            assert_eq!(runtime.timers.lock().len(), 1, "timer should be live");
+            // Bound to a local rather than left as the block's tail expression:
+            // the `MutexGuard` in it would otherwise still be alive when
+            // `runtime` is dropped, and `Drop` needs exclusive access.
+            let handles = (
+                Arc::clone(&runtime.pomodoro),
+                Arc::clone(&runtime.timers),
+                runtime.on_pomodoro_change.lock().clone(),
+            );
+            handles
+        };
+
+        assert!(
+            session.lock().is_none(),
+            "dropping the runtime must clear the session its reaper acts on"
+        );
+        assert!(
+            timers.lock().is_empty(),
+            "dropping the runtime must clear the timers its reapers act on"
+        );
+
+        // And a reaper that was already asleep when the runtime dropped must
+        // come back to find nothing, exactly as it does after `pomodoro_stop`.
+        let after_start = calls.load(Ordering::SeqCst);
+        TimekeepingRuntime::spawn_pomodoro_reaper(session, 0, Duration::from_millis(5), on_change);
+        std::thread::sleep(Duration::from_millis(50));
+        assert_eq!(
+            calls.load(Ordering::SeqCst),
+            after_start,
+            "a reaper for a dropped runtime's session must not fire"
+        );
     }
 }

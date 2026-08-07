@@ -1,12 +1,18 @@
 [package]
 name = "caduceus"
-version = "4.1.2"
+version = "4.2.0"
 description = "Caduceus — a fast, local-first AI command center for your desktop."
 authors = ["Caduceus contributors"]
 license = "GPL-3.0-or-later"
 repository = "https://github.com/vivaanshahani/caduceus"
 edition = "2021"
-rust-version = "1.82"
+# Raised from 1.82 for `std::fs::File::try_lock` (stable in 1.89), which
+# `scheduler::job::JobStore` uses to keep two processes from claiming the same
+# cron firing. The alternative was hand-rolling `flock`/`LockFileEx` behind
+# `unsafe` FFI on both platforms to keep a floor nothing in this project
+# actually builds against — declaring the version the code really needs is the
+# honest option, and a stale floor only breaks for whoever first tries it.
+rust-version = "1.89"
 
 # The library target is what Tauri's mobile/desktop entrypoints link against.
 # Keeping logic in `lib.rs` (rather than `main.rs`) keeps it unit-testable.
@@ -34,6 +40,13 @@ tauri-plugin-global-shortcut = "2"
 tauri-plugin-opener = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-autostart = "2"
+# Caduceus is a resident menu-bar app whose whole interface is a global hotkey,
+# and a global hotkey is a resource exactly one process can hold. Without this,
+# a second copy — launched at login, double-clicked, or left behind by a dev
+# build — fails to register the configured accelerator, silently rebinds the
+# user's Command Center key to a fallback and persists it. See the plugin's
+# handler in `lib.rs::run` for what a second launch does instead.
+tauri-plugin-single-instance = "2"
 
 # ---- Serialization / async ------------------------------------------------
 serde = { version = "1", features = ["derive"] }
