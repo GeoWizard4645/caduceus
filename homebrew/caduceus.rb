@@ -14,8 +14,8 @@
 # anybody having to change how they installed it.
 
 cask "caduceus" do
-  version "4.1.2"
-  sha256 "8b558f48735f22ac374c8f92d3dab08624a8856c9d5e9bc6d8b1427889a5f576"
+  version "4.2.0"
+  sha256 "9086ec9b295e8798a0c196c778ac0ab33947c1538ba304fcd71032b4858d80d0"
 
   url "https://github.com/GeoWizard4645/caduceus/releases/download/v#{version}/Caduceus_#{version}_universal.dmg",
       verified: "github.com/GeoWizard4645/caduceus/"
